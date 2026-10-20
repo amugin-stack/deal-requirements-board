@@ -1,0 +1,27 @@
+broker_id,name,source,license_state,license_number,license_type,license_status,license_expiration,county,markets,property_types,transaction_types,min_deal_usd,max_deal_usd
+fx-01,Fictional Broker FL-A,fictional,FL,FICT-FL-0001,Broker Individual,Active,2028-03-31,,Tampa;Orlando,retail;office,1031_exchange;buy;sell,1000000,10000000
+fx-02,Fictional Broker FL-B,fictional,FL,FICT-FL-0002,Broker Individual,Active,2027-09-30,,Miami;Fort Lauderdale,single_family;condo_townhome;land,buy;sell,200000,3000000
+fx-03,Fictional Broker FL-C,fictional,FL,FICT-FL-0003,Broker Individual,Inactive,2027-12-31,,Tampa,retail,1031_exchange,500000,8000000
+fx-04,Fictional Broker AZ-A,fictional,AZ,FICT-AZ-0001,Broker Individual,Active,2028-01-31,,Phoenix;Scottsdale;Tucson,single_family;multifamily,buy;sell,150000,5000000
+fx-05,Fictional Broker AZ-B,fictional,AZ,FICT-AZ-0002,Broker Individual,Active,2025-06-30,,Phoenix,single_family,sell,100000,1000000
+fx-06,Fictional Broker GA-A,fictional,GA,FICT-GA-0001,Broker Individual,Active,2028-05-31,,Savannah;Atlanta,industrial;retail;office,sell;lease,1000000,20000000
+fx-07,Fictional Broker GA-B,fictional,GA,FICT-GA-0002,Broker Individual,Active,,,Atlanta,retail,lease,,
+fx-08,Fictional Broker NC-A,fictional,NC,FICT-NC-0001,Broker Individual,Active,2027-11-30,,Charlotte;Raleigh,office;condo_townhome;single_family,lease;buy,150000,2000000
+fx-09,Fictional Broker NC-B,fictional,NC,FICT-NC-0002,Broker Individual,Active,2028-02-29,,Wilmington,multifamily;single_family,sell;buy,300000,2500000
+fx-10,Fictional Broker PA-A,fictional,PA,FICT-PA-0001,Broker Individual,Active,2028-04-30,,Philadelphia,mixed_use;multifamily;retail,sell;buy,500000,5000000
+fx-11,Fictional Broker NJ-A,fictional,NJ,FICT-NJ-0001,Broker Individual,Active,2027-10-31,,Jersey City;Hoboken,condo_townhome,buy;sell,300000,2000000
+fx-12,Fictional Broker NY-A,fictional,NY,FICT-NY-0001,Broker Individual,Active,2028-06-30,,New York;Hoboken,condo_townhome,buy,500000,5000000
+fx-13,Fictional Broker ID-A,fictional,ID,FICT-ID-0001,Broker Individual,Active,2028-01-31,,Boise,land;single_family,sell;buy,100000,3000000
+fx-14,Fictional Broker OH-A,fictional,OH,FICT-OH-0001,Broker Individual,Active,2027-12-31,,Columbus,single_family,sell,100000,600000
+fx-15,Fictional Broker NV-A,fictional,NV,FICT-NV-0001,Broker Individual,Active,2028-08-31,,Las Vegas,retail;industrial,sell;1031_exchange,1000000,15000000
+fx-16,Fictional Broker WA-A,fictional,WA,FICT-WA-0001,Broker Individual,Active,2028-05-31,,Seattle,office;industrial,sell;lease,2000000,50000000
+fx-17,Fictional Broker TN-A,fictional,TN,FICT-TN-0001,Broker Individual,Active,2028-03-31,,Nashville,single_family;multifamily,buy,200000,1500000
+fx-18,Fictional Broker CA-A,fictional,CA,FICT-CA-0001,Broker Individual,Active,2028-07-31,,Riverside;Ontario,industrial,lease,,
+fx-19,Fictional Agent CO-A,fictional,CO,FICT-CO-0001,Sales Agent,Active,2027-11-30,,Denver,single_family,buy;sell,300000,1500000
+fx-20,Fictional Broker MA-A,fictional,MA,FICT-MA-0001,Broker Individual,Active,2028-02-29,,Boston,condo_townhome,buy,400000,3000000
+fx-21,Fictional Broker ME-A,fictional,ME,FICT-ME-0001,Broker Individual,Active,2028-09-30,,Portland,multifamily;single_family,sell,200000,3000000
+fx-22,Fictional Broker OR-A,fictional,OR,FICT-OR-0001,Broker Individual,Active,2028-04-30,,Portland,condo_townhome;single_family,buy,200000,1500000
+fx-23,Fictional Broker IL-A,fictional,IL,FICT-IL-0001,Broker Individual,Active,2028-01-31,,Chicago,multifamily,sell,300000,3000000
+fx-24,Fictional Broker MO-A,fictional,MO,FICT-MO-0001,Broker Individual,Active,2028-06-30,,Kansas City;St. Louis,multifamily,buy,150000,2000000
+fx-25,Fictional Broker KS-A,fictional,KS,FICT-KS-0001,Broker Individual,Suspended,2028-06-30,,Kansas City,multifamily,buy,150000,2000000
+fx-26,Fictional Broker VA-A,fictional,VA,FICT-VA-0001,Broker Individual,Active,2028-03-31,,Arlington,condo_townhome,buy,300000,1500000
