@@ -133,6 +133,20 @@ def test_tx_county_fallback_unknown_city_scores_0():
     assert m.score == 0
 
 
+def test_tx_unknown_city_does_not_match_broker_with_unknown_county():
+    # Regression: an unmapped city and a blank county are both "unknown", not equal.
+    # Without this, every TREC row with no county would earn +2 for any unmapped TX city.
+    b = make_broker(county=None)
+    m = only_match(make_req(state="TX", city="Waco"), b)
+    assert m.score == 0 and m.reasons == []
+
+
+def test_market_match_is_exact_not_substring():
+    b = make_broker(license_state="IL", markets=["Arlington Heights"])
+    m = only_match(make_req(state="IL", city="Arlington"), b)
+    assert m.score == 0
+
+
 def test_market_and_county_together_award_market_points_once():
     b = make_broker(markets=["Austin"], county="Travis")
     m = only_match(make_req(state="TX", city="Austin"), b)
@@ -279,6 +293,19 @@ def test_equal_score_breaks_tie_by_reason_count_desc():
     result = match(req, [one_reason, two_reasons], AS_OF)
     assert [m.score for m in result.matches] == [3, 3]
     assert [m.broker.broker_id for m in result.matches] == ["b-2", "b-1"]
+
+
+def test_reason_count_tie_break_ignores_sales_agent_note():
+    # Regression: the tie-break counts point-earning reasons only. Counting the 0-point
+    # referral note would rank a sales agent above an equally scored broker.
+    agent = make_broker("a-agent", license_type="Sales Agent", property_types=[PropertyType.retail])
+    broker = make_broker("z-broker", transaction_types=[TransactionType.buy],
+                         min_deal_usd=0, max_deal_usd=1_000_000)
+    req = make_req(state="TX", property_type="retail", transaction_type="buy",
+                   deal_value_usd=500_000)
+    result = match(req, [agent, broker], AS_OF)
+    assert [m.score for m in result.matches] == [3, 3]
+    assert [m.broker.broker_id for m in result.matches] == ["z-broker", "a-agent"]
 
 
 def test_equal_score_and_reasons_breaks_tie_by_broker_id_asc():
