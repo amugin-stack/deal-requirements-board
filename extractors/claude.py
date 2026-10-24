@@ -24,6 +24,11 @@ Fill a field only when the post states it. Use null when the post doesn't say, i
 would need a guess. A null is always better than a guess: a wrong state sends the deal to brokers \
 who aren't licensed there. Follow each field's description exactly.
 
+A request for a real estate professional to handle specific properties is a deal request even \
+when it isn't a purchase, sale, or lease (e.g. a property manager for a client's rentals): set \
+is_deal_request true, transaction_type null, and fill location and property type as usual. \
+Requests for lenders, attorneys, or other non-brokerage services are still not deal requests.
+
 Broker shorthand: SFR = single-family residence; NNN = triple-net lease; BOM = back on market; \
 BOV = broker opinion of value; NOI = net operating income; cap = cap rate; \
 1031 = tax-deferred exchange; 2-flat = two-unit building; co-op agent = cooperating agent."""
