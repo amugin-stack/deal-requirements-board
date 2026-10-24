@@ -1,16 +1,16 @@
 {
   "status": "running",
-  "iteration": 1,
+  "iteration": 2,
   "max_iterations": 10,
   "consecutive_reverts": 0,
   "max_consecutive_reverts": 3,
   "best": {
-    "prompt_version": "a86a1ad8",
-    "dev_mean": 0.9264,
+    "prompt_version": "b0950301",
+    "dev_mean": 0.9298,
     "results_files": [
-      "claude_20261024T232921Z.json",
-      "claude_20261024T233007Z.json",
-      "claude_20261024T233059Z.json"
+      "claude_20261024T233307Z.json",
+      "claude_20261024T233351Z.json",
+      "claude_20261024T233433Z.json"
     ]
   },
   "final_runs": 0,
@@ -57,6 +57,28 @@
         "claude_20261024T233059Z.json"
       ],
       "note": "Tool strict: true enforces enums; s17 schema error gone, 0 errors and 0 non-deal fills in all 3 runs."
+    },
+    {
+      "iteration": 2,
+      "prompt_version": "b0950301",
+      "dev_mean": 0.9298,
+      "field_means": {
+        "is_deal_request": 1.0,
+        "state": 0.895,
+        "city": 0.86,
+        "property_type": 1.0,
+        "transaction_type": 0.895,
+        "deal_value_usd": 1.0,
+        "timeline": 0.86
+      },
+      "decision": "kept",
+      "change_commit": "3fa37ce",
+      "results_files": [
+        "claude_20261024T233307Z.json",
+        "claude_20261024T233351Z.json",
+        "claude_20261024T233433Z.json"
+      ],
+      "note": "Professional requests for specific properties (property manager) are deals; s22 is_deal_request + property_type fixed 3/3, s20 still non-deal. s22 city still null (ambiguous Springfield). check_success dev fails only on mean 0.930 vs 0.932."
     }
   ]
 }

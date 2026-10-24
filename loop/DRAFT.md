@@ -43,14 +43,14 @@ The final stage is a single look. If it fails, the loop stops and reports; it ne
 
 ## Backlog (EDITABLE: re-rank after every iteration)
 
-Re-ranked after iteration 1 (prompt `a86a1ad8`, dev mean 0.9264). Rank = dev failures addressed. Done: enforce enums (strict mode, iteration 1).
+Re-ranked after iteration 2 (prompt `b0950301`, dev mean 0.9298; dev check fails only on mean, 0.930 vs 0.932). Rank weighs dev failures addressed against how general and low-risk the rule is. Done: enforce enums (iteration 1), property-manager requests are deals (iteration 2).
 
-1. **Property-manager request is a deal** (s22, all 3 runs: is_deal_request false, plus city and property_type missed). Blocks the 100% is_deal_request bar. The label convention treats a property-manager request as a deal with no transaction type; `schema.py`'s transaction_type description already says null for property management. Keep lender requests non-deal (s20 is now correct; don't break it).
-2. **Timeline arithmetic** (s04, s25 every run; s17, s13 once). Weakest field (0.86). Add worked rules: subtract elapsed time from stated windows; "4 months" is over 90 days; an event "in 3 months" is the 31–90 bucket.
-3. **Seller vs buyer** (s23 every run: "lender-owned, $14M asking" is a sale; s07 every run, also sell→buy). Read s07's raw output before writing the rule.
-4. **State named in a licensing question still counts if it's the property's state** (s14, every run).
-5. **City from "outside X" / "near X"** (s08, every run). The city is the named reference city.
-6. **State only when named** (s11 inferred IL from Chicago, now 1 of 3 runs).
+1. **Ambiguous city still goes in `city`; only `state` goes null** (s22 3/3, "ambiguous which Springfield"; s02 Portland 2/3). 5 failures, one general rule that matches the label convention (s02 label: city Portland, state null). Phrase it as "the city name as written", so it doesn't trigger state inference (s11).
+2. **Timeline arithmetic** (s04 3/3, s25 2/3, s17 2/3, s13 1/3 = 8 failures; timeline is tied for weakest at 0.86). Add worked rules: subtract elapsed time from stated windows; "4 months" is over 90 days; an event "in 3 months" is the 31–90 bucket. Riskier, since several rules interact.
+3. **Seller vs buyer** (s23 3/3: "lender-owned, $14M asking" is a sale; s07 3/3, also sell→buy = 6 failures). Read s07's raw output before writing the rule.
+4. **State only when named** (s11 inferred IL from Chicago, now 3/3 runs). Watch it after any city change.
+5. **State named in a licensing question still counts if it's the property's state** (s14 3/3).
+6. **City from "outside X" / "near X"** (s08 3/3). The city is the named reference city. Could combine conceptually with #1, but keep it a separate change.
 
 ## Playbook (EDITABLE: how to iterate well)
 
@@ -61,3 +61,4 @@ Re-ranked after iteration 1 (prompt `a86a1ad8`, dev mean 0.9264). Rank = dev fai
 - Commit each results file before starting the next eval. `eval.py` counts an untracked results file as a dirty tree, and `check_success.py` ignores dirty runs (learned in iteration 0).
 - Before relying on an API feature, probe it with one call on one dev post through `ClaudeExtractor` (load `.env` via `load_dotenv(path)` without printing anything). Cheaper than burning 3 evals on a 400 (learned in iteration 1).
 - Strict tool schemas can fix more than the targeted error: in iteration 1 they also stopped a non-deal field fill. Recheck every failure after a structural change before re-ranking.
+- Use exact counts, not the rounded percentages in the .md tables, for the keep/revert field-drop check. One post is 1/19 ≈ 5.3 points on key fields (19 deal posts) and 1/24 ≈ 4.2 on is_deal_request. A 2/3-of-a-post drop averaged over 3 runs usually means one post flipping in more runs, so look at which post it was before calling it a regression (learned in iteration 2).
