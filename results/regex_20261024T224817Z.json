@@ -1,0 +1,2054 @@
+{
+  "extractor": "regex",
+  "model": null,
+  "prompt_version": null,
+  "timestamp": "20261024T224817Z",
+  "git": {
+    "commit": "e6b0e42983bd1047b1637a4d130fd511db7cd7a0",
+    "dirty": false
+  },
+  "scoring": "is_deal_request is scored on all posts; the other rows only on posts labeled as deal requests. deal_value_usd matches within \u00b11%. city ignores case, spacing, periods and commas (no spelling tolerance). missing_fields is exact set equality. notes is free text and NOT scored. Errors never count as correct and stay in the denominator.",
+  "datasets": {
+    "holdout": {
+      "path": "data/holdout.jsonl",
+      "records": {
+        "h01": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "ID",
+            "city": "Boise",
+            "property_type": "single_family",
+            "transaction_type": "buy",
+            "deal_value_usd": 550000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "ID",
+            "city": "Boise",
+            "property_type": "single_family",
+            "transaction_type": "buy",
+            "deal_value_usd": 550000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h02": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "OH",
+            "city": "Columbus",
+            "property_type": "industrial",
+            "transaction_type": "lease",
+            "deal_value_usd": 9,
+            "timeline": "over_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "OH",
+            "city": "Columbus",
+            "property_type": "industrial",
+            "transaction_type": "lease",
+            "deal_value_usd": 9,
+            "timeline": "over_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h03": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": "condo_townhome",
+            "transaction_type": "sell",
+            "deal_value_usd": null,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city",
+              "deal_value_usd"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": "condo_townhome",
+            "transaction_type": "sell",
+            "deal_value_usd": null,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city",
+              "deal_value_usd"
+            ]
+          },
+          "error": null
+        },
+        "h04": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "RI",
+            "city": "Providence",
+            "property_type": null,
+            "transaction_type": "buy",
+            "deal_value_usd": 900000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": [
+              "property_type"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "RI",
+            "city": "Providence",
+            "property_type": null,
+            "transaction_type": "buy",
+            "deal_value_usd": 900000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": [
+              "property_type"
+            ]
+          },
+          "error": null
+        },
+        "h05": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "MT",
+            "city": "Bozeman",
+            "property_type": "land",
+            "transaction_type": "buy",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "MT",
+            "city": "Bozeman",
+            "property_type": "land",
+            "transaction_type": "buy",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "h06": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Charlotte",
+            "property_type": null,
+            "transaction_type": "lease",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "property_type",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Charlotte",
+            "property_type": null,
+            "transaction_type": "lease",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "property_type",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "h07": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "VA",
+            "city": "Arlington",
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 875000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "VA",
+            "city": "Arlington",
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 875000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h08": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h09": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": "Portland",
+            "property_type": "multifamily",
+            "transaction_type": "buy",
+            "deal_value_usd": 600000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "state"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": "Portland",
+            "property_type": "multifamily",
+            "transaction_type": "buy",
+            "deal_value_usd": 600000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "state"
+            ]
+          },
+          "error": null
+        },
+        "h10": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NJ",
+            "city": "Frisco",
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "property_type",
+              "transaction_type",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NJ",
+            "city": "Frisco",
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "property_type",
+              "transaction_type",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "h11": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h12": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h13": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "h14": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "TN",
+            "city": "Knoxville",
+            "property_type": "retail",
+            "transaction_type": "sell",
+            "deal_value_usd": 5200000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "TN",
+            "city": "Knoxville",
+            "property_type": "retail",
+            "transaction_type": "sell",
+            "deal_value_usd": 5200000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "h15": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "CO",
+            "city": "Denver",
+            "property_type": "office",
+            "transaction_type": "sell",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "CO",
+            "city": "Denver",
+            "property_type": "office",
+            "transaction_type": "sell",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        }
+      },
+      "scores": {
+        "n_posts": 15,
+        "n_deal_posts": 12,
+        "n_non_deal_posts": 3,
+        "is_deal_request": {
+          "correct": 14,
+          "wrong": 1,
+          "error": 0,
+          "accuracy": 0.9333333333333333
+        },
+        "fields": {
+          "state": {
+            "correct": 8,
+            "wrong": 1,
+            "missed": 2,
+            "correct_missing": 1,
+            "hallucinated": 0,
+            "error": 0,
+            "accuracy": 0.75
+          },
+          "city": {
+            "correct": 9,
+            "wrong": 0,
+            "missed": 2,
+            "correct_missing": 0,
+            "hallucinated": 1,
+            "error": 0,
+            "accuracy": 0.75
+          },
+          "property_type": {
+            "correct": 8,
+            "wrong": 0,
+            "missed": 3,
+            "correct_missing": 1,
+            "hallucinated": 0,
+            "error": 0,
+            "accuracy": 0.75
+          },
+          "transaction_type": {
+            "correct": 9,
+            "wrong": 0,
+            "missed": 2,
+            "correct_missing": 0,
+            "hallucinated": 1,
+            "error": 0,
+            "accuracy": 0.75
+          },
+          "deal_value_usd": {
+            "correct": 5,
+            "wrong": 0,
+            "missed": 4,
+            "correct_missing": 2,
+            "hallucinated": 1,
+            "error": 0,
+            "accuracy": 0.5833333333333334
+          },
+          "timeline": {
+            "correct": 6,
+            "wrong": 0,
+            "missed": 2,
+            "correct_missing": 4,
+            "hallucinated": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334
+          }
+        },
+        "missing_fields": {
+          "correct": 4,
+          "wrong": 8,
+          "error": 0,
+          "accuracy": 0.3333333333333333
+        },
+        "non_deal_hallucinations": {
+          "fields_filled": 0,
+          "posts_with_any": 0,
+          "by_field": {
+            "state": 0,
+            "city": 0,
+            "property_type": 0,
+            "transaction_type": 0,
+            "deal_value_usd": 0,
+            "timeline": 0
+          }
+        },
+        "failures": [
+          {
+            "id": "h02",
+            "field": "deal_value_usd",
+            "outcome": "hallucinated",
+            "expected": null,
+            "got": 9,
+            "text": "Tenant rep needed in Columbus, Ohio. Client is a 3PL looking for 8-12k sf flex/warehouse w/ at least 2 dock doors, 24' clear. Budget is around $9.50/sf NNN. Current lease is up in 4 months so they need to be in before then."
+          },
+          {
+            "id": "h02",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "deal_value_usd"
+            ],
+            "got": [],
+            "text": "Tenant rep needed in Columbus, Ohio. Client is a 3PL looking for 8-12k sf flex/warehouse w/ at least 2 dock doors, 24' clear. Budget is around $9.50/sf NNN. Current lease is up in 4 months so they need to be in before then."
+          },
+          {
+            "id": "h03",
+            "field": "state",
+            "outcome": "missed",
+            "expected": "FL",
+            "got": null,
+            "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+          },
+          {
+            "id": "h03",
+            "field": "city",
+            "outcome": "missed",
+            "expected": "Tampa",
+            "got": null,
+            "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+          },
+          {
+            "id": "h03",
+            "field": "deal_value_usd",
+            "outcome": "missed",
+            "expected": 385000,
+            "got": null,
+            "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+          },
+          {
+            "id": "h03",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [],
+            "got": [
+              "city",
+              "deal_value_usd",
+              "state"
+            ],
+            "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+          },
+          {
+            "id": "h04",
+            "field": "property_type",
+            "outcome": "missed",
+            "expected": "multifamily",
+            "got": null,
+            "text": "Investor client (cash) looking for 2-4 unit properties in Providence, RI. Budget $700K-$900K. Prefers turnkey, open to light value-add. Can close in 45 days. DM me if you have something or know a good local agent."
+          },
+          {
+            "id": "h04",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [],
+            "got": [
+              "property_type"
+            ],
+            "text": "Investor client (cash) looking for 2-4 unit properties in Providence, RI. Budget $700K-$900K. Prefers turnkey, open to light value-add. Can close in 45 days. DM me if you have something or know a good local agent."
+          },
+          {
+            "id": "h05",
+            "field": "deal_value_usd",
+            "outcome": "missed",
+            "expected": 1200000,
+            "got": null,
+            "text": "Ok so this one is a little out of my wheelhouse lol. Long time client of mine from Chicago wants to buy acreage in Bozeman, Montana - 20+ acres, wants to eventualy build a home + barn for horses, needs well/septic feasibility. budget is about 1.2 million. He says there's no rush, he's willing to wait for the right parcel. Anyone know a good land agent out there??"
+          },
+          {
+            "id": "h05",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "timeline"
+            ],
+            "got": [
+              "deal_value_usd",
+              "timeline"
+            ],
+            "text": "Ok so this one is a little out of my wheelhouse lol. Long time client of mine from Chicago wants to buy acreage in Bozeman, Montana - 20+ acres, wants to eventualy build a home + barn for horses, needs well/septic feasibility. budget is about 1.2 million. He says there's no rush, he's willing to wait for the right parcel. Anyone know a good land agent out there??"
+          },
+          {
+            "id": "h06",
+            "field": "property_type",
+            "outcome": "missed",
+            "expected": "retail",
+            "got": null,
+            "text": "QSR client seeking 2,000-2,500 SF endcap w/ drive-thru, Charlotte NC. Pylon signage a must, 30k+ VPD. Looking to open within 6 mos. Tenant rep only, LL reps pls don't DM"
+          },
+          {
+            "id": "h06",
+            "field": "timeline",
+            "outcome": "missed",
+            "expected": "over_90_days",
+            "got": null,
+            "text": "QSR client seeking 2,000-2,500 SF endcap w/ drive-thru, Charlotte NC. Pylon signage a must, 30k+ VPD. Looking to open within 6 mos. Tenant rep only, LL reps pls don't DM"
+          },
+          {
+            "id": "h06",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "deal_value_usd"
+            ],
+            "got": [
+              "deal_value_usd",
+              "property_type",
+              "timeline"
+            ],
+            "text": "QSR client seeking 2,000-2,500 SF endcap w/ drive-thru, Charlotte NC. Pylon signage a must, 30k+ VPD. Looking to open within 6 mos. Tenant rep only, LL reps pls don't DM"
+          },
+          {
+            "id": "h08",
+            "field": "is_deal_request",
+            "outcome": "wrong",
+            "expected": true,
+            "got": false,
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h08",
+            "field": "state",
+            "outcome": "missed",
+            "expected": "AZ",
+            "got": null,
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h08",
+            "field": "city",
+            "outcome": "missed",
+            "expected": "Phoenix",
+            "got": null,
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h08",
+            "field": "transaction_type",
+            "outcome": "missed",
+            "expected": "1031_exchange",
+            "got": null,
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h08",
+            "field": "deal_value_usd",
+            "outcome": "missed",
+            "expected": 4000000,
+            "got": null,
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h08",
+            "field": "timeline",
+            "outcome": "missed",
+            "expected": "31_to_90_days",
+            "got": null,
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h08",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "property_type"
+            ],
+            "got": [],
+            "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+          },
+          {
+            "id": "h10",
+            "field": "state",
+            "outcome": "wrong",
+            "expected": "TX",
+            "got": "NJ",
+            "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+          },
+          {
+            "id": "h10",
+            "field": "city",
+            "outcome": "hallucinated",
+            "expected": null,
+            "got": "Frisco",
+            "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+          },
+          {
+            "id": "h10",
+            "field": "property_type",
+            "outcome": "missed",
+            "expected": "single_family",
+            "got": null,
+            "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+          },
+          {
+            "id": "h10",
+            "field": "transaction_type",
+            "outcome": "missed",
+            "expected": "buy",
+            "got": null,
+            "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+          },
+          {
+            "id": "h10",
+            "field": "deal_value_usd",
+            "outcome": "missed",
+            "expected": 950000,
+            "got": null,
+            "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+          },
+          {
+            "id": "h10",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "city",
+              "timeline"
+            ],
+            "got": [
+              "deal_value_usd",
+              "property_type",
+              "timeline",
+              "transaction_type"
+            ],
+            "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+          },
+          {
+            "id": "h15",
+            "field": "transaction_type",
+            "outcome": "hallucinated",
+            "expected": null,
+            "got": "sell",
+            "text": "Owner client has a 40,000 sf class B office building in Denver, CO and is fed up with his current PM. Looking for a referral to a solid commercial property management firm. Not selling, not refinancing, just needs management."
+          },
+          {
+            "id": "h15",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "deal_value_usd",
+              "timeline",
+              "transaction_type"
+            ],
+            "got": [
+              "deal_value_usd",
+              "timeline"
+            ],
+            "text": "Owner client has a 40,000 sf class B office building in Denver, CO and is fed up with his current PM. Looking for a referral to a solid commercial property management firm. Not selling, not refinancing, just needs management."
+          }
+        ]
+      }
+    },
+    "posts": {
+      "path": "data/posts.jsonl",
+      "records": {
+        "s01": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "TX",
+            "city": "Austin",
+            "property_type": "single_family",
+            "transaction_type": "buy",
+            "deal_value_usd": 650000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "TX",
+            "city": "Austin",
+            "property_type": "single_family",
+            "transaction_type": "buy",
+            "deal_value_usd": 650000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s02": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": "Portland",
+            "property_type": "industrial",
+            "transaction_type": "buy",
+            "deal_value_usd": 500000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": "Portland",
+            "property_type": "industrial",
+            "transaction_type": "buy",
+            "deal_value_usd": 500000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s03": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "ME",
+            "city": "Portland",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 1200000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "ME",
+            "city": "Portland",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 1200000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s04": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "FL",
+            "city": null,
+            "property_type": "retail",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 3500000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": [
+              "city"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "FL",
+            "city": null,
+            "property_type": "retail",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 3500000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": [
+              "city"
+            ]
+          },
+          "error": null
+        },
+        "s05": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s06": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s07": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "AZ",
+            "city": "Phoenix",
+            "property_type": "single_family",
+            "transaction_type": "sell",
+            "deal_value_usd": 425000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "AZ",
+            "city": "Phoenix",
+            "property_type": "single_family",
+            "transaction_type": "sell",
+            "deal_value_usd": 425000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s08": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "GA",
+            "city": "Savannah",
+            "property_type": "industrial",
+            "transaction_type": "sell",
+            "deal_value_usd": 6000000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "GA",
+            "city": "Savannah",
+            "property_type": "industrial",
+            "transaction_type": "sell",
+            "deal_value_usd": 6000000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s09": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Charlotte",
+            "property_type": "office",
+            "transaction_type": "lease",
+            "deal_value_usd": 2,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Charlotte",
+            "property_type": "office",
+            "transaction_type": "lease",
+            "deal_value_usd": 2,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s10": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": "multifamily",
+            "transaction_type": "buy",
+            "deal_value_usd": 400000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": "multifamily",
+            "transaction_type": "buy",
+            "deal_value_usd": 400000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city"
+            ]
+          },
+          "error": null
+        },
+        "s11": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": "Chicago",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 850000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": [
+              "state"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": "Chicago",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 850000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": [
+              "state"
+            ]
+          },
+          "error": null
+        },
+        "s12": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": "buy",
+            "deal_value_usd": 4000000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city",
+              "property_type",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": "buy",
+            "deal_value_usd": 4000000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city",
+              "property_type",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s13": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "PA",
+            "city": "Philadelphia",
+            "property_type": "mixed_use",
+            "transaction_type": "sell",
+            "deal_value_usd": 2700000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "PA",
+            "city": "Philadelphia",
+            "property_type": "mixed_use",
+            "transaction_type": "sell",
+            "deal_value_usd": 2700000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s14": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NY",
+            "city": null,
+            "property_type": "condo_townhome",
+            "transaction_type": null,
+            "deal_value_usd": 900000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "city",
+              "transaction_type",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NY",
+            "city": null,
+            "property_type": "condo_townhome",
+            "transaction_type": null,
+            "deal_value_usd": 900000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "city",
+              "transaction_type",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s15": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "ID",
+            "city": "Boise",
+            "property_type": "land",
+            "transaction_type": "sell",
+            "deal_value_usd": 1800000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "ID",
+            "city": "Boise",
+            "property_type": "land",
+            "transaction_type": "sell",
+            "deal_value_usd": 1800000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s16": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s17": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "OH",
+            "city": "Columbus",
+            "property_type": "single_family",
+            "transaction_type": "sell",
+            "deal_value_usd": 275000,
+            "timeline": "over_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "OH",
+            "city": "Columbus",
+            "property_type": "single_family",
+            "transaction_type": "sell",
+            "deal_value_usd": 275000,
+            "timeline": "over_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s18": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "CA",
+            "city": null,
+            "property_type": "multifamily",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 1500000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "city",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "CA",
+            "city": null,
+            "property_type": "multifamily",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 1500000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "city",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s19": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NV",
+            "city": "Las Vegas",
+            "property_type": "retail",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 5250000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NV",
+            "city": "Las Vegas",
+            "property_type": "retail",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 5250000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s20": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s21": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Raleigh",
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 400000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Raleigh",
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 400000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s22": {
+          "raw": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": "single_family",
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city",
+              "transaction_type",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": null,
+            "city": null,
+            "property_type": "single_family",
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "state",
+              "city",
+              "transaction_type",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s23": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "WA",
+            "city": "Seattle",
+            "property_type": "office",
+            "transaction_type": "sell",
+            "deal_value_usd": 14000000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "WA",
+            "city": "Seattle",
+            "property_type": "office",
+            "transaction_type": "sell",
+            "deal_value_usd": 14000000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s24": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "TN",
+            "city": "Nashville",
+            "property_type": "single_family",
+            "transaction_type": "buy",
+            "deal_value_usd": 550000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "TN",
+            "city": "Nashville",
+            "property_type": "single_family",
+            "transaction_type": "buy",
+            "deal_value_usd": 550000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s25": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "CA",
+            "city": "Inland Empire",
+            "property_type": "industrial",
+            "transaction_type": "lease",
+            "deal_value_usd": null,
+            "timeline": "over_90_days",
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "CA",
+            "city": "Inland Empire",
+            "property_type": "industrial",
+            "transaction_type": "lease",
+            "deal_value_usd": null,
+            "timeline": "over_90_days",
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd"
+            ]
+          },
+          "error": null
+        },
+        "s26": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "CO",
+            "city": "Denver",
+            "property_type": "single_family",
+            "transaction_type": "sell",
+            "deal_value_usd": 715000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "CO",
+            "city": "Denver",
+            "property_type": "single_family",
+            "transaction_type": "sell",
+            "deal_value_usd": 715000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s27": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "GA",
+            "city": "Atlanta",
+            "property_type": "retail",
+            "transaction_type": "lease",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "GA",
+            "city": "Atlanta",
+            "property_type": "retail",
+            "transaction_type": "lease",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s28": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s29": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "VA",
+            "city": null,
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 600000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "city"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "VA",
+            "city": null,
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 600000,
+            "timeline": "within_30_days",
+            "notes": null,
+            "missing_fields": [
+              "city"
+            ]
+          },
+          "error": null
+        },
+        "s30": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Wilmington",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 1100000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "NC",
+            "city": "Wilmington",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 1100000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s31": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "TX",
+            "city": "San Antonio",
+            "property_type": "industrial",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 2600000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "TX",
+            "city": "San Antonio",
+            "property_type": "industrial",
+            "transaction_type": "1031_exchange",
+            "deal_value_usd": 2600000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s32": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "FL",
+            "city": null,
+            "property_type": "land",
+            "transaction_type": "sell",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "city",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "FL",
+            "city": null,
+            "property_type": "land",
+            "transaction_type": "sell",
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "city",
+              "deal_value_usd",
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s33": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "AZ",
+            "city": "Tucson",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 780000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "AZ",
+            "city": "Tucson",
+            "property_type": "multifamily",
+            "transaction_type": "sell",
+            "deal_value_usd": 780000,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": [
+              "timeline"
+            ]
+          },
+          "error": null
+        },
+        "s34": {
+          "raw": {
+            "is_deal_request": true,
+            "state": "MA",
+            "city": "Boston",
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 1000000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": true,
+            "state": "MA",
+            "city": "Boston",
+            "property_type": "condo_townhome",
+            "transaction_type": "buy",
+            "deal_value_usd": 1000000,
+            "timeline": "31_to_90_days",
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        },
+        "s35": {
+          "raw": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "prediction": {
+            "is_deal_request": false,
+            "state": null,
+            "city": null,
+            "property_type": null,
+            "transaction_type": null,
+            "deal_value_usd": null,
+            "timeline": null,
+            "notes": null,
+            "missing_fields": []
+          },
+          "error": null
+        }
+      },
+      "scores": {
+        "n_posts": 35,
+        "n_deal_posts": 29,
+        "n_non_deal_posts": 6,
+        "is_deal_request": {
+          "correct": 35,
+          "wrong": 0,
+          "error": 0,
+          "accuracy": 1.0
+        },
+        "fields": {
+          "state": {
+            "correct": 21,
+            "wrong": 2,
+            "missed": 0,
+            "correct_missing": 5,
+            "hallucinated": 1,
+            "error": 0,
+            "accuracy": 0.896551724137931
+          },
+          "city": {
+            "correct": 20,
+            "wrong": 0,
+            "missed": 4,
+            "correct_missing": 4,
+            "hallucinated": 1,
+            "error": 0,
+            "accuracy": 0.8275862068965517
+          },
+          "property_type": {
+            "correct": 27,
+            "wrong": 1,
+            "missed": 0,
+            "correct_missing": 1,
+            "hallucinated": 0,
+            "error": 0,
+            "accuracy": 0.9655172413793104
+          },
+          "transaction_type": {
+            "correct": 26,
+            "wrong": 1,
+            "missed": 1,
+            "correct_missing": 1,
+            "hallucinated": 0,
+            "error": 0,
+            "accuracy": 0.9310344827586207
+          },
+          "deal_value_usd": {
+            "correct": 24,
+            "wrong": 0,
+            "missed": 0,
+            "correct_missing": 4,
+            "hallucinated": 1,
+            "error": 0,
+            "accuracy": 0.9655172413793104
+          },
+          "timeline": {
+            "correct": 16,
+            "wrong": 0,
+            "missed": 0,
+            "correct_missing": 13,
+            "hallucinated": 0,
+            "error": 0,
+            "accuracy": 1.0
+          }
+        },
+        "missing_fields": {
+          "correct": 22,
+          "wrong": 7,
+          "error": 0,
+          "accuracy": 0.7586206896551724
+        },
+        "non_deal_hallucinations": {
+          "fields_filled": 0,
+          "posts_with_any": 0,
+          "by_field": {
+            "state": 0,
+            "city": 0,
+            "property_type": 0,
+            "transaction_type": 0,
+            "deal_value_usd": 0,
+            "timeline": 0
+          }
+        },
+        "failures": [
+          {
+            "id": "s02",
+            "field": "property_type",
+            "outcome": "wrong",
+            "expected": "condo_townhome",
+            "got": "industrial",
+            "text": "Anyone have a solid buyer's agent in Portland? Clients want a condo near the Pearl, ~$500k, flexible on timing."
+          },
+          {
+            "id": "s09",
+            "field": "deal_value_usd",
+            "outcome": "hallucinated",
+            "expected": null,
+            "got": 2,
+            "text": "Looking for agent in Charlotte NC for tenant rep - small medical office, 3,000 sf, budget $28/sf NNN, move in within 90 days."
+          },
+          {
+            "id": "s09",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "deal_value_usd"
+            ],
+            "got": [],
+            "text": "Looking for agent in Charlotte NC for tenant rep - small medical office, 3,000 sf, budget $28/sf NNN, move in within 90 days."
+          },
+          {
+            "id": "s10",
+            "field": "city",
+            "outcome": "missed",
+            "expected": "Kansas City",
+            "got": null,
+            "text": "Kansas City buyer, looking for duplex or fourplex, $300-400k, needs to close in 30 days."
+          },
+          {
+            "id": "s10",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "state"
+            ],
+            "got": [
+              "city",
+              "state"
+            ],
+            "text": "Kansas City buyer, looking for duplex or fourplex, $300-400k, needs to close in 30 days."
+          },
+          {
+            "id": "s12",
+            "field": "city",
+            "outcome": "missed",
+            "expected": "Scottsdale",
+            "got": null,
+            "text": "Who covers Scottsdale? Have a luxury buyer, $4M+, wants something on the golf course. No rush."
+          },
+          {
+            "id": "s12",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "property_type",
+              "state",
+              "timeline"
+            ],
+            "got": [
+              "city",
+              "property_type",
+              "state",
+              "timeline"
+            ],
+            "text": "Who covers Scottsdale? Have a luxury buyer, $4M+, wants something on the golf course. No rush."
+          },
+          {
+            "id": "s14",
+            "field": "state",
+            "outcome": "wrong",
+            "expected": "NJ",
+            "got": "NY",
+            "text": "Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k."
+          },
+          {
+            "id": "s14",
+            "field": "transaction_type",
+            "outcome": "missed",
+            "expected": "buy",
+            "got": null,
+            "text": "Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k."
+          },
+          {
+            "id": "s14",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "city",
+              "timeline"
+            ],
+            "got": [
+              "city",
+              "timeline",
+              "transaction_type"
+            ],
+            "text": "Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k."
+          },
+          {
+            "id": "s18",
+            "field": "state",
+            "outcome": "wrong",
+            "expected": "TX",
+            "got": "CA",
+            "text": "Client doing a 1031 out of California, wants to buy small multifamily in Texas, DFW area, $1-1.5M."
+          },
+          {
+            "id": "s19",
+            "field": "transaction_type",
+            "outcome": "wrong",
+            "expected": "sell",
+            "got": "1031_exchange",
+            "text": "Retail strip center in Las Vegas NV, 92% occupied, 6.8 cap, asking $5.25M. Looking for buyers' agents w/ 1031 clients."
+          },
+          {
+            "id": "s22",
+            "field": "city",
+            "outcome": "missed",
+            "expected": "Springfield",
+            "got": null,
+            "text": "Springfield - looking for a property manager referral for 12 rental homes."
+          },
+          {
+            "id": "s22",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "deal_value_usd",
+              "state",
+              "timeline",
+              "transaction_type"
+            ],
+            "got": [
+              "city",
+              "deal_value_usd",
+              "state",
+              "timeline",
+              "transaction_type"
+            ],
+            "text": "Springfield - looking for a property manager referral for 12 rental homes."
+          },
+          {
+            "id": "s25",
+            "field": "city",
+            "outcome": "hallucinated",
+            "expected": null,
+            "got": "Inland Empire",
+            "text": "Looking to lease 20,000 sf of warehouse space in the Inland Empire, CA. Need occupancy in 4 months."
+          },
+          {
+            "id": "s25",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "city",
+              "deal_value_usd"
+            ],
+            "got": [
+              "deal_value_usd"
+            ],
+            "text": "Looking to lease 20,000 sf of warehouse space in the Inland Empire, CA. Need occupancy in 4 months."
+          },
+          {
+            "id": "s29",
+            "field": "state",
+            "outcome": "hallucinated",
+            "expected": null,
+            "got": "VA",
+            "text": "Arlington buyer needs a condo under $600k, 30-day close, VA loan."
+          },
+          {
+            "id": "s29",
+            "field": "city",
+            "outcome": "missed",
+            "expected": "Arlington",
+            "got": null,
+            "text": "Arlington buyer needs a condo under $600k, 30-day close, VA loan."
+          },
+          {
+            "id": "s29",
+            "field": "missing_fields",
+            "outcome": "wrong",
+            "expected": [
+              "state"
+            ],
+            "got": [
+              "city"
+            ],
+            "text": "Arlington buyer needs a condo under $600k, 30-day close, VA loan."
+          }
+        ]
+      }
+    }
+  }
+}
