@@ -4,6 +4,7 @@ Why a forced tool call instead of asking for JSON in text: the model must answer
 schema's fields, so there's no prose to parse. Pydantic then validates the result. If it fails
 (e.g. state "Oregon" instead of "OR"), we raise rather than repair, so the eval counts it.
 """
+import copy
 import hashlib
 import json
 import os
@@ -27,10 +28,37 @@ Broker shorthand: SFR = single-family residence; NNN = triple-net lease; BOM = b
 BOV = broker opinion of value; NOI = net operating income; cap = cap rate; \
 1031 = tax-deferred exchange; 2-flat = two-unit building; co-op agent = cooperating agent."""
 
+def _strict_schema(schema: dict) -> dict:
+    """Adapt the Pydantic schema for tool `strict: true` (API-enforced schema, enums included).
+
+    Strict mode needs `additionalProperties: false` on objects and every property listed in
+    `required` (optional fields are already nullable via anyOf). Defaults and numeric bounds are
+    dropped because strict mode doesn't use them; Pydantic still validates them afterwards.
+    """
+    schema = copy.deepcopy(schema)
+
+    def walk(node):
+        if isinstance(node, dict):
+            node.pop("default", None)
+            node.pop("minimum", None)
+            if node.get("type") == "object" and "properties" in node:
+                node["additionalProperties"] = False
+                node["required"] = list(node["properties"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(schema)
+    return schema
+
+
 TOOL = {
     "name": "record_deal_requirement",
     "description": "Record the structured requirement extracted from one post.",
-    "input_schema": ExtractedFields.model_json_schema(),
+    "input_schema": _strict_schema(ExtractedFields.model_json_schema()),
+    "strict": True,
 }
 
 # Changes whenever the prompt or schema changes, so saved eval results say which version ran.
