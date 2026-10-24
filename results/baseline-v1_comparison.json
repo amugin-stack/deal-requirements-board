@@ -1,0 +1,392 @@
+{
+  "extractor": "regex",
+  "git_tag": "baseline-v1",
+  "results": {
+    "original (35, author-written)": {
+      "n_posts": 35,
+      "accuracy": {
+        "is_deal_request": 1.0,
+        "state": 0.9142857142857143,
+        "city": 0.8571428571428571,
+        "property_type": 0.9714285714285714,
+        "transaction_type": 0.9428571428571428,
+        "deal_value_usd": 0.9714285714285714,
+        "timeline": 1.0
+      },
+      "counts": {
+        "is_deal_request": {
+          "correct": 35,
+          "correct_missing": 0,
+          "hallucinated": 0,
+          "missed": 0,
+          "wrong": 0
+        },
+        "state": {
+          "correct": 21,
+          "correct_missing": 11,
+          "hallucinated": 1,
+          "missed": 0,
+          "wrong": 2
+        },
+        "city": {
+          "correct": 20,
+          "correct_missing": 10,
+          "hallucinated": 1,
+          "missed": 4,
+          "wrong": 0
+        },
+        "property_type": {
+          "correct": 27,
+          "correct_missing": 7,
+          "hallucinated": 0,
+          "missed": 0,
+          "wrong": 1
+        },
+        "transaction_type": {
+          "correct": 26,
+          "correct_missing": 7,
+          "hallucinated": 0,
+          "missed": 1,
+          "wrong": 1
+        },
+        "deal_value_usd": {
+          "correct": 24,
+          "correct_missing": 10,
+          "hallucinated": 1,
+          "missed": 0,
+          "wrong": 0
+        },
+        "timeline": {
+          "correct": 16,
+          "correct_missing": 19,
+          "hallucinated": 0,
+          "missed": 0,
+          "wrong": 0
+        }
+      },
+      "failures": [
+        {
+          "id": "s02",
+          "field": "property_type",
+          "outcome": "wrong",
+          "expected": "condo_townhome",
+          "got": "industrial",
+          "text": "Anyone have a solid buyer's agent in Portland? Clients want a condo near the Pearl, ~$500k, flexible on timing."
+        },
+        {
+          "id": "s09",
+          "field": "deal_value_usd",
+          "outcome": "hallucinated",
+          "expected": null,
+          "got": 2,
+          "text": "Looking for agent in Charlotte NC for tenant rep - small medical office, 3,000 sf, budget $28/sf NNN, move in within 90 days."
+        },
+        {
+          "id": "s10",
+          "field": "city",
+          "outcome": "missed",
+          "expected": "Kansas City",
+          "got": null,
+          "text": "Kansas City buyer, looking for duplex or fourplex, $300-400k, needs to close in 30 days."
+        },
+        {
+          "id": "s12",
+          "field": "city",
+          "outcome": "missed",
+          "expected": "Scottsdale",
+          "got": null,
+          "text": "Who covers Scottsdale? Have a luxury buyer, $4M+, wants something on the golf course. No rush."
+        },
+        {
+          "id": "s14",
+          "field": "state",
+          "outcome": "wrong",
+          "expected": "NJ",
+          "got": "NY",
+          "text": "Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k."
+        },
+        {
+          "id": "s14",
+          "field": "transaction_type",
+          "outcome": "missed",
+          "expected": "buy",
+          "got": null,
+          "text": "Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k."
+        },
+        {
+          "id": "s18",
+          "field": "state",
+          "outcome": "wrong",
+          "expected": "TX",
+          "got": "CA",
+          "text": "Client doing a 1031 out of California, wants to buy small multifamily in Texas, DFW area, $1-1.5M."
+        },
+        {
+          "id": "s19",
+          "field": "transaction_type",
+          "outcome": "wrong",
+          "expected": "sell",
+          "got": "1031_exchange",
+          "text": "Retail strip center in Las Vegas NV, 92% occupied, 6.8 cap, asking $5.25M. Looking for buyers' agents w/ 1031 clients."
+        },
+        {
+          "id": "s22",
+          "field": "city",
+          "outcome": "missed",
+          "expected": "Springfield",
+          "got": null,
+          "text": "Springfield - looking for a property manager referral for 12 rental homes."
+        },
+        {
+          "id": "s25",
+          "field": "city",
+          "outcome": "hallucinated",
+          "expected": null,
+          "got": "Inland Empire",
+          "text": "Looking to lease 20,000 sf of warehouse space in the Inland Empire, CA. Need occupancy in 4 months."
+        },
+        {
+          "id": "s29",
+          "field": "state",
+          "outcome": "hallucinated",
+          "expected": null,
+          "got": "VA",
+          "text": "Arlington buyer needs a condo under $600k, 30-day close, VA loan."
+        },
+        {
+          "id": "s29",
+          "field": "city",
+          "outcome": "missed",
+          "expected": "Arlington",
+          "got": null,
+          "text": "Arlington buyer needs a condo under $600k, 30-day close, VA loan."
+        }
+      ]
+    },
+    "holdout (15, independent)": {
+      "n_posts": 15,
+      "accuracy": {
+        "is_deal_request": 0.9333333333333333,
+        "state": 0.8,
+        "city": 0.8,
+        "property_type": 0.8,
+        "transaction_type": 0.8,
+        "deal_value_usd": 0.6666666666666666,
+        "timeline": 0.8666666666666667
+      },
+      "counts": {
+        "is_deal_request": {
+          "correct": 14,
+          "correct_missing": 0,
+          "hallucinated": 0,
+          "missed": 0,
+          "wrong": 1
+        },
+        "state": {
+          "correct": 8,
+          "correct_missing": 4,
+          "hallucinated": 0,
+          "missed": 2,
+          "wrong": 1
+        },
+        "city": {
+          "correct": 9,
+          "correct_missing": 3,
+          "hallucinated": 1,
+          "missed": 2,
+          "wrong": 0
+        },
+        "property_type": {
+          "correct": 8,
+          "correct_missing": 4,
+          "hallucinated": 0,
+          "missed": 3,
+          "wrong": 0
+        },
+        "transaction_type": {
+          "correct": 9,
+          "correct_missing": 3,
+          "hallucinated": 1,
+          "missed": 2,
+          "wrong": 0
+        },
+        "deal_value_usd": {
+          "correct": 5,
+          "correct_missing": 5,
+          "hallucinated": 1,
+          "missed": 4,
+          "wrong": 0
+        },
+        "timeline": {
+          "correct": 6,
+          "correct_missing": 7,
+          "hallucinated": 0,
+          "missed": 2,
+          "wrong": 0
+        }
+      },
+      "failures": [
+        {
+          "id": "h02",
+          "field": "deal_value_usd",
+          "outcome": "hallucinated",
+          "expected": null,
+          "got": 9,
+          "text": "Tenant rep needed in Columbus, Ohio. Client is a 3PL looking for 8-12k sf flex/warehouse w/ at least 2 dock doors, 24' clear. Budget is around $9.50/sf NNN. Current lease is up in 4 months so they need to be in before then."
+        },
+        {
+          "id": "h03",
+          "field": "state",
+          "outcome": "missed",
+          "expected": "FL",
+          "got": null,
+          "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+        },
+        {
+          "id": "h03",
+          "field": "city",
+          "outcome": "missed",
+          "expected": "Tampa",
+          "got": null,
+          "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+        },
+        {
+          "id": "h03",
+          "field": "deal_value_usd",
+          "outcome": "missed",
+          "expected": 385000,
+          "got": null,
+          "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out"
+        },
+        {
+          "id": "h04",
+          "field": "property_type",
+          "outcome": "missed",
+          "expected": "multifamily",
+          "got": null,
+          "text": "Investor client (cash) looking for 2-4 unit properties in Providence, RI. Budget $700K-$900K. Prefers turnkey, open to light value-add. Can close in 45 days. DM me if you have something or know a good local agent."
+        },
+        {
+          "id": "h05",
+          "field": "deal_value_usd",
+          "outcome": "missed",
+          "expected": 1200000,
+          "got": null,
+          "text": "Ok so this one is a little out of my wheelhouse lol. Long time client of mine from Chicago wants to buy acreage in Bozeman, Montana - 20+ acres, wants to eventualy build a home + barn for horses, needs well/septic feasibility. budget is about 1.2 million. He says there's no rush, he's willing to wait for the right parcel. Anyone know a good land agent out there??"
+        },
+        {
+          "id": "h06",
+          "field": "property_type",
+          "outcome": "missed",
+          "expected": "retail",
+          "got": null,
+          "text": "QSR client seeking 2,000-2,500 SF endcap w/ drive-thru, Charlotte NC. Pylon signage a must, 30k+ VPD. Looking to open within 6 mos. Tenant rep only, LL reps pls don't DM"
+        },
+        {
+          "id": "h06",
+          "field": "timeline",
+          "outcome": "missed",
+          "expected": "over_90_days",
+          "got": null,
+          "text": "QSR client seeking 2,000-2,500 SF endcap w/ drive-thru, Charlotte NC. Pylon signage a must, 30k+ VPD. Looking to open within 6 mos. Tenant rep only, LL reps pls don't DM"
+        },
+        {
+          "id": "h08",
+          "field": "is_deal_request",
+          "outcome": "wrong",
+          "expected": true,
+          "got": false,
+          "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+        },
+        {
+          "id": "h08",
+          "field": "state",
+          "outcome": "missed",
+          "expected": "AZ",
+          "got": null,
+          "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+        },
+        {
+          "id": "h08",
+          "field": "city",
+          "outcome": "missed",
+          "expected": "Phoenix",
+          "got": null,
+          "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+        },
+        {
+          "id": "h08",
+          "field": "transaction_type",
+          "outcome": "missed",
+          "expected": "1031_exchange",
+          "got": null,
+          "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+        },
+        {
+          "id": "h08",
+          "field": "deal_value_usd",
+          "outcome": "missed",
+          "expected": 4000000,
+          "got": null,
+          "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+        },
+        {
+          "id": "h08",
+          "field": "timeline",
+          "outcome": "missed",
+          "expected": "31_to_90_days",
+          "got": null,
+          "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff."
+        },
+        {
+          "id": "h10",
+          "field": "state",
+          "outcome": "wrong",
+          "expected": "TX",
+          "got": "NJ",
+          "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+        },
+        {
+          "id": "h10",
+          "field": "city",
+          "outcome": "hallucinated",
+          "expected": null,
+          "got": "Frisco",
+          "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+        },
+        {
+          "id": "h10",
+          "field": "property_type",
+          "outcome": "missed",
+          "expected": "single_family",
+          "got": null,
+          "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+        },
+        {
+          "id": "h10",
+          "field": "transaction_type",
+          "outcome": "missed",
+          "expected": "buy",
+          "got": null,
+          "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+        },
+        {
+          "id": "h10",
+          "field": "deal_value_usd",
+          "outcome": "missed",
+          "expected": 950000,
+          "got": null,
+          "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then."
+        },
+        {
+          "id": "h15",
+          "field": "transaction_type",
+          "outcome": "hallucinated",
+          "expected": null,
+          "got": "sell",
+          "text": "Owner client has a 40,000 sf class B office building in Denver, CO and is fed up with his current PM. Looking for a referral to a solid commercial property management firm. Not selling, not refinancing, just needs management."
+        }
+      ]
+    }
+  }
+}
