@@ -59,3 +59,4 @@ Seeded from the dev-split failures of the first full run (prompt `de789943`). Ra
 - Prefer a general rule plus one short counter-example over a list of special cases. Special cases overfit 24 posts.
 - When a change helps one field and hurts another, check whether two rules now conflict before trying a third.
 - Read the raw outputs in the results file (`records[*].raw`), not just the scores. The raw value shows what the model was thinking.
+- Commit each results file before starting the next eval. `eval.py` counts an untracked results file as a dirty tree, and `check_success.py` ignores dirty runs (learned in iteration 0).

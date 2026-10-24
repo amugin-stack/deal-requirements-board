@@ -1,14 +1,40 @@
 {
-  "status": "not_started",
+  "status": "running",
   "iteration": 0,
   "max_iterations": 10,
   "consecutive_reverts": 0,
   "max_consecutive_reverts": 3,
   "best": {
-    "prompt_version": null,
-    "dev_mean": null,
-    "results_files": []
+    "prompt_version": "de789943",
+    "dev_mean": 0.8848,
+    "results_files": [
+      "claude_20261024T232452Z.json",
+      "claude_20261024T232649Z.json",
+      "claude_20261024T232722Z.json"
+    ]
   },
   "final_runs": 0,
-  "history": []
+  "history": [
+    {
+      "iteration": 0,
+      "prompt_version": "de789943",
+      "dev_mean": 0.8848,
+      "field_means": {
+        "is_deal_request": 0.931,
+        "state": 0.842,
+        "city": 0.86,
+        "property_type": 0.912,
+        "transaction_type": 0.895,
+        "deal_value_usd": 0.947,
+        "timeline": 0.807
+      },
+      "decision": "baseline",
+      "results_files": [
+        "claude_20261024T232452Z.json",
+        "claude_20261024T232649Z.json",
+        "claude_20261024T232722Z.json"
+      ],
+      "note": "Runs claude_20261024T232525Z and T232557Z are dirty (uncommitted results file) and excluded."
+    }
+  ]
 }
