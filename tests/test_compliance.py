@@ -131,6 +131,18 @@ def test_post_returns_only_licensed_brokers(req: DealRequirement):
     assert [b.model_dump() for b in POOL] == pool_before
 
 
+def test_duplicate_broker_id_returns_only_the_licensed_record():
+    # Regression: the gate must judge each record, never look brokers up by id. If an
+    # unlicensed record shares an id with a licensed one, only the licensed object comes back.
+    licensed = next(b for b in BASE if b.broker_id == "fx-01")
+    revoked = licensed.model_copy(update={"license_status": "Revoked"})
+    for pool in ([licensed, revoked], [revoked, licensed]):
+        result = match(DealRequirement(is_deal_request=True, state="FL"), pool, AS_OF)
+        assert [m.broker for m in result.matches] == [licensed]
+        assert result.matches[0].broker is licensed
+        assert result.excluded_for_licensing == 1
+
+
 # ---------- is_licensed against the oracle ----------
 
 def _base() -> Broker:
