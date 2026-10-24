@@ -36,7 +36,22 @@ from schema import DealRequirement
 
 logger = logging.getLogger(__name__)
 
+# The Anthropic SDK logs full request options, post text included, at DEBUG (enabled by
+# ANTHROPIC_LOG=debug or a DEBUG root logger). Pin it and its HTTP client to WARNING so turning
+# on debug logging for this app can never write a post to the logs.
+for _sdk_logger in ("anthropic", "httpx", "httpx2"):
+    logging.getLogger(_sdk_logger).setLevel(logging.WARNING)
+
 MAX_POST_CHARS = 4000
+# Raw body cap, checked before JSON parsing. `MAX_POST_CHARS` applies only after stripping, so
+# without this a post padded with megabytes of whitespace would be read and parsed in full.
+# 4000 chars of 4-byte UTF-8 plus JSON escaping and the key fits well inside 64 KiB.
+MAX_BODY_BYTES = 64 * 1024
+# Upper bound on one Claude call, retries included. The SDK default is 600s with 2 retries, which
+# would let a slow upstream pin threadpool workers for many minutes. A timeout surfaces as
+# anthropic.APIConnectionError, so it maps to the same 503 as any other upstream failure.
+CLAUDE_TIMEOUT_SECONDS = 30.0
+CLAUDE_MAX_RETRIES = 1
 
 # --- Request / response models -----------------------------------------------------------------
 
@@ -85,6 +100,12 @@ class MatchResponse(BaseModel):
     follow_up_question: str | None
 
 
+class ErrorDetail(BaseModel):
+    """The body of every non-validation error. `detail` is always a fixed, safe message."""
+
+    detail: str
+
+
 # --- Matcher contract ---------------------------------------------------------------------------
 # Structural types for matcher.MatchResult, so this module type-checks without importing it.
 
@@ -113,7 +134,8 @@ def get_extractor() -> Extractor:
     Claude extractor itself is cached: it owns an HTTP client with a connection pool, and
     building one per request would throw that pool away each time.
     """
-    if os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("DEAL_EXTRACTOR") != "regex":
+    forced = os.environ.get("DEAL_EXTRACTOR", "").strip().lower()
+    if os.environ.get("ANTHROPIC_API_KEY") and forced != "regex":
         return _claude_extractor()
     return _regex_extractor()
 
@@ -123,7 +145,8 @@ def _claude_extractor() -> Extractor:
     # Imported here so the regex-only path never constructs an Anthropic client.
     from extractors.claude import ClaudeExtractor
 
-    return ClaudeExtractor()
+    client = anthropic.Anthropic(timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES)
+    return ClaudeExtractor(client=client)
 
 
 @lru_cache(maxsize=1)
@@ -156,6 +179,11 @@ def get_matcher() -> MatchFn:
 
     A failed import is a server misconfiguration, so it surfaces as a 503 with a fixed message
     (see the handler below) instead of a 500 whose traceback would expose file paths.
+
+    FastAPI resolves dependencies before validating the body, so while the matcher is missing
+    even an invalid post gets this 503 rather than a 422. That is intended: the service is down,
+    and failing here also avoids spending an extraction call on a request that can't be matched.
+    Only ImportError is mapped; any other error while importing is a bug and stays a 500.
     """
     try:
         from matcher import match
@@ -172,6 +200,77 @@ app = FastAPI(
     summary="Turn a broker's deal post into licensed, ranked broker matches.",
     version="0.1.0",
 )
+
+
+class BodySizeLimit:
+    """ASGI middleware: reject request bodies over `max_bytes` with 413 before they are parsed.
+
+    It rejects an oversize `Content-Length` up front, then reads the body itself, stopping as
+    soon as it passes the cap, so a chunked upload without a length header can't get around it.
+    The (at most `max_bytes`) body is then replayed to the app. Reading here rather than
+    raising from a wrapped `receive` matters: FastAPI turns any error while reading the body
+    into a 400, which would hide the 413.
+    """
+
+    def __init__(self, app, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        declared = dict(scope.get("headers") or []).get(b"content-length")
+        if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):
+            await self._reject(send)
+            return
+
+        chunks: list[bytes] = []
+        size = 0
+        while True:
+            message = await receive()
+            if message["type"] != "http.request":  # client disconnected
+                await self.app(scope, _replay([message]), send)
+                return
+            body = message.get("body", b"")
+            size += len(body)
+            if size > self.max_bytes:
+                await self._reject(send)
+                return
+            chunks.append(body)
+            if not message.get("more_body", False):
+                break
+
+        replay = [{"type": "http.request", "body": b"".join(chunks), "more_body": False}]
+        await self.app(scope, _replay(replay, then=receive), send)
+
+    @staticmethod
+    async def _reject(send) -> None:
+        response = JSONResponse(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            content={"detail": "request body too large"},
+        )
+        await send({"type": "http.response.start", "status": response.status_code,
+                    "headers": response.raw_headers})
+        await send({"type": "http.response.body", "body": response.body})
+
+
+def _replay(messages: list[dict], then=None):
+    """An ASGI `receive` that returns `messages` in order, then defers to `then` (disconnects)."""
+    pending = list(messages)
+
+    async def receive():
+        if pending:
+            return pending.pop(0)
+        if then is not None:
+            return await then()
+        return {"type": "http.disconnect"}
+
+    return receive
+
+
+app.add_middleware(BodySizeLimit, max_bytes=MAX_BODY_BYTES)
 
 
 @app.exception_handler(MatcherUnavailable)
@@ -203,7 +302,15 @@ def _post_id(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:12]
 
 
-@app.post("/match", response_model=MatchResponse)
+@app.post(
+    "/match",
+    response_model=MatchResponse,
+    responses={
+        413: {"model": ErrorDetail, "description": "Request body over the size limit"},
+        500: {"model": ErrorDetail, "description": "The extractor failed unexpectedly"},
+        503: {"model": ErrorDetail, "description": "Extraction service or matcher unavailable"},
+    },
+)
 def match_post(
     body: MatchRequest,
     extractor: Annotated[Extractor, Depends(get_extractor)],
@@ -240,6 +347,16 @@ def match_post(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="extraction service unavailable",
         ) from e
+    except Exception as e:
+        # An extractor bug (e.g. the frozen regex baseline overflows on a 400-digit number).
+        # Mapped here, not left to the server, so the fixed detail and post-id log line hold and
+        # no exception text, which might quote the post, reaches the response or a traceback.
+        logger.error("extractor crashed post=%s extractor=%s error=%s",
+                     post_id, extractor.name, type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="extraction failed unexpectedly",
+        ) from None
 
     # Licensing gating, non-deal posts and missing states are the matcher's job; the API only
     # reshapes what it returns.

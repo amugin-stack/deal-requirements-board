@@ -264,6 +264,10 @@ def test_invalid_body_is_rejected_before_extraction(client, matcher, payload):
     assert resp.status_code == 422
     assert extractor.calls == []
     assert matcher.calls == []
+    # Regression: FastAPI's default 422 echoes the rejected value; ours must not.
+    assert all("input" not in err for err in resp.json()["detail"])
+    if payload.get("text", "").strip():
+        assert payload["text"] not in resp.text
 
 
 @pytest.mark.parametrize(
@@ -281,7 +285,7 @@ def test_length_limit_applies_after_stripping(client, matcher, text):
     resp = client.post("/match", json={"text": text})
 
     assert resp.status_code == 200
-    assert len(extractor.calls) == 1
+    assert extractor.calls == [text.strip()]
 
 
 # --- extractor failures ------------------------------------------------------
@@ -294,6 +298,7 @@ def test_extraction_error_is_422_with_readable_detail(client, matcher):
     assert resp.status_code == 422
     detail = resp.json()["detail"]
     assert isinstance(detail, str) and detail.strip()
+    assert "no tool call" not in resp.text  # exception text is never echoed
     assert matcher.calls == []
 
 
@@ -329,6 +334,133 @@ def test_post_text_never_reaches_logs(client, matcher, caplog, outcome, status):
     assert resp.status_code == status
     assert "ZEBRA-7731" not in caplog.text
     assert POST not in caplog.text
+
+
+# --- review regressions ------------------------------------------------------
+
+def test_unexpected_extractor_crash_is_fixed_500_without_post_text(client, matcher, caplog):
+    # The frozen regex baseline raises OverflowError on a 400-digit dollar amount.
+    caplog.set_level(logging.DEBUG)
+    wire(FakeExtractor(OverflowError(f"cannot convert {POST}")), matcher)
+
+    resp = TestClient(api.app, raise_server_exceptions=False).post("/match", json={"text": POST})
+
+    assert resp.status_code == 500
+    assert resp.json() == {"detail": "extraction failed unexpectedly"}
+    assert "ZEBRA-7731" not in caplog.text
+    assert matcher.calls == []
+
+
+def test_real_regex_extractor_overflow_is_500_not_crash(client, matcher):
+    api.app.dependency_overrides[api.get_matcher] = lambda: matcher
+    api.app.dependency_overrides[api.get_extractor] = lambda: api._regex_extractor()
+
+    resp = TestClient(api.app, raise_server_exceptions=False).post(
+        "/match", json={"text": "need broker TX $" + "9" * 400}
+    )
+
+    assert resp.status_code == 500
+    assert resp.json() == {"detail": "extraction failed unexpectedly"}
+
+
+def test_sdk_loggers_stay_above_debug_even_with_debug_root(caplog):
+    # The Anthropic SDK logs request bodies (the post) at DEBUG.
+    caplog.set_level(logging.DEBUG)
+    for name in ("anthropic", "anthropic._base_client", "httpx", "httpx2"):
+        assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING, name
+
+
+def test_oversize_body_is_413_before_parsing(client, matcher):
+    extractor = FakeExtractor(FULL_TX_DEAL)
+    wire(extractor, matcher)
+
+    resp = client.post("/match", json={"text": " " * (api.MAX_BODY_BYTES + 1) + "x"})
+
+    assert resp.status_code == 413
+    assert resp.json() == {"detail": "request body too large"}
+    assert extractor.calls == []
+
+
+def test_oversize_chunked_body_without_length_is_413(client, matcher):
+    extractor = FakeExtractor(FULL_TX_DEAL)
+    wire(extractor, matcher)
+    chunk = b" " * 16_384
+
+    def stream():
+        yield b'{"text": "'
+        for _ in range(api.MAX_BODY_BYTES // len(chunk) + 1):
+            yield chunk
+        yield b'x"}'
+
+    resp = client.post("/match", content=stream(), headers={"content-type": "application/json"})
+
+    assert resp.status_code == 413
+    assert extractor.calls == []
+
+
+def test_openapi_documents_error_responses(client):
+    responses = client.get("/openapi.json").json()["paths"]["/match"]["post"]["responses"]
+    assert {"200", "413", "422", "500", "503"} <= set(responses)
+
+
+@pytest.fixture
+def fresh_extractor_cache(monkeypatch):
+    """Clears the extractor caches and replaces the Anthropic client so nothing hits the network."""
+    built: list[dict] = []
+
+    class FakeAnthropic:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+
+    monkeypatch.setattr(api.anthropic, "Anthropic", FakeAnthropic)
+    api._claude_extractor.cache_clear()
+    api._regex_extractor.cache_clear()
+    yield built
+    api._claude_extractor.cache_clear()
+    api._regex_extractor.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "key, forced, expected",
+    [
+        pytest.param("test-key", None, "claude", id="key-only"),
+        pytest.param("test-key", "regex", "regex", id="key-forced-regex"),
+        pytest.param("test-key", " Regex ", "regex", id="key-forced-regex-loose"),
+        pytest.param(None, None, "regex", id="no-key"),
+        pytest.param("", None, "regex", id="empty-key"),
+    ],
+)
+def test_extractor_selection_follows_env(monkeypatch, fresh_extractor_cache, key, forced, expected):
+    for name, value in (("ANTHROPIC_API_KEY", key), ("DEAL_EXTRACTOR", forced)):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+
+    assert api.get_extractor().name == expected
+
+
+def test_claude_client_has_bounded_timeout_and_retries(monkeypatch, fresh_extractor_cache):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("DEAL_EXTRACTOR", raising=False)
+
+    api.get_extractor()
+    api.get_extractor()
+
+    assert fresh_extractor_cache == [
+        {"timeout": api.CLAUDE_TIMEOUT_SECONDS, "max_retries": api.CLAUDE_MAX_RETRIES}
+    ]  # built once, with bounds
+
+
+def test_brokers_are_loaded_once(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api.broker_store, "load_brokers", lambda: calls.append(1) or BROKERS)
+    api.get_brokers.cache_clear()
+    try:
+        assert api.get_brokers() is api.get_brokers()
+        assert calls == [1]
+    finally:
+        api.get_brokers.cache_clear()
 
 
 # --- integration with the real matcher ---------------------------------------
