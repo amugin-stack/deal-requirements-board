@@ -39,6 +39,10 @@ _PROPERTY_LABELS: dict[PropertyType, str] = {
     PropertyType.other: "",  # "other" adds nothing to the question
 }
 
+# Same reasoning as above: a new PropertyType must get a label, or questions would KeyError.
+if set(_PROPERTY_LABELS) != set(PropertyType):
+    raise RuntimeError("_PROPERTY_LABELS must cover every PropertyType")
+
 
 def _where(req: DealRequirement) -> str:
     """' in Austin' when the city is known, else ''. Keeps questions anchored to the post."""
