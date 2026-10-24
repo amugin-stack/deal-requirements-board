@@ -1,8 +1,8 @@
 {
   "status": "running",
-  "iteration": 2,
+  "iteration": 3,
   "max_iterations": 10,
-  "consecutive_reverts": 0,
+  "consecutive_reverts": 1,
   "max_consecutive_reverts": 3,
   "best": {
     "prompt_version": "b0950301",
@@ -79,6 +79,29 @@
         "claude_20261024T233433Z.json"
       ],
       "note": "Professional requests for specific properties (property manager) are deals; s22 is_deal_request + property_type fixed 3/3, s20 still non-deal. s22 city still null (ambiguous Springfield). check_success dev fails only on mean 0.930 vs 0.932."
+    },
+    {
+      "iteration": 3,
+      "prompt_version": "b4f9c9ab",
+      "dev_mean": 0.9524,
+      "field_means": {
+        "is_deal_request": 1.0,
+        "state": 0.93,
+        "city": 0.947,
+        "property_type": 1.0,
+        "transaction_type": 0.895,
+        "deal_value_usd": 1.0,
+        "timeline": 0.895
+      },
+      "decision": "reverted",
+      "change_commit": "d5ed67c",
+      "revert_commit": "fdc5f7f",
+      "results_files": [
+        "claude_20261024T233711Z.json",
+        "claude_20261024T233757Z.json",
+        "claude_20261024T233842Z.json"
+      ],
+      "note": "Ambiguous-city rule fixed s22/s02 3/3 and mean rose, but s16 (non-deal) got city Miami in 2/3 runs (non-deal fills [1,1,0]). Reverted per orchestrator constraint on non-deal fills. Retry scoped to is_deal_request true."
     }
   ]
 }
