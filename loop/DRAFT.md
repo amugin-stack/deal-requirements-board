@@ -43,14 +43,13 @@ The final stage is a single look. If it fails, the loop stops and reports; it ne
 
 ## Backlog (EDITABLE: re-rank after every iteration)
 
-Re-ranked after iteration 3 (best is still prompt `b0950301` at 0.9298; iteration 3's b4f9c9ab scored 0.9524 but was reverted because of a non-deal fill). Rank weighs dev failures addressed against how general and low-risk the rule is. Done: enforce enums (iteration 1), property-manager requests are deals (iteration 2).
+Re-ranked after iteration 4 (best is prompt `ac1a145b` at 0.9449; dev passes). Rank weighs dev failures addressed against how general and low-risk the rule is. Done: enforce enums (iteration 1), property-manager requests are deals (iteration 2), ambiguous city kept on deal requests only (iteration 4).
 
-1. **Ambiguous city rule, scoped to deal requests** (s22 3/3, s02 2/3). Iteration 3's wording fixed both in 3/3 runs and cut s11's IL inference to 1/3, but it caused s16 (non-deal hiring post in Miami) to fill city in 2/3 runs. Re-run the same rule, opening with "When is_deal_request is true", and add "if false, every other field stays null". Expected ≈0.95 with 0 non-deal fills.
-2. **Timeline arithmetic** (s04 3/3, s17 2–3/3, s25 2/3, s13 1/3). Add worked rules: subtract elapsed time from stated windows; "6 months" / "4 months" is over 90 days; an event "in 3 months" is the 31–90 bucket. Riskier, since several rules interact.
-3. **Seller vs buyer** (s23 3/3: "lender-owned, $14M asking" is a sale; s07 3/3: "seller wants $425k … cash buyers only" is a sale = 6 failures). Rule idea: if the client being represented owns the property or sets an asking price, it's a sell.
-4. **State only when named** (s11 IL from Chicago). The iteration-3 wording helped (1/3). Recheck after #1 lands.
-5. **State named in a licensing question still counts if it's the property's state** (s14 3/3).
-6. **City from "outside X" / "near X"** (s08 3/3). The city is the named reference city. Keep it a separate change from #1.
+1. **Timeline arithmetic** (s04 3/3, s25 3/3, s17 2/3). Timeline is the weakest field at 0.860, right at the 0.85 bar. Add worked rules: subtract elapsed time from stated windows; "6 months" / "4 months" is over 90 days; an event "in 3 months" is the 31–90 bucket. Riskier, since several rules interact.
+2. **Seller vs buyer** (s23 3/3, s07 3/3 = 6 failures). Rule idea: if the client being represented owns the property or sets an asking price, it's a sell. Scope it to is_deal_request true.
+3. **State only when named** (s11 IL from Chicago, 2/3).
+4. **State named in a licensing question still counts if it's the property's state** (s14 3/3).
+5. **City from "outside X" / "near X"** (s08 3/3). The city is the named reference city. Scope it to deal requests.
 
 ## Playbook (EDITABLE: how to iterate well)
 
@@ -63,3 +62,4 @@ Re-ranked after iteration 3 (best is still prompt `b0950301` at 0.9298; iteratio
 - Strict tool schemas can fix more than the targeted error: in iteration 1 they also stopped a non-deal field fill. Recheck every failure after a structural change before re-ranking.
 - Use exact counts, not the rounded percentages in the .md tables, for the keep/revert field-drop check. One post is 1/19 ≈ 5.3 points on key fields (19 deal posts) and 1/24 ≈ 4.2 on is_deal_request. A 2/3-of-a-post drop averaged over 3 runs usually means one post flipping in more runs, so look at which post it was before calling it a regression (learned in iteration 2).
 - Any rule that tells the model to *fill* a field must say it applies only when is_deal_request is true. Otherwise the model applies it to non-deal posts too and fills fields there (iteration 3: s16 got city Miami). After every eval, check non-deal fills per run as well as the mean. A rising mean is required for a keep but isn't enough on its own (learned in iteration 3).
+- A rule that leaked onto non-deal posts can be kept by adding an explicit scope clause ("When is_deal_request is true …; when false, leave every other field null") to that one rule. Re-running the same rule with the scope clause still counts as one change, and it can be attributed (learned in iteration 4).

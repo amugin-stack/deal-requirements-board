@@ -1,16 +1,16 @@
 {
-  "status": "running",
-  "iteration": 3,
+  "status": "dev_passed",
+  "iteration": 4,
   "max_iterations": 10,
-  "consecutive_reverts": 1,
+  "consecutive_reverts": 0,
   "max_consecutive_reverts": 3,
   "best": {
-    "prompt_version": "b0950301",
-    "dev_mean": 0.9298,
+    "prompt_version": "ac1a145b",
+    "dev_mean": 0.9449,
     "results_files": [
-      "claude_20261024T233307Z.json",
-      "claude_20261024T233351Z.json",
-      "claude_20261024T233433Z.json"
+      "claude_20261024T234059Z.json",
+      "claude_20261024T234146Z.json",
+      "claude_20261024T234229Z.json"
     ]
   },
   "final_runs": 0,
@@ -102,6 +102,28 @@
         "claude_20261024T233842Z.json"
       ],
       "note": "Ambiguous-city rule fixed s22/s02 3/3 and mean rose, but s16 (non-deal) got city Miami in 2/3 runs (non-deal fills [1,1,0]). Reverted per orchestrator constraint on non-deal fills. Retry scoped to is_deal_request true."
+    },
+    {
+      "iteration": 4,
+      "prompt_version": "ac1a145b",
+      "dev_mean": 0.9449,
+      "field_means": {
+        "is_deal_request": 1.0,
+        "state": 0.912,
+        "city": 0.947,
+        "property_type": 1.0,
+        "transaction_type": 0.895,
+        "deal_value_usd": 1.0,
+        "timeline": 0.86
+      },
+      "decision": "kept",
+      "change_commit": "1a0775f",
+      "results_files": [
+        "claude_20261024T234059Z.json",
+        "claude_20261024T234146Z.json",
+        "claude_20261024T234229Z.json"
+      ],
+      "note": "Ambiguous-city rule scoped to is_deal_request true; s22/s02 city fixed 3/3, non-deal fills [0,0,0]. check_success --stage dev SUCCESS (mean 0.945, weakest timeline 0.860)."
     }
   ]
 }
