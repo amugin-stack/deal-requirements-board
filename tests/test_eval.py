@@ -59,6 +59,14 @@ def test_invalid_output_is_an_error_and_rescore_needs_no_client():
     assert score([DEAL, NON_DEAL], rescored) == s  # same scores from saved outputs, zero API calls
 
 
+def test_dev_split_never_scores_holdout():
+    from extractors.regex_baseline import RegexExtractor
+    result = ev.evaluate(RegexExtractor(), "dev")
+    assert list(result) == ["posts_dev"]
+    assert all(pid.startswith("s") for pid in result["posts_dev"]["records"])
+    assert result["posts_dev"]["scores"]["n_posts"] == 24
+
+
 def test_no_api_key_runs_baseline_only(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(ev, "RESULTS_DIR", tmp_path)

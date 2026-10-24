@@ -59,10 +59,20 @@ def run_posts(extractor, posts: list[dict]) -> dict[str, dict]:
     return records
 
 
-def evaluate(extractor, datasets: dict = DATASETS) -> dict:
+def select(split: str) -> dict[str, str]:
+    """'all' scores every set, holdout first. 'dev' scores only the tuning posts, so no holdout is seen."""
+    return DATASETS if split == "all" else {"posts_dev": DATASETS["posts"]}
+
+
+def load_split(path: str, split: str) -> list[dict]:
+    posts = load_posts(ROOT / path)
+    return posts if split == "all" else [p for p in posts if p.get("split") == split]
+
+
+def evaluate(extractor, split: str = "all") -> dict:
     out = {}
-    for name, path in datasets.items():
-        posts = load_posts(ROOT / path)
+    for name, path in select(split).items():
+        posts = load_split(path, split)
         records = run_posts(extractor, posts)
         out[name] = {"path": path, "records": records, "scores": score(posts, records)}
     return out
@@ -88,7 +98,8 @@ def markdown(result: dict) -> str:
     def pct(x):
         return "n/a" if x is None else f"{x:.0%}"
 
-    lines = [f"# Eval: {result['extractor']}", ""]
+    split = result.get("split", "all")
+    lines = [f"# Eval: {result['extractor']}" + ("" if split == "all" else f" (split: {split}; holdout not scored)"), ""]
     meta = {k: result[k] for k in ("model", "prompt_version", "timestamp") if result.get(k)}
     meta["commit"] = result["git"]["commit"][:7] + (" (uncommitted changes)" if result["git"]["dirty"] else "")
     lines += [", ".join(f"{k}: `{v}`" for k, v in meta.items()), "", f"_{SCORING_NOTE}_", ""]
@@ -139,6 +150,8 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--extractor", choices=["regex", "claude", "all"], default="all")
     ap.add_argument("--rescore", type=Path, help="re-score a saved results JSON without re-running")
+    ap.add_argument("--split", choices=["all", "dev"], default="all",
+                    help="'dev' scores only posts.jsonl's dev split, for prompt tuning without seeing holdout")
     args = ap.parse_args(argv)
 
     if args.rescore:
@@ -156,9 +169,9 @@ def main(argv=None) -> None:
         names = ["regex"]
     for name in names:
         extractor, meta = make_extractor(name)
-        result = {"extractor": name, "model": None, "prompt_version": None, **meta,
+        result = {"extractor": name, "model": None, "prompt_version": None, **meta, "split": args.split,
                   "timestamp": timestamp(), "git": git_info(), "scoring": SCORING_NOTE,
-                  "datasets": evaluate(extractor)}
+                  "datasets": evaluate(extractor, args.split)}
         path = save(result)
         print(markdown(result), f"\nsaved {path}", sep="\n")
 

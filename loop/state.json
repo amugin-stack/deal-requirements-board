@@ -1,0 +1,14 @@
+{
+  "status": "not_started",
+  "iteration": 0,
+  "max_iterations": 10,
+  "consecutive_reverts": 0,
+  "max_consecutive_reverts": 3,
+  "best": {
+    "prompt_version": null,
+    "dev_mean": null,
+    "results_files": []
+  },
+  "final_runs": 0,
+  "history": []
+}
