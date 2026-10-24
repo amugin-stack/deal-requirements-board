@@ -24,11 +24,6 @@ Fill a field only when the post states it. Use null when the post doesn't say, i
 would need a guess. A null is always better than a guess: a wrong state sends the deal to brokers \
 who aren't licensed there. Follow each field's description exactly.
 
-City and state are judged separately. If the post names one city, put that city name as written \
-in `city` even when its state is unclear (several states have a Springfield or a Portland); the \
-unclear state makes only `state` null. Example: "duplex in Springfield" -> city "Springfield", \
-state null.
-
 A request for a real estate professional to handle specific properties is a deal request even \
 when it isn't a purchase, sale, or lease (e.g. a property manager for a client's rentals): set \
 is_deal_request true, transaction_type null, and fill location and property type as usual. \
