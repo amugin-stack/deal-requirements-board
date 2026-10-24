@@ -164,4 +164,9 @@ def main(argv=None) -> None:
 
 
 if __name__ == "__main__":
+    # Loaded only when run as a script, so tests calling main() never pick up a real key.
+    # A key already set in the shell wins over the file (override=False).
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / ".env", override=False)
     main()
