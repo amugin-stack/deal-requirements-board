@@ -1,5 +1,5 @@
 {
-  "status": "dev_passed",
+  "status": "done",
   "iteration": 4,
   "max_iterations": 10,
   "consecutive_reverts": 0,
@@ -13,7 +13,7 @@
       "claude_20261024T234229Z.json"
     ]
   },
-  "final_runs": 0,
+  "final_runs": 1,
   "history": [
     {
       "iteration": 0,
@@ -125,5 +125,11 @@
       ],
       "note": "Ambiguous-city rule scoped to is_deal_request true; s22/s02 city fixed 3/3, non-deal fills [0,0,0]. check_success --stage dev SUCCESS (mean 0.945, weakest timeline 0.860)."
     }
-  ]
+  ],
+  "final": {
+    "prompt_version": "ac1a145b",
+    "results_file": "claude_20261024T234359Z.json",
+    "holdout_mean": 0.952,
+    "check_success_final": "PASS"
+  }
 }
