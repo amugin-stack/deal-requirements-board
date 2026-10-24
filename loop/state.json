@@ -1,16 +1,16 @@
 {
   "status": "running",
-  "iteration": 0,
+  "iteration": 1,
   "max_iterations": 10,
   "consecutive_reverts": 0,
   "max_consecutive_reverts": 3,
   "best": {
-    "prompt_version": "de789943",
-    "dev_mean": 0.8848,
+    "prompt_version": "a86a1ad8",
+    "dev_mean": 0.9264,
     "results_files": [
-      "claude_20261024T232452Z.json",
-      "claude_20261024T232649Z.json",
-      "claude_20261024T232722Z.json"
+      "claude_20261024T232921Z.json",
+      "claude_20261024T233007Z.json",
+      "claude_20261024T233059Z.json"
     ]
   },
   "final_runs": 0,
@@ -35,6 +35,28 @@
         "claude_20261024T232722Z.json"
       ],
       "note": "Runs claude_20261024T232525Z and T232557Z are dirty (uncommitted results file) and excluded."
+    },
+    {
+      "iteration": 1,
+      "prompt_version": "a86a1ad8",
+      "dev_mean": 0.9264,
+      "field_means": {
+        "is_deal_request": 0.958,
+        "state": 0.93,
+        "city": 0.895,
+        "property_type": 0.947,
+        "transaction_type": 0.895,
+        "deal_value_usd": 1.0,
+        "timeline": 0.86
+      },
+      "decision": "kept",
+      "change_commit": "cd36d51",
+      "results_files": [
+        "claude_20261024T232921Z.json",
+        "claude_20261024T233007Z.json",
+        "claude_20261024T233059Z.json"
+      ],
+      "note": "Tool strict: true enforces enums; s17 schema error gone, 0 errors and 0 non-deal fills in all 3 runs."
     }
   ]
 }

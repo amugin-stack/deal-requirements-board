@@ -43,15 +43,14 @@ The final stage is a single look. If it fails, the loop stops and reports; it ne
 
 ## Backlog (EDITABLE: re-rank after every iteration)
 
-Seeded from the dev-split failures of the first full run (prompt `de789943`). Rank = dev failures addressed.
+Re-ranked after iteration 1 (prompt `a86a1ad8`, dev mean 0.9264). Rank = dev failures addressed. Done: enforce enums (strict mode, iteration 1).
 
-1. **Enforce enums** (s17 returned `within_90_days`, an invalid timeline). Try `strict: true`; if unsupported, one retry with the validation error appended.
-2. **Timeline arithmetic** (s04, s25, s34). Add worked rules: subtract elapsed time from stated windows; "4 months" is over 90 days; an event "in 3 months" is the 31–90 bucket.
-3. **Non-broker requests are not deals** (s20 filled a state on a lender request; s22 a property-manager request). Note: the label convention treats a property-manager request as a deal with no transaction type (s22). Read `schema.py`'s `is_deal_request` description before changing anything, and don't contradict the labels.
-4. **State only when named** (s11 inferred IL from Chicago). Strengthen the rule with a counter-example in the prompt.
-5. **City from "outside X" / "near X"** (s08, and similar phrasing). The city is the named reference city.
-6. **State named in a licensing question still counts if it's the property's state** (s14: "licensed in both NY and NJ" + NJ cities).
-7. **Seller vs buyer from asking price** (s23: "lender-owned, $14M asking" is a sale).
+1. **Property-manager request is a deal** (s22, all 3 runs: is_deal_request false, plus city and property_type missed). Blocks the 100% is_deal_request bar. The label convention treats a property-manager request as a deal with no transaction type; `schema.py`'s transaction_type description already says null for property management. Keep lender requests non-deal (s20 is now correct; don't break it).
+2. **Timeline arithmetic** (s04, s25 every run; s17, s13 once). Weakest field (0.86). Add worked rules: subtract elapsed time from stated windows; "4 months" is over 90 days; an event "in 3 months" is the 31–90 bucket.
+3. **Seller vs buyer** (s23 every run: "lender-owned, $14M asking" is a sale; s07 every run, also sell→buy). Read s07's raw output before writing the rule.
+4. **State named in a licensing question still counts if it's the property's state** (s14, every run).
+5. **City from "outside X" / "near X"** (s08, every run). The city is the named reference city.
+6. **State only when named** (s11 inferred IL from Chicago, now 1 of 3 runs).
 
 ## Playbook (EDITABLE: how to iterate well)
 
@@ -60,3 +59,5 @@ Seeded from the dev-split failures of the first full run (prompt `de789943`). Ra
 - When a change helps one field and hurts another, check whether two rules now conflict before trying a third.
 - Read the raw outputs in the results file (`records[*].raw`), not just the scores. The raw value shows what the model was thinking.
 - Commit each results file before starting the next eval. `eval.py` counts an untracked results file as a dirty tree, and `check_success.py` ignores dirty runs (learned in iteration 0).
+- Before relying on an API feature, probe it with one call on one dev post through `ClaudeExtractor` (load `.env` via `load_dotenv(path)` without printing anything). Cheaper than burning 3 evals on a 400 (learned in iteration 1).
+- Strict tool schemas can fix more than the targeted error: in iteration 1 they also stopped a non-deal field fill. Recheck every failure after a structural change before re-ranking.
