@@ -10,7 +10,7 @@ import os
 
 import anthropic
 
-from extractors import ExtractionError
+from extractors import ExtractionError, parse_requirement
 from schema import DealRequirement, ExtractedFields
 
 # A cheap model. Note: Haiku 5.5 accepts a forced tool_choice, but Opus 5.5 and Sonnet 5.5
@@ -48,6 +48,13 @@ class ClaudeExtractor:
         self.model = model or os.environ.get("DEAL_MODEL", DEFAULT_MODEL)
 
     def extract(self, text: str) -> DealRequirement:
+        return parse_requirement(self.extract_raw(text))
+
+    def extract_raw(self, text: str) -> dict:
+        """The tool call's input exactly as Claude returned it, before validation.
+
+        eval.py saves this so results can be re-scored later without calling the API again.
+        """
         response = self.client.messages.create(
             model=self.model,
             max_tokens=1024,
@@ -61,7 +68,4 @@ class ClaudeExtractor:
         call = next((b for b in response.content if b.type == "tool_use"), None)
         if call is None:
             raise ExtractionError(f"no tool call (stop_reason={response.stop_reason})")
-        try:
-            return DealRequirement.model_validate(call.input)
-        except ValueError as e:  # pydantic.ValidationError subclasses ValueError
-            raise ExtractionError(f"invalid output: {e}") from e
+        return call.input
