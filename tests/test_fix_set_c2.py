@@ -90,8 +90,9 @@ def records_for(
     call = {"cached": cached, "input_tokens": 100, "output_tokens": 20, "latency_s": 0.1}
     out = {}
     for p in posts:
-        raw = dict(p["label"])
-        out[p["id"]] = {**ev.to_record(edit(raw) if edit else raw), "call": dict(call)}
+        label = dict(p["label"])
+        raw = {"notes": None, **(edit(label) if edit else label)}  # a strict tool call returns every key
+        out[p["id"]] = {**ev.to_record(raw), "call": dict(call)}
     return out
 
 

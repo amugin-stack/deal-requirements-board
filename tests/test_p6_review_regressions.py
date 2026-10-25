@@ -38,7 +38,7 @@ class FakeClient:
         return NS(
             stop_reason="tool_use",
             usage=NS(input_tokens=100, output_tokens=10),
-            content=[NS(type="tool_use", input=dict(OUTPUT))],
+            content=[NS(type="tool_use", name="record_deal_requirement", input=dict(OUTPUT))],
         )
 
 
@@ -63,7 +63,9 @@ def test_rescore_does_not_inherit_source_usage_or_repeat(monkeypatch: pytest.Mon
     (out,) = rescored.glob("*.json")
     result = json.loads(out.read_text())
     assert not {"usage", "repeat", "cache_enabled"} & result.keys()
-    assert "_r2" not in out.name and result["rescored_from"] == str(source)
+    assert (
+        "_r2" not in out.name and result["rescored_from"] == source.name
+    )  # outside the repo: bare name only (compliance-security/S-4)
     md = out.with_suffix(".md").read_text()
     assert "**Usage:**" not in md and "repeat 2 of 2" not in md and "no API calls" in md
 
