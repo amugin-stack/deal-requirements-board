@@ -100,3 +100,45 @@ def test_final_allows_one_look_at_a_dev_passed_prompt() -> None:
     assert "one look only" in failed(cs.final_checks([final_run(), final_run()], V1))
     assert "prompt passed dev first" in failed(cs.final_checks([final_run()], None))
     assert "holdout mean accuracy" in failed(cs.final_checks([final_run(acc=0.7)], V1))
+
+
+def test_final_uses_oldest_run_and_gates_errors_and_hallucinations() -> None:
+    """eval-quality/CQ-4: the first final look counts (finals are newest first); errors and fills gate it."""
+    newer_v2, older_v1 = final_run("v2"), final_run("v1")
+    assert failed(cs.final_checks([newer_v2, older_v1], V1)) == {"one look only"}
+    assert failed(cs.final_checks([older_v1, newer_v2], V1)) == {"one look only", "prompt passed dev first"}
+    assert failed(cs.final_checks([final_run(), final_run(acc=0.7)], V1)) == {
+        "one look only",
+        "holdout mean accuracy",
+    }
+    assert failed(cs.final_checks([final_run(errors=1)], V1)) == {"schema errors"}
+    posts_error = {**final_run(), "datasets": {**final_run()["datasets"], "posts": {"scores": scores(errors=1)}}}
+    assert failed(cs.final_checks([posts_error], V1)) == {"schema errors"}
+    assert failed(cs.final_checks([final_run(non_deal_filled=cs.FINAL_MAX_NON_DEAL_FILLED)], V1)) == set()
+    too_many = cs.FINAL_MAX_NON_DEAL_FILLED + 1
+    assert failed(cs.final_checks([final_run(non_deal_filled=too_many)], V1)) == {"holdout non-deal hallucinations"}
+
+
+def test_dev_gates_mean_accuracy_alone() -> None:
+    """eval-quality/CQ-4: every field at 0.9 clears the weakest-field bar (0.85) but not the mean bar."""
+    assert failed(cs.dev_checks([dev_run(acc=0.9)] * cs.REPEATS, stored)) == {"mean accuracy"}
+    for i in range(cs.REPEATS):  # one weak run in any position drags the 3-run mean under the bar
+        runs = [dev_run()] * cs.REPEATS
+        runs[i] = dev_run(acc=0.7)
+        assert failed(cs.dev_checks(runs, stored)) == {"mean accuracy"}
+
+
+def test_dev_scores_every_counted_run_whatever_its_position() -> None:
+    """eval-quality/CQ-4: a bad run counts wherever it sits among exactly REPEATS runs."""
+    for i in range(cs.REPEATS):
+        runs = [dev_run()] * cs.REPEATS
+        runs[i] = dev_run(errors=1)
+        assert failed(cs.dev_checks(runs, stored)) == {"schema errors"}
+
+
+def test_dev_rejects_more_than_repeats_runs() -> None:
+    """eval-quality/CQ-4 (with EM-21's contract): more than REPEATS runs fails 'repeats', wherever the bad one is."""
+    good, bad = dev_run(), dev_run(errors=1)
+    assert "repeats" in failed(cs.dev_checks([bad] + [good] * cs.REPEATS, stored))
+    assert "repeats" in failed(cs.dev_checks([good] * cs.REPEATS + [bad], stored))
+    assert failed(cs.dev_checks([good] * (cs.REPEATS + 1), stored)) == {"repeats"}
