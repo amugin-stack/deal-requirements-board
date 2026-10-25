@@ -30,6 +30,7 @@ from deal_board.scoring import SCORED_FIELDS, load_posts, score
 ROOT = paths.REPO_ROOT
 SPLIT = "holdout_v3"
 DEFAULT_PROMPT = "ac1a145b"
+PROTOCOL = "tools/final_eval/PROTOCOL.md"
 EXPECTED_POSTS = 25
 HEX_COMMIT = re.compile(r"^[0-9a-f]{7,40}$")
 
@@ -52,18 +53,17 @@ def _git_ok(*args: str) -> subprocess.CompletedProcess[str] | None:
 
 
 def is_ancestor(commit: str) -> bool:
-    """Whether the run's commit is in main's history (or is HEAD, before main is updated).
+    """Whether the run's commit is in main's history.
 
-    A commit that isn't on main could carry an edited extractor or scorer. Only well-formed hex
-    reaches git, so a crafted string can never be read as an option or revision expression.
+    A commit that isn't on main could carry an edited extractor or scorer. There is deliberately
+    no "equals HEAD" fallback: on a side branch HEAD is not on main, and validate.py runs after
+    the results are committed to main anyway. Only well-formed hex reaches git, so a crafted
+    string can never be read as an option or revision expression.
     """
     if not HEX_COMMIT.fullmatch(commit):
         return False
     r = _git_ok("merge-base", "--is-ancestor", commit, "main")
-    if r is not None and r.returncode == 0:
-        return True
-    head = _git_ok("rev-parse", "HEAD")
-    return head is not None and head.returncode == 0 and head.stdout.strip() == commit
+    return r is not None and r.returncode == 0
 
 
 @dataclass(frozen=True)
@@ -160,6 +160,45 @@ def _check_complete(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
     return complete is True and aborted is None, f"complete={complete!r}, aborted={aborted!r}"
 
 
+def _check_first_look(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
+    """An approved second look, or a run from another branch or tool, is not the clean first look."""
+    fe = result["final_eval"]
+    second, branch, protocol = fe["second_look"], fe["branch"], fe["protocol"]
+    ok = second is False and branch == "main" and protocol == PROTOCOL
+    return ok, f"second_look={second!r}, branch={branch!r}, protocol={protocol!r}"
+
+
+def _check_labels(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
+    """Labels edited after the run would change the number without a new look; the sha pins them."""
+    recorded = result["final_eval"]["data_sha256"]
+    ok = recorded == ctx.data_sha256
+    return ok, (
+        "label file unchanged since the run"
+        if ok
+        else f"label file sha256 {ctx.data_sha256[:12]} != recorded {str(recorded)[:12]}: labels changed since the run"
+    )
+
+
+def _check_provenance(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
+    """A rescore or a cached output is not a fresh look: it reuses or replays an earlier one."""
+    problems = []
+    if "rescored_from" in result:
+        problems.append(f"rescored_from={result['rescored_from']!r}")
+    if result["cache_enabled"] is not False:
+        problems.append(f"cache_enabled={result['cache_enabled']!r}")
+    hits = result["usage"]["cache_hits"]
+    if hits != 0:
+        problems.append(f"usage.cache_hits={hits!r}")
+    calls = [r.get("call") for r in _records(result).values()]
+    no_call = sum(1 for c in calls if not isinstance(c, dict))
+    cached = sum(1 for c in calls if isinstance(c, dict) and c.get("cached") is not False)
+    if no_call:
+        problems.append(f"{no_call} records without call provenance")
+    if cached:
+        problems.append(f"{cached} records not marked cached=false")
+    return not problems, "; ".join(problems) if problems else "fresh run: no rescore, no cache, every call fresh"
+
+
 def _check_git_clean(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
     """Uncommitted code at run time means nobody can reproduce what produced the number."""
     dirty = result["git"]["dirty"]
@@ -183,6 +222,31 @@ def _check_prompt(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
     if extractor == "regex":
         return version is None, f"prompt_version is {version!r}, expected null for regex"
     return False, f"unknown extractor {extractor!r}"
+
+
+def _check_model(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
+    """The headline names a model; a DEAL_MODEL override would otherwise swap it silently."""
+    extractor, model = result["extractor"], result["model"]
+    if extractor == "regex":
+        return model is None, f"model is {model!r}, expected null for regex"
+    if not isinstance(model, str) or not model:
+        return False, f"model is {model!r}, expected a model id"
+    if ctx.expect_model is not None and model != ctx.expect_model:
+        return False, f"model is {model!r}, expected {ctx.expect_model!r}"
+    return True, f"model is {model!r}"
+
+
+def _check_raw_consistent(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
+    """Each prediction must be what its raw output parses to. validate.py scores predictions and
+    tables.py rescores raw, so editing only one of them would make the two tools disagree."""
+    records = _records(result)
+    reparsed = json.loads(json.dumps(ev.rescore_records(records)))
+    bad = [
+        pid
+        for pid, r in records.items()
+        if {k: v for k, v in r.items() if k != "call"} != {k: v for k, v in reparsed[pid].items() if k != "call"}
+    ]
+    return not bad, f"{len(bad)} records whose prediction/error doesn't match their raw output ({_ids(bad)})"
 
 
 def _check_scores(result: JSONObject, ctx: _Context) -> tuple[bool, str]:
@@ -245,6 +309,8 @@ class _Context:
     expected_path: str
     is_ancestor: Callable[[str], bool]
     expect_prompt: str
+    data_sha256: str
+    expect_model: str | None
 
 
 CHECKS: tuple[tuple[str, Callable[[JSONObject, _Context], tuple[bool, str]]], ...] = (
@@ -254,9 +320,14 @@ CHECKS: tuple[tuple[str, Callable[[JSONObject, _Context], tuple[bool, str]]], ..
     ("records", _check_records),
     ("errors", _check_errors),
     ("complete", _check_complete),
+    ("first_look", _check_first_look),
+    ("labels", _check_labels),
+    ("provenance", _check_provenance),
     ("git_clean", _check_git_clean),
     ("git_ancestor", _check_git_ancestor),
     ("prompt", _check_prompt),
+    ("model", _check_model),
+    ("raw_consistent", _check_raw_consistent),
     ("scores", _check_scores),
     ("intervals", _check_intervals),
     ("non_deal", _check_non_deal),
@@ -270,6 +341,8 @@ def validate(
     expected_path: str,
     is_ancestor: Callable[[str], bool],
     expect_prompt: str,
+    data_sha256: str,
+    expect_model: str | None = None,
 ) -> list[Check]:
     """All checks, in order. A malformed file FAILs the affected checks instead of crashing,
     because a validator that dies on a bad file reports nothing about the rest of it."""
@@ -280,6 +353,8 @@ def validate(
         expected_path=expected_path,
         is_ancestor=is_ancestor,
         expect_prompt=expect_prompt,
+        data_sha256=data_sha256,
+        expect_model=expect_model,
     )
     out: list[Check] = []
     for name, fn in CHECKS:
@@ -298,6 +373,7 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
     ap.add_argument(
         "--expect-prompt", default=DEFAULT_PROMPT, help=f"required Claude prompt version ({DEFAULT_PROMPT})"
     )
+    ap.add_argument("--expect-model", default=None, help="required Claude model id, e.g. claude-haiku-5-5")
     args = ap.parse_args(argv)
     hooks = default_hooks() if hooks is None else hooks
 
@@ -311,6 +387,7 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
         return 2
     try:
         posts = load_posts(hooks.data_path)
+        data_sha256 = ev.file_sha256(hooks.data_path)
     except (OSError, ValueError) as e:
         print(f"ERROR: can't read the labels {hooks.data_path}: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
@@ -321,6 +398,8 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
         expected_path=dataset_path_string(hooks.data_path),
         is_ancestor=hooks.is_ancestor,
         expect_prompt=args.expect_prompt,
+        data_sha256=data_sha256,
+        expect_model=args.expect_model,
     )
     for c in checks:
         print(f"{'PASS' if c.ok else 'FAIL'} {c.name}: {c.detail}")
