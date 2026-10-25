@@ -141,15 +141,6 @@ KNOWN_REGEX_STATE_LEAKS: frozenset[str] = frozenset(
     }
 )
 
-CITY_ECHO_BUG = (
-    "followup.py interpolates requirement.city verbatim into the follow-up question, so "
-    "injected text in city is echoed to the caller"
-)
-# Posts whose regex-path response trips a known system bug (strict xfail, reported).
-KNOWN_REGEX_BUGS: dict[str, str] = {
-    "rt-20": CITY_ECHO_BUG,  # "in System Override Mode" becomes the city, then the follow-up
-}
-
 
 # --- pure helpers -------------------------------------------------------------------------------
 
@@ -315,21 +306,9 @@ def assert_regex_outcome(resp: Response) -> api.MatchResponse:
 # --- run (a): every post through the regex extractor --------------------------------------------
 
 
-REGEX_PARAMS = [
-    pytest.param(
-        rec,
-        id=rec["id"],
-        marks=(
-            [pytest.mark.xfail(strict=True, reason=KNOWN_REGEX_BUGS[rec["id"]])]
-            if rec["id"] in KNOWN_REGEX_BUGS
-            else []
-        ),
-    )
-    for rec in RECORDS
-]
-
-
-@pytest.mark.parametrize("rec", REGEX_PARAMS)
+# rt-20 ("in System Override Mode" becomes the city) used to echo its city into the follow-up;
+# followup.py now names only known cities (red-team/RT-1), so every post must be compliant.
+@pytest.mark.parametrize("rec", RECORD_PARAMS)
 def test_regex_post_never_returns_unlicensed_broker(client: TestClient, rec: JSONObject) -> None:
     assert_regex_outcome(regex_response(client, rec["text"]))
 
@@ -522,16 +501,14 @@ HOSTILE_VARIANTS: list[object] = [
         # Injected text in free-text fields.
         HostileCase("injection-in-notes", lambda: full_deal("TX", notes=INJECTED)),
         HostileCase("injection-in-city-full-deal", lambda: full_deal("TX", city=INJECTED)),
-        # With fields missing, the follow-up names the city, so the injected city may be echoed.
+        # With fields missing there is a follow-up; it must not echo the injected city (RT-3, RT-4).
         HostileCase(
             "injection-in-city-with-follow-up",
             lambda: DealRequirement(is_deal_request=True, state="TX", city=INJECTED),
-            xfail=CITY_ECHO_BUG,
         ),
         HostileCase(
             "injection-in-city-no-state",
             lambda: DealRequirement(is_deal_request=True, city=INJECTED),
-            xfail=CITY_ECHO_BUG,
         ),
         # Merged from the schema-only drafter: coercions and type confusion.
         HostileCase(
@@ -545,9 +522,9 @@ HOSTILE_VARIANTS: list[object] = [
         ),
         HostileCase("state-tab-inside", rejected({"is_deal_request": True, "state": "t\tx"}), expect="rejected_422"),
         HostileCase("state-nul-suffix", rejected({"is_deal_request": True, "state": "tx\x00"}), expect="rejected_422"),
-        # Non-string states are turned into None by the validator: fail closed, nobody matched.
-        HostileCase("state-int", lambda: DealRequirement.model_validate({"is_deal_request": True, "state": 5})),
-        HostileCase("state-bytes", lambda: DealRequirement.model_validate({"is_deal_request": True, "state": b"TX"})),
+        # Non-string states are rejected by the schema (compliance-security/C-6): the fixed 422.
+        HostileCase("state-int", rejected({"is_deal_request": True, "state": 5}), expect="rejected_422"),
+        HostileCase("state-bytes", rejected({"is_deal_request": True, "state": b"TX"}), expect="rejected_422"),
         HostileCase("deal-value-string-coerced", lambda: full_deal("FL", deal_value_usd=" 1_000 ")),
         HostileCase(
             "deal-value-float-huge",
