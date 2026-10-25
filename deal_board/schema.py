@@ -102,6 +102,11 @@ class Timeline(str, Enum):
 KEY_FIELDS = ("state", "city", "property_type", "transaction_type", "deal_value_usd", "timeline")
 
 
+# The fields an extractor fills, validated without repair. The only normalisation: an ASCII
+# state is stripped and upper-cased, city and notes are stripped, and a blank state/city/notes
+# becomes null. Everything else that doesn't fit (a non-string, a non-ASCII state, an unknown
+# code or enum value) raises. (A comment, not a docstring: pydantic would put a docstring into
+# the JSON schema, which is the Claude tool's input_schema and part of PROMPT_VERSION.)
 class ExtractedFields(BaseModel):
     is_deal_request: bool = Field(
         description="True only if the post asks for a broker, agent, buyer, or property for a "
@@ -142,12 +147,33 @@ class ExtractedFields(BaseModel):
     @field_validator("state", mode="before")
     @classmethod
     def _upper_state(cls, v: object) -> str | None:
-        return v.strip().upper() if isinstance(v, str) and v.strip() else None
+        """Normalise only an ASCII string's case and surrounding whitespace; blank means null.
+
+        Anything else raises, so the eval counts it as an error instead of a quiet repair:
+        a non-string (48, ['TX'], b'TX') is not a state, and a non-ASCII string must not
+        case-fold into one ('\u0131l'.upper() == 'IL'). Codes that aren't states then fail
+        the State literal.
+        """
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError(f"state must be a string or null, got {type(v).__name__}")
+        v = v.strip()
+        if not v:
+            return None
+        if not v.isascii():
+            raise ValueError(f"state must be an ASCII two-letter code, got {v!r}")
+        return v.upper()
 
     @field_validator("city", "notes", mode="before")
     @classmethod
     def _blank_to_none(cls, v: object) -> str | None:
-        return v.strip() if isinstance(v, str) and v.strip() else None
+        """Strip surrounding whitespace and turn a blank string into null; a non-string raises."""
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError(f"must be a string or null, got {type(v).__name__}")
+        return v.strip() or None
 
 
 class DealRequirement(ExtractedFields):
