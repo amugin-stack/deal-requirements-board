@@ -5,7 +5,7 @@ Written blind to the implementation, from the contracts in review/fixes/disposit
 Everything runs in tmp git repos under tmp_path: cs.ROOT points there. The real data files are only
 read (dev and holdout labels, to build honest fake runs) and copied into the tmp repo. No API calls.
 
-Seam assumed for run identity: `cs.current_run_identity() -> (prompt_version, model, request_sha)`.
+Seam for run identity: `cs.current_identity() -> RunIdentity(prompt_version, model, request_sha)`.
 """
 
 import importlib.util
@@ -167,7 +167,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
     head = init_repo(root, {"README.md": "tmp\n"})
     monkeypatch.setattr(cs, "ROOT", root)
     monkeypatch.setattr(cs, "guard_checks", list)
-    monkeypatch.setattr(cs, "current_run_identity", lambda: IDENTITY, raising=False)
+    monkeypatch.setattr(cs, "current_identity", lambda: cs.RunIdentity(*IDENTITY))
     monkeypatch.setattr(cs, "current_prompt_version", lambda: IDENTITY[0])
     return root, head
 
@@ -467,7 +467,8 @@ def test_cq7_guard_fails_on_a_protected_commit_later_reverted(guard_repo: Path) 
     """eval-quality/CQ-7: a commit since loop-start touching a protected path fails, though the net diff is empty."""
     protected_commit_then_revert(guard_repo)
     assert git(guard_repo, "diff", "loop-start", "--", "deal_board/scoring.py") == ""  # fixture sanity
-    assert "protected files unchanged" in failed(cs.guard_checks())
+    # The net diff is clean, so the history check (not the net-diff one) is what must catch it.
+    assert failed(cs.guard_checks()) == {"protected files untouched in history"}
 
 
 SKIP_ALL = "import pytest\n\n\ndef pytest_collection_modifyitems(items):\n" + (
