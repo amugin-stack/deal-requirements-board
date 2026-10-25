@@ -425,18 +425,23 @@ def changes_since(tag: str) -> list[tuple[str, str]] | None:
 def commits_since(tag: str) -> list[tuple[str, list[tuple[str, str]]]] | None:
     """(sha, changes) for every commit in tag..HEAD, oldest first; None if git fails.
 
-    Merge commits list no changes of their own (diff-tree shows none without -m); the commits
-    they bring in are in the range themselves.
+    Each commit is checked two ways, and either view failing the allow-list fails the history
+    check: its own diff against its parent (`diff-tree --root`, so an edit later reverted is still
+    seen), and its whole tree against `tag`. The second view is what catches a merge commit that
+    carries an edit of its own (an "evil merge", invisible to plain diff-tree) or a merged-in
+    unrelated root; the first is what keeps an edit to an already-added results file visible.
     """
     revs = git("rev-list", "--reverse", f"{tag}..HEAD")
     if revs.returncode != 0:
         return None
     out: list[tuple[str, list[tuple[str, str]]]] = []
     for sha in revs.stdout.split():
-        tree = git("diff-tree", "--no-commit-id", "--name-status", "--no-renames", "-r", "-z", sha)
-        if tree.returncode != 0:
+        own = git("diff-tree", "--root", "--no-commit-id", "--name-status", "--no-renames", "-r", "-z", sha)
+        snapshot = git("diff", "--name-status", "--no-renames", "-z", tag, sha)
+        if own.returncode != 0 or snapshot.returncode != 0:
             return None
-        out.append((sha, parse_name_status(tree.stdout)))
+        changes = parse_name_status(own.stdout)
+        out.append((sha, changes + [c for c in parse_name_status(snapshot.stdout) if c not in changes]))
     return out
 
 
