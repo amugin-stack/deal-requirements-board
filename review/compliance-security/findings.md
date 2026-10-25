@@ -1,0 +1,1011 @@
+# Compliance & security review — findings
+
+Branch `review-compliance-security`, cut from `main` at `c4ae4be`. Read-only adversarial review in 4
+rounds (see `LOG.md`, loop in `graph.md`). Each candidate was reproduced by its own verifier with a
+`python -I` script (FastAPI `TestClient` with fakes, synthetic `Broker` objects, CSV scans, whole-suite
+mutation runs in a scratch copy). No network, no API key, no repo file changed.
+
+Paths in commands: `$WT` = the worktree, `$PY` = the main checkout's `.venv/bin/python`, `$SCRATCH` =
+the session scratchpad that holds each `roundN/verify_<ID>.py`; most scripts are also inlined in
+`findings.json`.
+
+**Result: 20 confirmed, 4 rejected.** Compliance 11 confirmed / 2 rejected; security & data 9 confirmed /
+2 rejected. **Every confirmed finding is low severity.** No path was found that returns an unlicensed,
+expired, probation, suspended or out-of-state broker when the matcher is given the correct state and
+the correct date. The weak points are around the gate: which date it gets (C-3), which extractor feeds
+it (C-7, C-8), how old its data is (C-2), and tests that claim more than they check (C-12, C-13).
+
+Known issues that were excluded, as briefed: the `followup.py` city echo, `api.py` not re-validating a
+`model_construct`'d requirement, regex first-state-wins, the year-only expiry gap, `results/` keeping raw
+outputs, and license numbers being public lookups.
+
+## Confirmed findings
+
+| ID | Sev | Dimension | Where | Finding | Round |
+|---|---|---|---|---|---|
+| C-2 | low | compliance | `matcher.py:42` | The gate has no snapshot age limit: as_of moves forward with the clock, but license status stays as it was in the Oct 20, 2026 TREC download | 1 |
+| C-3 | low | compliance | `api.py:170` | get_as_of uses the server's local date, not the deal state's date, so a license that expired yesterday (Texas time) can pass | 1 |
+| C-4 | low | compliance | `matcher.py:92` | The sales-agent referral note needs an exact 'Sales Agent' string; the loader accepts any license_type, so other spellings get no note | 1 |
+| C-5 | low | compliance | `scripts/build_brokers.py:45` | build_brokers.py: the 'keep every' Active-but-expired comment is really a [:N_INVALID] slice, status is classified on the raw value but written stripped, and the %y pivot is undocumented | 1 |
+| C-6 | low | compliance | `schema.py:91` | README/docstrings say bad state output is never repaired, but the state validator strips and upper-cases it (Unicode case folds included) and quietly turns non-strings into None | 1 |
+| C-7 | low | compliance | `api.py:138` | DEAL_EXTRACTOR is unvalidated: 'claude' (or any typo) without a key is silently treated as auto and serves the regex baseline | 2 |
+| C-8 | low | compliance | `extractors/regex_baseline.py:25` | Regex invents a state for posts that name no state, from a neighbourhood name, a city abbreviation or a CRE abbreviation (Washington Heights->WA, 'CO pending'->CO, LA->LA, NE Portland->NE) | 2 |
+| C-9 | low | compliance | `matcher.py:69` | Fictional NY-only broker fx-12 lists Hoboken (NJ); state-blind _market_point adds '+2 serves Hoboken' when a Hoboken, NJ deal is misrouted to NY | 2 |
+| C-10 | low | compliance | `extractors/claude.py:123` | Claude output that is truncated, mislabelled or loosely typed is accepted and routed instead of raising | 2 |
+| C-12 | low | compliance | `tests/test_compliance.py:23` | Compliance gate test skips holdout_v3 and can't take it in as written: every wrong-state variant moves to OK, and v3-01 is an OK deal | 3 |
+| C-13 | low | compliance | `tests/test_api.py:479` | API integration test 'only returns brokers licensed in the deal state' is status-blind and vacuous (passes with a status-blind gate) | 3 |
+| S-1 | low | security_data | `api.py:225` | Content-Length header with more than 4300 digits crashes BodySizeLimit with a 500 instead of a 413 | 1 |
+| S-2 | low | security_data | `api.py:148` | Anthropic client is built with SDK tracing defaults, so one env var exports full post text in OTel spans | 1 |
+| S-3 | low | security_data | `api.py:302` | Log post id is an unsalted SHA-256 prefix plus exact length, so a guessed or templated post can be confirmed or brute-forced offline | 1 |
+| S-4 | low | security_data | `scripts/eval.py:288` | --rescore writes the caller's path verbatim into committed results (absolute path leaks local username) | 1 |
+| S-5 | low | security_data | `data/brokers.csv:122` | brokers.csv republishes sensitive real-licensee statuses (Deceased, plus 'Probation - Active') keyed by public license number | 1 |
+| S-6 | low | security_data | `requirements.txt:6` | requirements.txt pins httpx 0.x, which nothing uses at runtime; the HTTP stack that carries the API key (httpx2/httpcore2/truststore) and opentelemetry-api come from unpinned ranges | 2 |
+| S-7 | low | security_data | `.gitignore:3` | .gitignore ignores only the exact name `.env`; `.env.local`, `.env.production`, `*.pem`, `*.key` are not ignored | 2 |
+| S-8 | low | security_data | `loop/DRAFT.md:61` | Agent-editable Playbook tells the loop agent to load .env itself in ad-hoc probe code, contradicting the fixed 'Never read .env' rule; the Playbook is self-propagating agent instructions | 2 |
+| S-10 | low | security_data | `.claude/agents/extractor-improver.md:13` | Loop agent's FIXED holdout ban is keyed on a literal "split": "all"; three pre-loop results files have no split key yet hold 26 holdout raw outputs each, and data/holdout_v3.jsonl is not named in any ban | 3 |
+
+## Rejected candidates
+
+| ID | Dimension | Candidate | Why rejected |
+|---|---|---|---|
+| C-1 | compliance | Regex baseline reads a city that shares a state's name as that state: 'Washington, DC' goes to the WA broker | REJECTED: duplicate of known issue #3 (first state wins). Output: DC in CODES: True \| 'Washington, DC' hits ['Washington','DC'] -> WA [fx-16 WA] \| 'DC (Washington)' hits ['DC','Washington'] -> DC [] \| 'Nevada, MO' hits ['Nevada','MO'] -> NV [fx-15 NV] \| 'Washington County, Oregon' hits ['Washington','Oregon'] -> WA [fx-16 WA]. Reason: 'DC' is a valid State in schema.py (line 15), so these posts co |
+| C-11 | compliance | BrokerMatch docstring says the response is 'enough to contact and verify the licensee' but it has no contact field and omits license_state, status and expiration | Observed: 200; response keys ['excluded_for_licensing','extractor','follow_up_question','matches','requirement']; match keys ['broker_id','license_number','license_type','name','reasons','score','source'] (5 TX matches); sample name 'TX Licensee 009', source 'trec_2026-10-20', license_number '606083-B'. Snippet verbatim at api.py:74. REJECTED as too trivial / not a real mismatch: (1) 'verify' is h |
+| S-9 | security_data | Review secret check scans only for key strings; sibling review branches already committed the OS username and local paths (/Users/<user>/...) in findings | REJECTED: out of scope for main's code. Observed: main (c4ae4be) home-path: [] real-user: [] (no /Users/<name> or -Users-<name>- strings in any tracked file). HEAD (this review branch) has 1 home-path match in review/compliance-security/findings.json, but it is a generic placeholder inside a claim, not the real OS username (real-user count 0). check_success.py (g) is spec'd as 'no file in this dir |
+| S-11 | security_data | Eval markdown report puts model-extracted values into results/*.md unescaped; a backtick plus newline breaks out of the code span and injects headings and links | Observed: city accepted: 'Austin`\n\n## INJECTED\n\n[x](https://evil.example) `'; injected heading line present: True; eval DATASETS: {'holdout': 'data/holdout.jsonl', 'posts': 'data/posts.jsonl'}; holdout/holdout_v3/posts/red_team posts containing a backtick: [] for all; no committed failure value contains a backtick or a blank line. REJECTED, because there is no reachability: eval inputs are onl |
+
+## What I'd fix first
+
+1. **C-3: compute `as_of` in Texas time** (`api.py:170`). This is the only reproduced case where the
+   live API returns a broker whose license had already expired, on any host west of Central time. The
+   fix is one line: `datetime.now(ZoneInfo("America/Chicago")).date()`.
+2. **C-7 + C-8: stop serving the regex baseline silently.** Validate `DEAL_EXTRACTOR` and refuse
+   `claude` without a key. The regex path invents states for posts that name none
+   ("Washington Heights" → WA broker), which breaks "never guesses a state" in production.
+3. **S-2: pin the SDK's tracing to metadata only** (`api.py:148`, one keyword argument). Without it, one
+   env var plus any OTel provider exports full post text, which the careful logger pinning doesn't cover.
+4. **C-13 + C-12: make the tests mean what their names say.** Pin `excluded_for_licensing` in the API
+   e2e test, and put `holdout_v3` through the compliance oracle with a wrong-state target that no
+   labelled post uses.
+5. **C-10 + C-6: make "bad output raises" true.** Require `stop_reason == "tool_use"`, the right tool
+   name, the exact key set, and strict types. Then the eval counts truncated outputs as failures.
+
+The rest (C-2 snapshot age, C-4 license_type enum, C-5 build strata, C-9 Hoboken market, S-1, S-3, S-4,
+S-5, S-6, S-7, S-8, S-10) is hardening or documentation work that can be batched.
+
+## Compliance promise audit
+
+README: *"filters brokers down to those **actively licensed in the deal's state**"* and *"only an exact
+`Active` status plus an unexpired date counts as licensed … the system never guesses a state from a
+city."* **Verdict: No, not fully.**
+
+- **The gate itself: yes.** `is_licensed` (`matcher.py:32-45`) needs the state to match, the status to be
+  exactly `Active`, and a known expiration ≥ `as_of`. Every fail-open mutation tried (about a dozen) turns the full suite
+  red (round 4). Boundaries hold, including the expiry day, a leap day, `None`, and Unicode or fullwidth
+  state lookalikes.
+- **License data is never fabricated: yes.** `build_brokers.py` leaves the specialty and deal fields
+  blank for real rows, and every fictional row is labelled `Fictional`/`FICT-` (S-5 scan).
+- **"Unexpired" in the deployed API: no.** C-3 shows `POST /match` returning a broker whose license
+  expired the day before (Texas date) on a Honolulu-TZ host. C-2 shows the status is also only as fresh
+  as the 2026-10-20 snapshot.
+- **"Never guesses a state from a city": no, on the regex path.** C-8 shows states invented from a
+  neighbourhood or an abbreviation, and C-7 shows the API can land on that path without anyone choosing
+  it. The Claude path holds: the prompt, the strict enum and the gold labels never infer a state.
+
+## Finding details
+
+### C-2 (low, compliance): The gate has no snapshot age limit: as_of moves forward with the clock, but license status stays as it was in the Oct 20, 2026 TREC download
+
+**Where:** `matcher.py:42`
+
+```
+and broker.license_status == "Active"
+```
+
+**Claim.** is_licensed checks license_expiration against as_of, and api.get_as_of returns date.today(). license_status, though, is a fixed value from the TREC download (source='trec_2026-10-20'), and nothing compares that snapshot date to as_of. A suspension or revocation after Oct 20, 2026 therefore never reaches the gate as time passes. In my run, 102 TREC rows still pass the TX gate at as_of=2027-06-01 and 31 pass at 2028-06-01, all on the 2026-10-20 snapshot. A synthetic 'Active' row from that snapshot with expiration 2029-01-01 passes at 2028-06-01. Calibration: this comes from using a static snapshot, and it is partly disclosed. The README dates the data (Oct 20, 2026 download), and every /match response carries `source=trec_2026-10-20`. But neither the README's Limitations section nor the API response says the status may be stale. The README's claim that brokers are 'actively licensed in the deal's state' and matcher.py's docstring ('can't be verified as licensed... is never returned') are true only as of the snapshot date. Note: the candidate's quoted phrase 'verifiably licensed' does not appear verbatim in the README. Low: a documentation/hardening gap, not a code path that returns a broker who was unlicensed per the data the system holds.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round1/verify_C-2.py
+
+import sys; from datetime import date
+W="$WT"; sys.path.insert(0,W)
+from brokers import load_brokers, Broker
+from matcher import is_licensed
+bs=load_brokers()
+for d in [date(2026,10,24),date(2027,6,1),date(2028,6,1)]:
+    ok=[b for b in bs if b.source.startswith("trec_") and is_licensed(b,"TX",d)]
+    print(d,"TREC licensed:",len(ok),"sources:",sorted({b.source for b in ok}))
+b=Broker(broker_id="x",name="x",source="trec_2026-10-20",license_state="TX",license_number="1",license_type="Broker Individual",license_status="Active",license_expiration=date(2029,1,1),county=None,markets=[],property_types=[],transaction_types=[],min_deal_usd=None,max_deal_usd=None)
+print("synthetic 2026-10-20 snapshot row at 2028-06-01:",is_licensed(b,"TX",date(2028,6,1)))
+```
+
+**Observed (verifier).** Observed: '2026-10-24 TREC licensed: 150 sources: [trec_2026-10-20]'; '2027-06-01 TREC licensed: 102'; '2028-06-01 TREC licensed: 31'; 'synthetic 2026-10-20 snapshot row at 2028-06-01: True'. Snippet verified verbatim at matcher.py:42. Not a duplicate of a known issue: known #4 is about expiration-year comparison, and this is status staleness. Severity lowered from medium to low. It is inherent to a dated static snapshot, the snapshot date is disclosed in the README data table and returned per match in `source`, and no broker is returned against the data the system holds. What remains is that nothing bounds snapshot age and the README/Limitations never say status may be outdated. The candidate's '5 brokers' is the match limit; 31 pass the gate. The README quote 'verifiably licensed' is not verbatim.
+
+**Proposed fix.** Store the snapshot date (parse it from source or add a verified_on column). In is_licensed, fail closed for real-record rows when as_of - verified_on > MAX_SNAPSHOT_AGE (e.g. 30 days). Also return verified_on in BrokerMatch, and add a README Limitations bullet saying license status reflects the Oct 20, 2026 TREC download and must be re-checked against TREC before a referral.
+
+**Proposed regression test.** test_stale_snapshot_fails_closed: a Broker with source='trec_2026-10-20', status 'Active' and expiration 2029-01-01 is licensed at as_of=2026-10-24 but not at as_of=2027-06-01 (beyond MAX_SNAPSHOT_AGE)
+
+### C-3 (low, compliance): get_as_of uses the server's local date, not the deal state's date, so a license that expired yesterday (Texas time) can pass
+
+**Where:** `api.py:170`
+
+```
+return date.today()
+```
+
+**Claim.** api.get_as_of() returns date.today(), which follows the server process's TZ. On a host whose TZ is west of Central (e.g. Pacific/Honolulu, US/Pacific), for the first hours of each Texas day the server's date is still the previous day. During that window, POST /match with the real get_as_of returns a TX broker whose license expired the day before (Texas date). Reproduced: with the clock frozen at 2027-01-02T06:30Z (00:30 CST on Jan 2) and TZ=Pacific/Honolulu, get_as_of() returns 2027-01-01, and a broker with license_expiration=2027-01-01 is returned as a match (excluded_for_licensing=0). Under TZ=America/Chicago, at the same instant it is excluded. UTC hosts are ahead of Texas, so they fail closed (too strict in the Texas evening, never too lenient). README scope: the 'The date is passed in, never read from the clock' sentence is in the Gate row ('matcher.py → is_licensed'), so it only describes matcher.py, where it is true. The Serve row says only that the clock is an injected dependency and does not say which timezone it uses. So this is a gap the README doesn't mention, not a false statement. The candidate's extra claim that passing a datetime as as_of raises TypeError (500) is hypothetical: the current get_as_of always returns a date. It was not reproduced and has been removed from the claim.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round1/verify_C-3.py
+
+# verify_C-3.py
+import os, subprocess, sys
+W = "$WT"
+CHILD = r'''
+import sys, time
+from datetime import datetime, date, timezone
+FROZEN = datetime(2027, 1, 2, 6, 30, tzinfo=timezone.utc).timestamp()  # 00:30 CST Jan 2; 20:30 HST Jan 1
+time.time = lambda: FROZEN          # CPython's date.today() calls the Python-level time.time()
+sys.path.insert(0, W)
+import api
+from brokers import Broker
+from schema import DealRequirement
+from fastapi.testclient import TestClient
+class FakeExtractor:
+    name = "regex"
+    def extract(self, text): return DealRequirement(is_deal_request=True, state="TX", city="Austin", property_type="retail")
+b = Broker.model_validate(dict(broker_id="EXPIRED-YDAY-TX", name="n", source="fictional", license_state="TX",
+    license_number="1", license_type="Broker Individual", license_status="Active", license_expiration="2027-01-01",
+    county="", markets="", property_types="", transaction_types="", min_deal_usd="", max_deal_usd=""))
+api.app.dependency_overrides[api.get_extractor] = lambda: FakeExtractor()
+api.app.dependency_overrides[api.get_brokers] = lambda: [b]   # get_as_of NOT overridden
+r = TestClient(api.app).post("/match", json={"text": "need a retail broker in Austin TX"})
+j = r.json()
+print(f"TZ={time.tzname} get_as_of()={api.get_as_of()} status={r.status_code} "
+      f"matches={[m['broker_id'] for m in j['matches']]} excluded={j['excluded_for_licensing']} (broker expires 2027-01-01)")
+'''.replace("W)", repr(W) + ")", 1)
+for tz in ("Pacific/Honolulu", "America/Chicago"):
+    env = dict(PATH=os.environ.get("PATH", ""), TZ=tz)
+    out = subprocess.run([sys.executable, "-I", "-c", CHILD], env=env, capture_output=True, text=True)
+    print(tz, "->", out.stdout.strip() or out.stderr[-800:])
+```
+
+**Observed (verifier).** Observed output:
+Pacific/Honolulu -> TZ=('HST', 'HST') get_as_of()=2027-01-01 status=200 matches=['EXPIRED-YDAY-TX'] excluded=0 (broker expires 2027-01-01)
+America/Chicago -> TZ=('CST', 'CDT') get_as_of()=2027-01-02 status=200 matches=[] excluded=1 (broker expires 2027-01-01)
+Snippet 'return date.today()' is verbatim at api.py:170. Not a duplicate of the known issues. Severity stays low. The bad case only happens on hosts west of Central time, for a window of a few hours, and lets a license through at most one day after it expired. UTC/cloud defaults fail closed. On a US/Pacific host this is borderline medium ('plausible deployment path'). README check: the 'never read from the clock' sentence belongs to the matcher.py Gate row and is accurate there, so the documentation part is a gap, not a mismatch. The datetime TypeError sub-claim is dropped as hypothetical (not reachable with the current code).
+
+**Proposed fix.** In api.get_as_of, return datetime.now(ZoneInfo("America/Chicago")).date(). All licensees are TREC/TX, so this uses the licensing authority's timezone. Generalize to a per-state zone if more states are added. Add a note to the README Serve row: 'as_of is today's date in Texas (America/Chicago), independent of server TZ.'
+
+**Proposed regression test.** test_get_as_of_uses_texas_date: in a subprocess with TZ=Pacific/Honolulu and time.time frozen at 2027-01-02T06:30Z, assert api.get_as_of() == date(2027, 1, 2), and that POST /match (fake TX extractor, real get_as_of, one broker with license_expiration 2027-01-01) returns no matches and excluded_for_licensing == 1
+
+### C-4 (low, compliance): The sales-agent referral note needs an exact 'Sales Agent' string; the loader accepts any license_type, so other spellings get no note
+
+**Where:** `matcher.py:92`
+
+```
+if broker.license_type == "Sales Agent":
+```
+
+**Claim.** Broker.license_type is a plain `str` with no validator (brokers.py:36, only a comment says "Broker Individual" or "Sales Agent"). The model's `_blank_to_none` validator does not strip whitespace. So load_brokers() accepts 'Sales Agent ' (trailing space), 'sales agent' and 'Salesperson' without error. Each of these brokers passes the gate and is returned without SALES_AGENT_NOTE, because matcher.py:92 checks for the exact string. If the type is mis-entered, a sales agent is shown with no 'referral fee must go through sponsoring broker' warning. Nothing pins the set of allowed values: no test in tests/test_data.py or tests/test_brokers.py asserts it. The TREC build path is safe because scripts/build_brokers.py strips the type and keeps only values in PEOPLE={'Sales Agent','Broker Individual'}. The exposure is the hand-written data/fictional_brokers.csv, any future source or state, or a direct load_brokers(path) call. The current data holds only 'Broker Individual' and 'Sales Agent', so the issue is latent. Low severity: no unlicensed broker gets through, but a required compliance note can go missing without any error.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round1/verify_C-4.py
+
+import sys, csv, tempfile, os
+from datetime import date
+W = "$WT"
+sys.path.insert(0, W)
+from brokers import load_brokers
+from matcher import match, SALES_AGENT_NOTE
+from schema import DealRequirement
+hdr = "broker_id,name,source,license_state,license_number,license_type,license_status,license_expiration,county,markets,property_types,transaction_types,min_deal_usd,max_deal_usd\n"
+types = ["Sales Agent", "Sales Agent ", "sales agent", "Salesperson", "Broker Individual"]
+body = "".join(f"f-{i},F{i},fictional,TX,N{i},{t},Active,2030-01-01,Travis,austin,,,,\n" for i, t in enumerate(types))
+p = os.path.join(tempfile.mkdtemp(), "b.csv"); open(p, "w").write(hdr + body)
+bs = load_brokers(p)
+print("loaded", [repr(b.license_type) for b in bs])
+req = DealRequirement(is_deal_request=True, state="TX")
+res = match(req, bs, date(2026, 10, 24), limit=10)
+for m in res.matches:
+    print(repr(m.broker.license_type), "note" if SALES_AGENT_NOTE in m.reasons else "NO NOTE")
+with open(f"{W}/data/brokers.csv") as f:
+    print("current data values:", sorted({r["license_type"] for r in csv.DictReader(f)}))
+```
+
+**Observed (verifier).** Output: loaded ['Sales Agent', 'Sales Agent ', 'sales agent', 'Salesperson', 'Broker Individual'] (no ValidationError). All 5 were returned by match(). Only 'Sales Agent' got the note; 'Sales Agent ', 'sales agent' and 'Salesperson' showed NO NOTE. current data values: ['Broker Individual', 'Sales Agent']. I ran `grep -n -F` and the snippet is verbatim at matcher.py:92. This is not one of the known issues. No test pins the license_type value set: the only references in tests/ build synthetic brokers with valid values. I narrowed the claim: build_brokers.py strips the type and filters to PEOPLE, so TREC-sourced rows can't trigger this, but fictional_brokers.csv and other load paths can. Severity stays low because the gate is unaffected and nothing is in the current data.
+
+**Proposed fix.** In brokers.py, change `license_type: str` to `license_type: Literal["Broker Individual", "Sales Agent"]` (or a str Enum shared with scripts/build_brokers.PEOPLE), so load_brokers raises ValidationError on an unknown or whitespace-padded type. matcher.py:92 can then compare against the enum member.
+
+**Proposed regression test.** test_unknown_license_type_rejected_at_load: Broker.model_validate with license_type in ('Salesperson', 'sales agent', 'Sales Agent ') raises ValidationError, and every row of data/brokers.csv has license_type in {'Broker Individual', 'Sales Agent'}
+
+### C-5 (low, compliance): build_brokers.py: the 'keep every' Active-but-expired comment is really a [:N_INVALID] slice, status is classified on the raw value but written stripped, and the %y pivot is undocumented
+
+**Where:** `scripts/build_brokers.py:45`
+
+```
+active_expired = [r for r in invalid if r["Status"] == "Active"][:N_INVALID]
+```
+
+**Claim.** Three separate sampling and documentation defects. None of them lets an unlicensed broker through the gate. (1) The comment on line 44 says 'keep every one', but line 45 keeps the first 50 Active-but-expired rows in file order. With 50 or more such rows, rng.sample(other_invalid, 0) adds nothing, so the invalid stratum has no Inactive, Suspended or Probation rows. On a synthetic raw file with 60 Active-expired rows and 42 Inactive/Suspended/'Probation - Active' rows, the output had 200 rows, all 'Active', and the 50 kept rows were exactly the first 50 in file order. (2) is_valid (line 36) and the active_expired filter (lines 45-46) compare the raw Status. Line 67 writes r['Status'].strip() under the comment 'copied verbatim, never edited'. A raw 'Active ' (trailing space) row with a future date is classified invalid and drawn from other_invalid. It is written out as 'Active' with that future date, so main()'s n_ok counts 151 valid instead of the intended 150, and is_licensed returns True for the row. This skews the strata and breaks the 'verbatim' claim and the README's '150 valid / 50 invalid' guarantee. It is not a gate bypass: the record really is Active and unexpired, the runtime gate in matcher.py checks the written data on its own, and a padded 'Active' with a past date is still rejected on date. (3) parse_date uses %m/%d/%y, so Python's pivot maps 12/31/68 to 2068-12-31 and 01/01/69 to 1969-01-01. A 4-digit year such as 12/31/1990 parses to None. This is undocumented. It would only matter if TREC used 2-digit placeholder years at or below 68, which the current data (1990/1991 placeholders) doesn't show. The current data/brokers.csv has 150 valid rows, 2 Active-expired rows (1990/1991) and 48 other invalid rows, which matches the README. Sub-claims 1 and 2 are latent, because data/raw is absent and a rebuild would be needed to trigger them.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round1/verify_C-5.py
+
+import sys, csv, collections, os
+from datetime import date
+WT='$WT'
+sys.path.insert(0, WT); sys.path.insert(0, WT+'/scripts')
+import build_brokers as bb
+from brokers import Broker
+from matcher import is_licensed
+D=os.path.dirname(os.path.abspath(__file__))
+H=['License Type','Status','License Expiration Date','License Number','County']
+def write(n,rows):
+    p=os.path.join(D,n); w=csv.writer(open(p,'w',newline='')); w.writerow(H); w.writerows(rows); return p
+def base(n=150): return [['Sales Agent','Active','12/31/27',f'FAKE-V{i:04d}','FakeCounty'] for i in range(n)]
+# (1)
+rows=base()+[['Sales Agent','Active','01/01/20',f'FAKE-AE{i:03d}','FakeCounty'] for i in range(60)]+[['Sales Agent',s,'12/31/27',f'FAKE-O{i:03d}','FakeCounty'] for i,s in enumerate(['Inactive','Suspended','Probation - Active']*14)]
+out=bb.sample_trec(write('c5_raw1.csv',rows))
+print(collections.Counter(r['license_status'] for r in out))
+ae=[r['license_number'] for r in out if r['license_number'].startswith('FAKE-AE')]
+print(len(ae), sorted(ae)==[f'FAKE-AE{i:03d}' for i in range(50)])
+# (2)
+rows=base(150)+[['Sales Agent','Active ','12/31/27','FAKE-PAD1','FakeCounty'],['Sales Agent','Active ','12/31/27','FAKE-PAD2','FakeCounty']]+[['Sales Agent','Inactive','12/31/27',f'FAKE-O{i:03d}','FakeCounty'] for i in range(60)]
+print(bb.is_valid({'Status':'Active ','License Expiration Date':'12/31/27'}))
+out=bb.sample_trec(write('c5_raw2.csv',rows))
+pad=[r for r in out if r['license_number'].startswith('FAKE-PAD')]
+print([(r['license_status'],r['license_expiration']) for r in pad])
+print(sum(1 for r in out if r['license_status']=='Active' and r['license_expiration']>=bb.AS_OF.isoformat()))
+b=pad[0]; print(is_licensed(Broker(broker_id='x',name='x',source='s',license_state='TX',license_number=b['license_number'],license_type=b['license_type'],license_status=b['license_status'],license_expiration=date.fromisoformat(b['license_expiration']),county=None,markets=[],property_types=[],transaction_types=[],min_deal_usd=None,max_deal_usd=None),'TX',date(2026,10,20)))
+print(bb.is_valid({'Status':' Active','License Expiration Date':'01/01/20'}))
+# (3)
+for s in ['12/31/68','01/01/69','12/31/1990']: print(s, bb.parse_date(s))
+
+Also a csv scan of the current data/brokers.csv: Counter of license_status, valid count as of 2026-10-20, and expiration years.
+```
+
+**Observed (verifier).** Snippet found verbatim at line 45 (grep). Not a duplicate of known issues 1-6. main() was never called; only sample_trec was run, on synthetic FAKE-* raw CSVs in the scratchpad. Observed output: (1) Counter({'Active': 200}); AE kept: 50, first50-in-file-order: True. (2) is_valid('Active ' future): False; PAD rows written: [('Active', '2027-12-31')]; main()-style n_ok: 151 (intended 150); gate on written row: True; is_valid(' Active', past): False. (3) 12/31/68 -> 2068-12-31; 01/01/69 -> 1969-01-01; 12/31/1990 -> None. Current brokers.csv: 200 TREC rows, 150 valid, statuses Active 152 / Expired<6mo 29 / Inactive 16 / Deceased 1 / Probation - Active 1 / Expired>6mo 1; no padded statuses; expiration years 1990, 1991 and 2021-2028. Matches the README. Severity check: low is right. The strip/raw mismatch only moves a genuinely Active, unexpired record into the wrong stratum, which inflates the valid count. It does not make an unlicensed broker matchable, because is_licensed independently requires an exact 'Active' status plus an unexpired date on the written data. All three sub-claims are build-time sampling and documentation correctness issues and are latent until someone rebuilds from a raw file.
+
+**Proposed fix.** Normalise once at read time: for each row, set r['Status'] = r['Status'].strip() (and the same for the date and license type) right after DictReader, then use that one value for is_valid, the active_expired filter and the output. Either write the raw value with no .strip() or change the comment to 'whitespace-trimmed, otherwise unedited'. Either reword line 44 to 'keep up to N_INVALID' or cap active_expired at, say, N_INVALID//2 with rng.sample, so other statuses always stay represented. Assert len(valid) >= N_VALID with a clear message. Document the %y pivot (00-68 -> 2000s) in parse_date and fail loudly on 4-digit years instead of silently returning None.
+
+**Proposed regression test.** test_build_strata_classify_stripped_status: sample_trec on a synthetic raw CSV with an 'Active ' + future-date row puts it in the valid stratum, so exactly N_VALID output rows are Active and unexpired; and with 60 Active-expired rows plus Inactive/Suspended rows, at least one output row has a status other than 'Active'.
+
+### C-6 (low, compliance): README/docstrings say bad state output is never repaired, but the state validator strips and upper-cases it (Unicode case folds included) and quietly turns non-strings into None
+
+**Where:** `schema.py:91`
+
+```
+return v.strip().upper() if isinstance(v, str) and v.strip() else None
+```
+
+**Claim.** README.md:38 says 'Bad output raises an error instead of being repaired.' The extractors/claude.py module docstring (line 5) says 'we raise rather than repair, so the eval counts it.' The extractors/__init__.py parse_requirement docstring says it 'Raises ExtractionError instead of repairing bad values.' But ExtractedFields._upper_state (mode='before') does repair state values before the State Literal check runs. ' tx ' and 'tx' become 'TX'. Non-ASCII 'ıl' (dotless i, U+0131) becomes 'IL' and 'ın' becomes 'IN' through str.upper(). Non-strings (48, ['TX']) and '' silently become None instead of raising. This happens in parse_requirement, so it affects ClaudeExtractor.extract and scripts/eval.py to_record (fresh runs, cache replays and --rescore). As a result the eval undercounts malformed state outputs. Full names like 'Oregon' or 'Texas' still raise, as the docstring's example says. Reachability: the live tool uses strict: true, and TOOL.input_schema.properties.state is anyOf[enum of 2-letter codes, null], so the real API should never return these values. They can only come from fake clients, hand-edited or old cache/results raw outputs fed to --rescore, or a future non-strict extractor. No route to a wrong broker: a dropped value becomes state=None, which fails closed into the state follow-up question. The case fold maps to the state the text plainly spells. This is a doc/code mismatch plus a measurement-honesty issue. Low.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round1/verify_C-6.py
+
+import sys, json
+W = "$WT"
+sys.path.insert(0, W); sys.path.insert(0, W + "/scripts")
+from schema import DealRequirement as D
+from extractors import parse_requirement, ExtractionError
+from extractors.claude import TOOL
+st = TOOL["input_schema"]["properties"]["state"]
+print("strict schema state:", json.dumps(st)[:160])
+for v in [" tx ", "tx", "\u0131l", "\u0131n", 48, ["TX"], "", "Oregon", "Texas"]:
+    try: print(repr(v), "->", repr(parse_requirement({"is_deal_request": True, "state": v}).state))
+    except ExtractionError as e: print(repr(v), "-> ExtractionError")
+import eval as ev
+print("to_record lowercase:", ev.to_record({"is_deal_request": True, "state": "tx"})["prediction"]["state"])
+print("to_record int:", ev.to_record({"is_deal_request": True, "state": 48})["error"])
+```
+
+**Observed (verifier).** Observed output: strict schema state: {"anyOf": [{"enum": ["AL", "AK", ... (2-letter enum + null). ' tx ' -> 'TX'; 'tx' -> 'TX'; 'ıl' -> 'IL'; 'ın' -> 'IN'; 48 -> None; ['TX'] -> None; '' -> None; 'Oregon' -> ExtractionError; 'Texas' -> ExtractionError; to_record lowercase: TX; to_record int: None (no error recorded). Snippet is verbatim at schema.py:91. Not a duplicate of the known issues (#2 is api.py skipping re-validation of model_construct objects; this is the validator itself normalizing). Severity stays low: the live strict enum blocks these values from the real API, and every repaired or dropped value either maps to the state the text plainly spells or fails closed to state=None and a follow-up question, so no wrong or unlicensed broker can result. The real cost is that the eval/rescore error count hides malformed state outputs, and three docstrings/README say otherwise.
+
+**Proposed fix.** In _upper_state: return None for None; raise ValueError for non-str; for str, strip and require s.isascii() (or re.fullmatch('[A-Za-z]{2}', s)) before upper(), else raise. Or drop upper-casing completely and let the strict Literal reject anything that isn't an exact code, if the 'never repaired' wording should hold literally. Otherwise change README.md:38, the extractors/claude.py docstring and the parse_requirement docstring to say whitespace/case normalization is applied but other bad values raise.
+
+**Proposed regression test.** test_state_rejects_non_ascii_and_non_string: parse_requirement({'is_deal_request': True, 'state': '\u0131l'}) raises ExtractionError; same for state=48 and state=['TX']; and (if case repair is kept) to_record({'is_deal_request': True, 'state': 'tx'}) still yields 'TX', so the documented behaviour is pinned
+
+### C-7 (low, compliance): DEAL_EXTRACTOR is unvalidated: 'claude' (or any typo) without a key is silently treated as auto and serves the regex baseline
+
+**Where:** `api.py:138`
+
+```
+if os.environ.get("ANTHROPIC_API_KEY") and forced != "regex":
+```
+
+**Claim.** get_extractor only recognises DEAL_EXTRACTOR='regex'; every other value ('claude', 'Claude', 'anthropic', typos) is treated as auto, so with no ANTHROPIC_API_KEY an operator who explicitly asked for Claude gets the frozen regex baseline with no startup error or warning. The no-key fallback itself is documented (get_extractor docstring; README 'omit DEAL_EXTRACTOR to use Claude when a key is set'; tests/test_api.py no-key case), and no doc lists 'claude' as an accepted value, so this is input-validation hardening, not an undocumented compliance path. The out-of-state routing that follows (e.g. 'Washington Heights ...' -> WA, fx-16; KNOWN_REGEX_STATE_LEAKS 16/30) is known issue #3, and the README's own run command already uses DEAL_EXTRACTOR=regex. Correction to candidate: it is not log-free; each request logs INFO 'extractor=regex' and the response carries extractor='regex'.
+
+**Reproduction.**
+
+```
+env -u ANTHROPIC_API_KEY $PY -I -B $SCRATCH/round2/verify_C-7.py
+
+import sys, os, logging
+W="$WT"
+sys.path.insert(0, W)
+logging.basicConfig(level=logging.DEBUG)
+import api
+assert "ANTHROPIC_API_KEY" not in os.environ
+for v in ["claude", "Claude", "anthropic", "rgex", "regex", ""]:
+    os.environ["DEAL_EXTRACTOR"] = v
+    print(repr(v), "->", api.get_extractor().name)
+from fastapi.testclient import TestClient
+from datetime import date
+os.environ["DEAL_EXTRACTOR"] = "claude"
+api.app.dependency_overrides[api.get_as_of] = lambda: date(2026, 10, 20)
+c = TestClient(api.app)
+r = c.post("/match", json={"text": "Washington Heights co-op for sale, $800k, 45 days"})
+j = r.json()
+print(r.status_code, j["extractor"], j["requirement"]["state"], [m["broker_id"] for m in j["matches"]])
+```
+
+**Observed (verifier).** Observed: 'claude'->regex, 'Claude'->regex, 'anthropic'->regex, 'rgex'->regex, 'regex'->regex, ''->regex; POST with DEAL_EXTRACTOR=claude -> 200 extractor=regex state=WA matches=['fx-16']; INFO:api:matched ... extractor=regex. Snippet verbatim at api.py:138. Downgraded medium->low: the no-key fallback is documented design (docstring, README run note, test no-key/empty-key params); 'claude' is never documented as a valid value; the resulting out-of-state routing is known #3 restated; per-request INFO log and response field do disclose the regex choice. Remaining true part: no validation of DEAL_EXTRACTOR and no startup warning when an explicit non-regex request degrades to regex.
+
+**Proposed fix.** Validate DEAL_EXTRACTOR against {'', 'auto', 'claude', 'regex'} and raise on anything else; make 'claude' without ANTHROPIC_API_KEY fail at startup (or 503 from /match) instead of degrading; log one WARNING at startup when auto mode resolves to regex.
+
+**Proposed regression test.** test_deal_extractor_claude_without_key_does_not_fall_back_to_regex: with DEAL_EXTRACTOR='claude' and no key, get_extractor() raises (or /match returns 503), and DEAL_EXTRACTOR='rgex' raises ValueError
+
+### C-8 (low, compliance): Regex invents a state for posts that name no state, from a neighbourhood name, a city abbreviation or a CRE abbreviation (Washington Heights->WA, 'CO pending'->CO, LA->LA, NE Portland->NE)
+
+**Where:** `extractors/regex_baseline.py:25`
+
+```
+STATE_RE = re.compile(r"\b(" + "|".join(sorted(NAMES, key=len, reverse=True)) + r")\b(?! City)|\b([A-Z]{2})\b")
+```
+
+**Claim.** For posts whose only state-looking token is spurious (no real state anywhere), _state() returns that token as the deal state. 'Washington Heights co-op for sale...' (NYC neighbourhood) -> WA and returns fx-16 (WA broker) for a NY deal; 'Seller in NYC listing a condo, CO pending...' -> CO and returns fx-19 (CO); 'Buyer in LA ...' -> LA and 'condo in NE Portland' -> NE (no brokers, but the follow-up asks for the city instead of the state). In all four the state follow-up is suppressed. This is not first-state-wins (known #3): each post has exactly one state token. The red-team code_collision rows (rt-07..12) always also contain the real state, and implied_city rows rt-13..15 use bare full city names that the regex correctly leaves stateless, so no pinned row covers a stateless post getting a state invented. README 'Error analysis'/'Limitations' do not document it (only $9.50/sf, 'flexible', 'just closed'); posts.jsonl/holdout.jsonl have no such cases. It breaks the README promise 'never guesses a state from a city' on the documented DEAL_EXTRACTOR=regex API path. Low: the baseline is frozen and documented as naive, and the gate still only returns brokers licensed in the (wrong) extracted state, the same consequence class as known #3.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round2/verify_C-8.py
+
+import sys, re
+WT="$WT"; sys.path.insert(0, WT)
+from datetime import date
+from typing import get_args
+from schema import State
+from extractors.regex_baseline import RegexExtractor
+from brokers import load_brokers
+from matcher import match
+from followup import follow_up_question
+CODES=set(get_args(State)); B=load_brokers(); AS=date(2026,10,20); r=RegexExtractor()
+NAMES=["Washington","Louisiana","Colorado","Nebraska"]
+for t in ["Washington Heights co-op for sale, $800k, 45 days",
+          "Seller in NYC listing a condo, CO pending, $1.2M, 90 days.",
+          "Buyer in LA looking for a 3bd SFR around $900k, 30 days.",
+          "Need a buyer's agent for a condo in NE Portland, $500k, 60 days."]:
+    toks=[w for w in re.findall(r"\b[A-Z]{2}\b",t) if w in CODES]+[n for n in NAMES if n in t]
+    q=r.extract(t); m=match(q,B,AS)
+    print(repr(t), "| state tokens:", toks, "| state:", q.state, "city:", q.city,
+          "| matches:", [(x.broker.broker_id,x.broker.license_state) for x in m.matches],
+          "| followup:", follow_up_question(q))
+```
+
+**Observed (verifier).** Observed: 'Washington Heights co-op for sale, $800k, 45 days' state tokens ['Washington'] -> state WA, matches [('fx-16','WA')], follow-up asks transaction type. 'Seller in NYC listing a condo, CO pending, $1.2M, 90 days.' tokens ['CO'] -> CO, matches [('fx-19','CO')], follow-up asks city. 'Buyer in LA looking for a 3bd SFR around $900k, 30 days.' tokens ['LA'] -> LA, matches [], follow-up asks city. "Need a buyer's agent for a condo in NE Portland, $500k, 60 days." tokens ['NE'] -> NE, matches [], follow-up asks city. Each post has exactly one State-schema token (the spurious one), so this isn't first-state-wins. Checked KNOWN_REGEX_STATE_LEAKS (rt-01..30 subset) and every red_team row: code_collision rows always include the true state; implied_city rt-13..15 have no tokens. README Error analysis/Limitations, test_baseline_golden, test_matcher, test_compliance and posts/holdout labels don't document it. Snippet verified verbatim at line 25. Severity kept low: frozen naive baseline, same consequence class as known #3. Claim reworded: NE/LA return no brokers, but they still suppress the state follow-up.
+
+**Proposed fix.** Baseline frozen: add red-team rows for stateless posts with a spurious token (neighbourhood 'Washington Heights', city abbreviation 'LA', CRE 'CO pending', compass 'NE Portland') with expected_state null, pin the regex results in KNOWN_REGEX_STATE_LEAKS (fx-16, fx-19 cases), and document in the README that the regex baseline guesses states from abbreviations and neighbourhood names; don't serve the regex extractor in the API (see C-7), or fall back to the state follow-up when the only state evidence is a bare 2-letter token/name not in a 'City, ST' pattern.
+
+**Proposed regression test.** test_red_team_no_state_spurious_token_posts: for new rows 'Washington Heights co-op...', 'Seller in NYC ... CO pending', 'Buyer in LA ...', 'condo in NE Portland' with expected_state null, the Claude (fake) path returns no matches and a state follow-up; the regex path is pinned exactly (WA->fx-16 and CO->fx-19 in KNOWN_REGEX_STATE_LEAKS, LA/NE empty with a non-state follow-up) so a change either way is noticed.
+
+### C-9 (low, compliance): Fictional NY-only broker fx-12 lists Hoboken (NJ); state-blind _market_point adds '+2 serves Hoboken' when a Hoboken, NJ deal is misrouted to NY
+
+**Where:** `matcher.py:69`
+
+```
+if city in {m.strip().lower() for m in broker.markets}:
+```
+
+**Claim.** Partly true; downgraded from medium. _market_point matches on city name alone, and fx-12 in data/fictional_brokers.csv (license_state NY) lists markets 'New York;Hoboken'; Hoboken is in NJ. The licensing gate is intact: a correctly extracted NJ Hoboken deal returns only fx-11 (NJ), never fx-12. The only way to get fx-12 with '+2 serves Hoboken' (score 8 instead of 6) is a requirement whose state is already NY, e.g. the regex extractor's first-state-wins on 'Licensed in NY. ... Hoboken, NJ'. That is known #3. fx-12 is returned for that misrouted deal anyway; the market bonus only bumps its rank and adds a reason that reads like a confirmed local fit for an out-of-state city. The row looks like a deliberate trap (README line 105 lists 'wrong state' traps; posts.jsonl s14 asks for 'both NY and NJ' about Jersey City/Hoboken), but no test references fx-12 or Hoboken. So nothing pins down the intent, and nothing checks that a market lies in the license state. The other fictional rows are fine: Portland ME/OR, Kansas City MO/KS and Arlington VA are real cities in each row's own state. Net effect: hardening plus a documentation gap. No unlicensed broker is returned, and nothing new is exposed beyond known #3.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round2/verify_C-9.py
+
+import sys, csv
+W="$WT"
+sys.path.insert(0, W)
+from datetime import date
+from brokers import load_brokers
+from matcher import match
+from schema import DealRequirement
+from extractors.regex_baseline import RegexExtractor
+B=load_brokers(); D=date(2026,10,20)
+def show(tag,r):
+    res=match(r,B,D,limit=len(B))
+    print(tag, r.state, r.city, [(m.broker.broker_id,m.broker.license_state,m.score,m.reasons) for m in res.matches if m.broker.broker_id in("fx-11","fx-12")])
+# 1 correct NJ Hoboken deal
+show("NJ-correct", DealRequirement(is_deal_request=True,state="NJ",city="Hoboken",property_type="condo_townhome",transaction_type="buy",deal_value_usd=700000))
+# 2 regex misroute (known #3)
+q=RegexExtractor().extract("Licensed in NY. Client buying a condo in Hoboken, NJ, $700k, 30 days.")
+show("regex", q)
+# 3 labeled s14 via regex
+q=RegexExtractor().extract("Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k.")
+show("s14-regex", q)
+# 4 scan fictional markets: list all markets per row
+for row in csv.DictReader(open(W+"/data/fictional_brokers.csv")):
+    print(row["broker_id"], row["license_state"], row["markets"])
+```
+
+**Observed (verifier).** Snippet verified at matcher.py:69. Observed: NJ-correct NJ Hoboken -> only fx-11 (NJ, 8, '+2 serves Hoboken'); fx-12 excluded by gate. regex 'Licensed in NY. ... Hoboken, NJ' -> state NY (known #3) -> fx-12 (NY, 8, ['+3 specializes in condo_townhome','+2 handles buy deals','+2 serves Hoboken','+1 deal size ...']). s14 via regex -> NY, city None -> fx-12 score 4 (no market point). Fictional market scan: fx-12 Hoboken is the only market outside its license_state. Downgraded medium->low: gate intact, the misrouting is known #3, and fx-12 is returned for the misrouted deal either way. The new part is only the extra rank and the reason text from a likely-intentional trap row that no test documents.
+
+**Proposed fix.** Document fx-12 as the s14 NY/NJ trap in a comment or README, and pick one of two options. (a) Drop Hoboken from fx-12's markets. (b) Store markets as 'City, ST' and award the market point only when the market's state equals req.state, which already equals the broker's license_state after the gate.
+
+**Proposed regression test.** test_fictional_markets_are_in_license_state: every fictional market (with an explicit allowlist for intentional traps such as fx-12/Hoboken) is a city in the row's license_state. test_market_point_requires_same_state: a synthetic NY broker with market 'Hoboken, NJ' gets no '+2 serves' reason for a NY/Hoboken requirement.
+
+### C-10 (low, compliance): Claude output that is truncated, mislabelled or loosely typed is accepted and routed instead of raising
+
+**Where:** `extractors/claude.py:123`
+
+```
+call = next((b for b in response.content if b.type == "tool_use"), None)
+```
+
+**Claim.** extract_raw rejects only stop_reason 'refusal' and a missing tool_use block; it accepts stop_reason 'max_tokens'/'pause_turn' and a tool_use block with any name. parse_requirement (DealRequirement.model_validate, lax mode, default extra='ignore') then accepts: omitted Optional keys (silently None, so a truncated call with only is_deal_request+state yields a routable TX requirement), 'yes'->True, '450000'->450000, 4.9e5->490000, and unknown keys (e.g. inferred_state, license_ok) dropped silently. Only a missing is_deal_request or a non-integral float raises. This contradicts README line 38 ('Bad output raises an error instead of being repaired') and the ExtractionError docstring, and the strict tool schema that requires all 8 keys with additionalProperties:false is never re-checked locally. eval.py to_record scores such outputs as predictions (error=None) rather than failures, so truncation/shape failures are hidden in the metrics. No test pins this: tests cover refusal only (test_eval_cache) and the tool schema shape (test_claude_strict); no test for max_tokens, wrong tool name, missing/extra keys or type coercion. Gate is unaffected: state remains the closed Literal enum and is_licensed still runs, so no wrong-state or unlicensed match results (truncation drops later keys, it cannot invent a state). Impact is measurement/doc honesty and defense in depth. Distinct from C-6 (state repair) and known #2 (model_construct not re-validated in api).
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round2/verify_C-10.py
+
+import sys
+WT="$WT"; sys.path.insert(0, WT)
+from types import SimpleNamespace as NS
+from extractors import ExtractionError, parse_requirement
+from extractors.claude import ClaudeExtractor, TOOL
+from datetime import date
+import brokers, matcher
+class Fake:
+    def __init__(s, r): s.messages = NS(create=lambda **k: r)
+B = {"is_deal_request":True,"state":"TX","city":"Austin","property_type":"single_family",
+     "transaction_type":"buy","deal_value_usd":None,"timeline":None,"notes":None}
+cases = [("max_tokens partial", "max_tokens", "record_deal_requirement", {"is_deal_request":True,"state":"TX"}),
+         ("pause_turn", "pause_turn", "record_deal_requirement", B),
+         ("wrong tool name", "tool_use", "other_tool", B),
+         ("missing keys", "tool_use", "record_deal_requirement", {"is_deal_request":True,"state":"TX"}),
+         ("'yes' bool", "tool_use", "record_deal_requirement", {**B,"is_deal_request":"yes"}),
+         ("'450000' str", "tool_use", "record_deal_requirement", {**B,"deal_value_usd":"450000"}),
+         ("4.9e5 float", "tool_use", "record_deal_requirement", {**B,"deal_value_usd":4.9e5}),
+         ("490000.5 float", "tool_use", "record_deal_requirement", {**B,"deal_value_usd":490000.5}),
+         ("extra key", "tool_use", "record_deal_requirement", {**B,"inferred_state":"OR","license_ok":True}),
+         ("missing is_deal_request", "tool_use", "record_deal_requirement", {"state":"TX"})]
+bl = brokers.load_brokers() if hasattr(brokers,"load_brokers") else None
+for label, stop, name, inp in cases:
+    resp = NS(stop_reason=stop, content=[NS(type="tool_use", name=name, input=dict(inp))])
+    try:
+        r = ClaudeExtractor(client=Fake(resp), model="x").extract("p")
+        out = f"ACCEPTED state={r.state} deal={r.is_deal_request} value={r.deal_value_usd!r} missing={r.missing_fields}"
+    except ExtractionError as e: out = f"ExtractionError {str(e)[:60]}"
+    try: parse_requirement(dict(inp)); pr = "parse_requirement ACCEPTS"
+    except ExtractionError: pr = "parse_requirement raises"
+    print(f"{label:24s} -> {out} | {pr}")
+print("TOOL required:", sorted(TOOL["input_schema"]["required"]), "additionalProperties:", TOOL["input_schema"]["additionalProperties"])
+```
+
+**Observed (verifier).** Observed (both via ClaudeExtractor(client=fake).extract and parse_requirement):
+max_tokens partial {is_deal_request,state} -> ACCEPTED state=TX missing=[city,property_type,transaction_type,deal_value_usd,timeline]
+pause_turn -> ACCEPTED
+wrong tool name 'other_tool' -> ACCEPTED
+missing keys -> ACCEPTED
+'yes' bool -> ACCEPTED deal=True
+'450000' -> value=450000; 4.9e5 -> 490000
+extra keys inferred_state/license_ok -> ACCEPTED (dropped)
+490000.5 -> ExtractionError; missing is_deal_request -> ExtractionError
+Corrections to candidate: not *all* missing required keys default to None (is_deal_request has no default and raises). Snippet verified verbatim at line 123. Severity low kept: gate holds (state Literal enum + is_licensed), no unlicensed/wrong-state route; issue is doc mismatch + eval undercounting failures. Not duplicate of C-6 or known #2.
+
+**Proposed fix.** In extract_raw: raise ExtractionError unless response.stop_reason == 'tool_use' and call.name == TOOL['name']. In parse_requirement (or a Claude-specific wrapper): require set(raw) == set(ExtractedFields.model_fields) and validate with DealRequirement.model_validate(raw, strict=True) (or model_config = ConfigDict(extra='forbid') on ExtractedFields, with strict per-field for bool/int; enums need strict-compatible handling, e.g. validate via model_validate_json(json.dumps(raw), strict=True) so enum strings still parse).
+
+**Proposed regression test.** test_claude_rejects_truncated_or_loose_output: with a fake client, each of stop_reason='max_tokens', stop_reason='pause_turn', tool name 'other', a missing key (e.g. city omitted), is_deal_request='yes', deal_value_usd='450000', and an extra key 'inferred_state' makes ClaudeExtractor.extract raise ExtractionError, while the fully-populated strict-shaped output still parses.
+
+### C-12 (low, compliance): Compliance gate test skips holdout_v3 and can't take it in as written: every wrong-state variant moves to OK, and v3-01 is an OK deal
+
+**Where:** `tests/test_compliance.py:23`
+
+```
+POST_FILES = [DATA / "posts.jsonl", DATA / "holdout.jsonl"]
+```
+
+**Claim.** README:137 says without qualification that 'The compliance test runs every labeled post against every broker, plus generated variants'. The test loads only posts.jsonl + holdout.jsonl (50 posts). The 25 labeled posts in data/holdout_v3.jsonl (commit 3c54b35, added after the compliance test in 2330c10) are never run through the gate oracle. No other test covers them: test_holdout_v3.py only checks shape and schema, and test_red_team.py reads red_team.jsonl only. The docstring's '(dev and holdout)' is narrower and arguably still true, so the mismatch is in the README. Also, the fixture can't simply take v3 in: other_state() moves every wrong-state variant to 'OK', which no dev/holdout post uses, but v3-01 is labeled state=OK. Adding v3 makes match() return all 172 '~wrong-state' variants for v3-01. They really are licensed in OK (0 oracle failures), so this is not a gate leak. It still fails the test's `not in VARIANT_IDS` assertion, test_fixture_sanity's `not moved_to & post states`, and its `len(POSTS) == 50`. No real gate bug was found on v3 posts. This is a test-coverage and doc gap.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round3/verify_C-12.py
+
+import sys, json
+W="$WT"
+sys.path.insert(0,W); sys.path.insert(0,W+"/tests")
+import test_compliance as tc
+from schema import DealRequirement
+from matcher import match
+v3=[(json.loads(l)["id"],DealRequirement.model_validate(json.loads(l)["label"])) for l in open(W+"/data/holdout_v3.jsonl") if l.strip()]
+print("POST_FILES:", [p.name for p in tc.POST_FILES], "POSTS:", len(tc.POSTS), "v3:", len(v3))
+moved={v.license_state for v in tc.VARIANTS if v.broker_id.endswith("~wrong-state")}
+print("wrong-state moved to:", moved, "| v3 states:", sorted({r.state for _,r in v3 if r.state}))
+print("OK in dev/holdout states:", "OK" in {r.state for _,r in tc.POSTS})
+leaks=0
+for pid,r in v3:
+    res=match(r,tc.POOL,tc.AS_OF,limit=len(tc.POOL)+10)
+    var=[m.broker.broker_id for m in res.matches if m.broker.broker_id in tc.VARIANT_IDS]
+    bad=[m.broker.broker_id for m in res.matches if not tc.oracle_licensed(m.broker,r.state,tc.AS_OF)]
+    if var or bad: print(pid,r.state,"matches",len(res.matches),"variant ids:",len(var),"oracle-fail:",len(bad))
+    leaks+=len(bad)
+print("oracle failures across v3 (real gate bugs):", leaks)
+print("sanity 'not moved_to & post states' with v3:", not (moved & ({r.state for _,r in tc.POSTS}|{r.state for _,r in v3})))
+```
+
+**Observed (verifier).** Observed: POST_FILES ['posts.jsonl','holdout.jsonl'] POSTS 50, v3 25; wrong-state moved to {'OK'}; OK in dev/holdout states: False; v3-01 OK matches 172 variant ids 172 oracle-fail 0; oracle failures across v3: 0; sanity check with v3: False. grep: holdout_v3 referenced only in tests/test_holdout_v3.py (shape/schema checks, no match()). git: holdout_v3 3c54b35 (19:03) came after test_compliance 2330c10 (18:30). The snippet matches line 23 verbatim. The README's data table (lines 102-103) also omits holdout_v3. Severity low is right: only coverage and docs are affected, and the gate behaves correctly on all v3 posts. Claim adjusted: the docstring says '(dev and holdout)', so only README:137 is literally false.
+
+**Proposed fix.** Glob the labeled data/*.jsonl files that carry a 'label' key into POST_FILES (posts, holdout, holdout_v3). Pick the wrong-state target automatically as a valid State used by no labeled post and no broker. Replace the hard-coded `len(POSTS) == 50` with the sum of the file line counts (or 75). Update README:137 and the data table to name holdout_v3.
+
+**Proposed regression test.** test_compliance_covers_every_labeled_file: asserts the set of data/*.jsonl files whose records have 'label' equals set(POST_FILES), and the wrong-state target state is absent from every labeled post's state, so every '~wrong-state' variant stays unlicensed for every post.
+
+### C-13 (low, compliance): API integration test 'only returns brokers licensed in the deal state' is status-blind and vacuous (passes with a status-blind gate)
+
+**Where:** `tests/test_api.py:479`
+
+```
+assert body["excluded_for_licensing"] >= 0
+```
+
+**Claim.** test_real_matcher_only_returns_brokers_licensed_in_the_deal_state (tests/test_api.py:468, no docstring) checks state and expiration (line 485) but never license_status, and its count check (line 479, excluded_for_licensing >= 0) is trivially true. With is_licensed replaced by a status-blind gate it still passes. Adding only a status assertion would NOT fix it: for its Austin/multifamily/buy deal the top 5 are identical (tx-010, tx-069, tx-132, tx-197, tx-002, all Active) under the real and weakened gate; only excluded_for_licensing changes (76 -> 59), which the test doesn't pin. So the test name over-claims. Impact is low: test_red_team already checks status at the API level with real brokers and real matcher.match (reference_licensed + exact excluded/match counts, incl. hostile case tx-probation-broker trapping tx-131), and test_compliance checks every non-Active status; under the weakened gate those two files fail 93 tests. The candidate's 'only e2e test' wording is imprecise: test_red_team.wire overrides get_brokers with load_brokers() and get_matcher with matcher.match, so it is effectively e2e too.
+
+**Reproduction.**
+
+```
+cd $WT && env -u ANTHROPIC_API_KEY PYTHONPATH=$SCRATCH/round3/c13plug:$PWD $PY -B -m pytest -q -p no:cacheprovider -p c13_weakgate 'tests/test_api.py::test_real_matcher_only_returns_brokers_licensed_in_the_deal_state'  -> 1 passed. Same plugin on tests/test_compliance.py tests/test_red_team.py -> 93 failed. Vacuity: $PY -I -B $SCRATCH/round3/verify_C-13.py.
+Plugin c13plug/c13_weakgate.py:
+def _weak(broker, state, as_of):
+    return (state is not None and broker.license_state == state and broker.license_expiration is not None and broker.license_expiration >= as_of)
+def pytest_configure(config):
+    import matcher; matcher.is_licensed = _weak
+verify_C-13.py: builds the test's FULL_TX_DEAL, runs matcher.match(deal, load_brokers(), date(2026,10,20)) with the real gate, then with matcher.is_licensed=_weak, printing (broker_id, license_status) of matches and excluded_for_licensing, plus all unexpired non-Active TX brokers.
+```
+
+**Observed (verifier).** Weak-gate run: '1 passed in 1.16s'. Unpatched: 1 passed. test_compliance+test_red_team with weak gate: '93 failed, 324 passed, 5 xfailed' (incl. test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]). verify_C-13.py: real: [tx-010, tx-069, tx-132, tx-197, tx-002 all Active] excluded 76; weak: same 5, all Active, excluded 59; unexpired non-Active TX: 16 Inactive + tx-131 'Probation - Active'. So the test is vacuous for status: its deal never ranks a non-Active broker in the top 5, and the only observable difference (excluded count) is asserted as >= 0. Confirmed at low; suite as a whole catches the weakened gate. Snippet/line moved from 485 to 479 (the trivial count check is the load-bearing gap); line 485 snippet also verified verbatim.
+
+**Proposed fix.** In the test: assert broker.license_status == 'Active'; assert body['matches'] (non-empty); and pin excluded_for_licensing to the count from an independent reference gate (len(brokers) - #(state==TX and status=='Active' and exp>=AS_OF), i.e. 76), so a status-blind gate (59) fails. Optionally add a second case whose deal ranks tx-131 (Probation - Active) into the weak-gate top 5. Or rename the test to what it checks.
+
+**Proposed regression test.** test_real_matcher_api_rejects_non_active_status: with matcher.is_licensed monkeypatched to a status-blind gate, the API integration test fails (excluded_for_licensing != reference count 76 and/or a non-Active broker appears); unpatched it passes.
+
+### S-1 (low, security_data): Content-Length header with more than 4300 digits crashes BodySizeLimit with a 500 instead of a 413
+
+**Where:** `api.py:225`
+
+```
+if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):
+```
+
+**Claim.** BodySizeLimit checks declared.isdigit() and then calls int(declared). When the header has more than 4300 digits, int() raises ValueError because of Python's int max-str-digits limit (4300 by default on 3.14). The exception escapes the middleware, so the outer ServerErrorMiddleware returns a plain-text 'Internal Server Error' 500 instead of the 413 JSON. A header of exactly 4300 digits still returns 413. The post text does not leak. Under uvicorn 0.54 with h11 0.16 (httptools is not installed in the venv), h11 rejects any Content-Length longer than 20 digits with RemoteProtocolError('bad Content-Length') before the app sees it. That means normal uvicorn deployments can't hit this. It only shows up through TestClient, other ASGI servers or parsers that pass long digit strings through, or a proxy that forwards the header unchanged to such a server. This is hardening only.
+
+**Reproduction.**
+
+```
+cd $SCRATCH/round1/ && $PY -I -B verify_S-1.py
+
+# verify_S-1.py
+import sys, asyncio, logging
+WT="$WT"; sys.path.insert(0, WT)
+logging.disable(logging.CRITICAL)
+from fastapi.testclient import TestClient
+import api
+big = "9"*5000
+# 1) TestClient (raise_server_exceptions=False so we see the actual HTTP response)
+c = TestClient(api.app, raise_server_exceptions=False)
+r = c.post("/match", content=b'{"text":"x"}', headers={"content-type":"application/json","content-length":big})
+print("TestClient 5000 digits:", r.status_code, r.headers.get("content-type"), r.text[:60])
+r = c.post("/match", content=b'{"text":"x"}', headers={"content-type":"application/json","content-length":"9"*4300})
+print("TestClient 4300 digits:", r.status_code, r.text[:60])
+# 2) middleware directly with raw ASGI scope
+async def inner(scope, receive, send): raise AssertionError("inner app reached")
+mw = api.BodySizeLimit(inner, max_bytes=api.MAX_BODY_BYTES)
+async def recv(): return {"type":"http.request","body":b"","more_body":False}
+sent=[]
+async def send(m): sent.append(m)
+scope={"type":"http","method":"POST","path":"/match","headers":[(b"content-length", big.encode())]}
+try:
+    asyncio.run(mw(scope, recv, send)); print("direct: no exception, sent", [m.get("status") for m in sent])
+except Exception as e:
+    print("direct middleware raised:", type(e).__name__, str(e)[:70])
+# 3) h11 (uvicorn's default when httptools absent)
+import h11
+for n in (4300, 5000):
+    conn = h11.Connection(h11.SERVER)
+    conn.receive_data(b"POST /match HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: " + b"9"*n + b"\r\n\r\n")
+    try:
+        ev = conn.next_event(); print(f"h11 {n} digits: accepted ->", type(ev).__name__)
+    except h11.RemoteProtocolError as e:
+        print(f"h11 {n} digits: RemoteProtocolError:", str(e)[:70])
+    except Exception as e:
+        print(f"h11 {n} digits: other", type(e).__name__, str(e)[:70])
+try:
+    import httptools; print("httptools present")
+except ImportError: print("httptools not installed")
+```
+
+**Observed (verifier).** The snippet matches api.py line 225 verbatim. This is not a duplicate of any known issue. Observed output: 'TestClient 5000 digits: 500 text/plain; charset=utf-8 Internal Server Error' | 'TestClient 4300 digits: 413 {"detail":"request body too large"}' | 'direct middleware raised: ValueError Exceeds the limit (4300 digits) for integer string conversion' | 'h11 4300 digits: RemoteProtocolError: bad Content-Length' | 'h11 5000 digits: RemoteProtocolError: bad Content-Length' | 'httptools not installed'. A separate h11 threshold probe showed 18, 19 and 20 digits accepted and 21 or more rejected with 'bad Content-Length'. Versions: uvicorn 0.54.0, h11 0.16.0, sys.get_int_max_str_digits() = 4300. Low severity holds: nothing leaks, the post is still rejected (just with the wrong status), and uvicorn+h11 stops it upstream. I could not test httptools offline because it is not installed.
+
+**Proposed fix.** In BodySizeLimit.__call__, reject before converting: `if declared is not None and (not declared.isdigit() or len(declared) > len(str(self.max_bytes)) or int(declared) > self.max_bytes): await self._reject(send); return`. Alternatively, wrap int() in try/except ValueError and send a 413.
+
+**Proposed regression test.** test_huge_digit_content_length_is_413: TestClient(app, raise_server_exceptions=False).post('/match', content=b'{"text":"x"}', headers={'content-type':'application/json','content-length':'9'*5000}) returns status 413 with json {'detail': 'request body too large'}, and calling BodySizeLimit directly with that raw scope raises nothing and sends a 413.
+
+### S-2 (low, security_data): Anthropic client is built with SDK tracing defaults, so one env var exports full post text in OTel spans
+
+**Where:** `api.py:148`
+
+```
+client = anthropic.Anthropic(timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES)
+```
+
+**Claim.** api.py pins the anthropic/httpx/httpx2 loggers to WARNING so post text never reaches logs, but _claude_extractor() builds the client without an open_telemetry option. In anthropic 1.15.0 an unset option (None) makes the client read ANTHROPIC_OPEN_TELEMETRY* env vars (_tracing.env_open_telemetry); traces are enabled by default with content_mode 'metadata_only'. Setting ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content, with a tracer provider registered, makes a /match request put the full post text into the gen_ai.input.messages span attribute. Logger pinning does not cover this channel. Only opentelemetry-api 1.45.1 is installed (no opentelemetry-sdk), so the default deployment uses the no-op provider and records nothing; exposure needs both an operator-set env var and a deployment that installs/registers a real provider. Low (defense in depth), not medium.
+
+**Reproduction.**
+
+```
+cd scratchpad/round1 && for m in content default fixed; do $PY -I -B verify_S-2.py $m; done
+--- verify_S-2.py ---
+# usage: verify_S-2.py {content|default|fixed}
+import sys, os, types
+from datetime import date
+from contextlib import contextmanager
+W='$WT'; sys.path.insert(0, W)
+mode = sys.argv[1]
+os.environ['ANTHROPIC_API_KEY'] = 'test-fake-key-123'   # fake, this process only
+os.environ.pop('DEAL_EXTRACTOR', None)
+for k in list(os.environ):
+    if k.startswith('ANTHROPIC_OPEN_TELEMETRY'): del os.environ[k]
+if mode in ('content', 'fixed'):
+    os.environ['ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE'] = 'content'
+from opentelemetry import trace
+from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+REC = []
+class Span(NonRecordingSpan):
+    def __init__(self): super().__init__(SpanContext(1, 1, False, TraceFlags(1)))
+    def is_recording(self): return True
+    def set_attribute(self, k, v): REC.append((k, v))
+    def set_attributes(self, a): REC.extend(a.items())
+    def add_event(self, name, attributes=None, timestamp=None): REC.append((name, attributes))
+class Tracer(trace.Tracer):
+    def start_span(self, name, context=None, kind=None, attributes=None, *a, **k):
+        if attributes: REC.extend(attributes.items())
+        return Span()
+    @contextmanager
+    def start_as_current_span(self, name, *a, **k):
+        s = self.start_span(name, attributes=k.get('attributes'))
+        with trace.use_span(s): yield s
+class Provider(trace.TracerProvider):
+    def get_tracer(self, *a, **k): return Tracer()
+trace.set_tracer_provider(Provider())
+import anthropic, httpx2, api
+from fastapi.testclient import TestClient
+def handler(r):
+    return httpx2.Response(200, request=r, json={"id": "m", "type": "message", "role": "assistant",
+        "model": "claude-haiku-5-5", "stop_reason": "tool_use", "stop_sequence": None,
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+        "content": [{"type": "tool_use", "id": "t", "name": "record_deal_requirement", "input": {"is_deal_request": False}}]})
+class Mocked(anthropic.Anthropic):  # only adds the mock transport; api.py's own kwargs pass through unchanged
+    def __init__(self, **kw):
+        if mode == 'fixed': kw['open_telemetry'] = False   # proposed fix
+        super().__init__(http_client=httpx2.Client(transport=httpx2.MockTransport(handler)), **kw)
+api.anthropic = types.SimpleNamespace(**{**vars(anthropic), 'Anthropic': Mocked})
+api._claude_extractor.cache_clear()
+print('extractor:', type(api.get_extractor()).__name__, 'otel:', api._claude_extractor()._client.open_telemetry['traces'] if hasattr(api._claude_extractor(), '_client') else '?')
+api.app.dependency_overrides[api.get_as_of] = lambda: date(2026, 10, 24)
+r = TestClient(api.app).post('/match', json={'text': 'SECRETPOST client Jane Doe 512-555-0100 wants Austin TX office'})
+print('status', r.status_code)
+print('spans recorded attrs:', len(REC), '| post in span attrs:', any('SECRETPOST' in str(v) for _, v in REC),
+      [k for k, v in REC if 'SECRETPOST' in str(v)])
+```
+
+**Observed (verifier).** Observed: content -> status 200, 'post in span attrs: True [gen_ai.input.messages]'; default (no env var) -> False; fixed (open_telemetry=False injected, env var still content) -> False. Path exercised: TestClient POST /match -> api.get_extractor() -> api._claude_extractor() (api.py's own constructor kwargs, only a mock httpx2 transport added) with a recording fake TracerProvider; fake key only in-process, no network. SDK source confirms: env var name ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE (_tracing.py:111), default content_mode 'metadata_only' and enabled True (_tracing.py:87-90), constructor kwarg open_telemetry (_client.py:180), and a given option, even {}, ignores the env vars (_types.py:157). site-packages has opentelemetry_api-1.45.1 only, no opentelemetry-sdk, so a deployment must add a provider. Snippet verified verbatim at api.py:148. Not a duplicate of the known issues. Severity low kept.
+
+**Proposed fix.** In api._claude_extractor(): anthropic.Anthropic(timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES, open_telemetry={'traces': {'content_mode': 'metadata_only'}}) (keeps metadata spans, ignores env vars) or open_telemetry=False; extend the logging comment at api.py:38-41 to say tracing content is also pinned off.
+
+**Proposed regression test.** test_claude_client_tracing_never_records_content: with ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content (monkeypatch) and a recording fake TracerProvider, POST /match through api._claude_extractor() using a mock httpx2 transport records no span attribute containing the post text; also with ANTHROPIC_OPEN_TELEMETRY unset the client built by api still records metadata-only spans (or none if open_telemetry=False is chosen).
+
+### S-3 (low, security_data): Log post id is an unsalted SHA-256 prefix plus exact length, so a guessed or templated post can be confirmed or brute-forced offline
+
+**Where:** `api.py:302`
+
+```
+return hashlib.sha256(text.encode()).hexdigest()[:12]
+```
+
+**Claim.** Every /match request logs `post=<sha256(text)[:12]> chars=<len(text)>`. The hash is unkeyed, so the same post gives the same id in every process and deployment. Anyone who can read the logs can check a candidate post against a log line offline. Reproduced: (a) the log line for data/posts.jsonl s03 matches exactly one of the 35 dataset posts (s03); (b) for a templated post with one hidden field, the length filter leaves 900 budget values and the hash then recovers the exact budget ($735k) from the log line alone. The docstring states the design ('we log a short SHA-256 prefix and the length') and README line 42 says the same, so the mechanism itself is disclosed. But the docstring's claim that this correlates a request 'without storing it' does not hold for low-entropy or templated posts: the log line works as a confirmable encoding of the post. This is a gap between a documented promise and the code, not just a disclosed trade-off. It is not one of the 6 known issues. Low severity: it needs log access plus a candidate set, and it reveals nothing about posts with high entropy.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round1/verify_S-3.py
+
+import sys, json, hashlib, logging, re, types
+W = "$WT"
+sys.path.insert(0, W)
+from datetime import date
+from fastapi.testclient import TestClient
+import api
+from schema import DealRequirement
+
+class FakeExtractor:
+    name = "regex"
+    def extract(self, text): return DealRequirement(is_deal_request=False)
+def fake_match(req, brokers, as_of): return types.SimpleNamespace(matches=[], excluded_for_licensing=0)
+api.app.dependency_overrides.update({api.get_extractor: lambda: FakeExtractor(), api.get_brokers: lambda: [],
+    api.get_as_of: lambda: date(2026, 10, 1), api.get_matcher: lambda: fake_match})
+
+lines = []
+class H(logging.Handler):
+    def emit(self, r): lines.append(r.getMessage())
+lg = logging.getLogger("api"); lg.addHandler(H()); lg.setLevel(logging.INFO)
+
+posts = [json.loads(l) for l in open(f"{W}/data/posts.jsonl")]
+secret = next(p for p in posts if p["id"] == "s03")["text"]
+r = TestClient(api.app).post("/match", json={"text": secret})
+log = lines[-1]; print("status", r.status_code, "| log:", log)
+pid, n = re.search(r"post=(\w+) chars=(\d+)", log).groups(); n = int(n)
+
+# Attack 1: offline dictionary of known/candidate posts
+hits = [p["id"] for p in posts if len(p["text"].strip()) == n and hashlib.sha256(p["text"].strip().encode()).hexdigest()[:12] == pid]
+print("dictionary hit:", hits, "of", len(posts), "candidates")
+
+# Attack 2: templated post, brute-force a hidden field (budget) from the log line alone
+tmpl = "Need a referral partner in Austin, TX. Relocating client (tech, pre-approved) looking for SFR, 3/2 min, budget up to ${}k. Wants to close within 60 days."
+lines.clear(); TestClient(api.app).post("/match", json={"text": tmpl.format(735)})
+pid2, n2 = re.search(r"post=(\w+) chars=(\d+)", lines[-1]).groups()
+cands = [b for b in range(100, 5001) if len(tmpl.format(b)) == int(n2)]
+rec = [b for b in cands if hashlib.sha256(tmpl.format(b).encode()).hexdigest()[:12] == pid2]
+print("budget candidates after length filter:", len(cands), "-> recovered budget $%sk" % rec)
+print("process-independent:", api._post_id(secret.strip()) == hashlib.sha256(secret.strip().encode()).hexdigest()[:12])
+```
+
+**Observed (verifier).** Observed output: `status 200 | log: matched post=7c5830c0547d chars=110 extractor=regex matches=0 excluded=0` / `dictionary hit: ['s03'] of 35 candidates` / `budget candidates after length filter: 900 -> recovered budget $[735]k` / `process-independent: True`. The snippet is verbatim at api.py:302 (grep -n -F). Same line format on the 422/503/500 paths (lines 337/344/354, without chars=). Docstring check (api.py lines 10-11, README line 42): the SHA-256-prefix-plus-length design is disclosed, so I am not rating this as hidden behaviour. I still confirm rather than reject because the docstring's promise ('without storing it') does not hold. Unkeyed and stable across processes, the log line lets anyone recover a low-entropy post, and I recovered a hidden budget from it. That makes the risk more than negligible. Low severity kept, not raised: exploiting it needs log access and a candidate set. Not a duplicate of known issues 1-6. The original repro (repro_post_hash.py) only hashed the dataset directly. This verify goes through the real route via TestClient with log capture.
+
+**Proposed fix.** In api.py, replace the plain hash with a keyed one: `_LOG_KEY = os.environ.get('POST_LOG_KEY', '').encode() or secrets.token_bytes(32)` at module load; `_post_id` returns `hmac.new(_LOG_KEY, text.encode(), hashlib.sha256).hexdigest()[:12]`. With the default per-process random key, ids only correlate within one process; a configured secret allows correlation across processes. Optionally log a coarse length bucket (e.g. rounded to 50) instead of the exact length. Update the docstring to say ids are keyed and cannot be reversed without the key.
+
+**Proposed regression test.** test_post_id_is_keyed: api._post_id(POST) != hashlib.sha256(POST.encode()).hexdigest()[:12], api._post_id(POST) == api._post_id(POST) (stable within a process), and len(api._post_id(POST)) == 12
+
+### S-4 (low, security_data): --rescore writes the caller's path verbatim into committed results (absolute path leaks local username)
+
+**Where:** `scripts/eval.py:288`
+
+```
+return {**kept, "timestamp": stamp, "git": git, "rescored_from": str(source), "datasets": rescore(saved)}
+```
+
+**Claim.** rescored_result() stores str(source) exactly as the caller typed it. main() passes args.rescore straight through (line 525), and markdown() repeats it at line 407 ("Re-scored from `{result['rescored_from']}` ..."). So running `--rescore /abs/path/x.json` writes the absolute path, local username and directory layout included, into both the .json and the .md under results/. All 43 results files are git-tracked. Every other path field (datasets[].path) is repo-relative, so this is the only field that can leak. Today it's latent: no file in results/*.json or *.md has a rescored_from key, a 'Re-scored from' line, or any '/Users/', '/home/', '/private/', '/tmp/' or 'annika' string. Defense-in-depth/hygiene only. It's not in the known-issues list (#5 is about raw outputs).
+
+**Reproduction.**
+
+```
+cd <scratchpad>/round1 && $PY -I -B verify_S-4.py  (s4_src.json = scratchpad COPY of results/regex_20261024T224817Z.json)
+
+# verify_S-4.py
+import sys, json, subprocess
+from pathlib import Path
+WT = "$WT"
+sys.path.insert(0, WT); sys.path.insert(0, WT + "/scripts")
+import eval as ev
+S = Path(__file__).resolve().parent
+src = S / "s4_src.json"            # absolute path (scratchpad copy of a results file)
+out = S / "s4_out"
+# 1) direct function call
+r = ev.rescored_result(ev.load_run(src), src, "T", {"commit": "x"*40, "dirty": False})
+print("direct rescored_from:", r["rescored_from"])
+md = ev.markdown(r)
+print("md line:", [l for l in md.splitlines() if "Re-scored" in l])
+# 2) end-to-end CLI, writing only to scratchpad
+p = subprocess.run([sys.executable, "-I", "-B", WT + "/scripts/eval.py", "--rescore", str(src),
+                    "--results-dir", str(out)], capture_output=True, text=True, cwd=str(S))
+print("cli rc:", p.returncode, p.stderr[-300:])
+for f in sorted(out.iterdir()):
+    t = f.read_text()
+    print(f.name, "contains /Users/:", "/Users/" in t, "| rescored_from line:",
+          [l.strip() for l in t.splitlines() if "rescored_from" in l or "Re-scored" in l])
+```
+
+**Observed (verifier).** Snippet is verbatim at line 288. The .md writer repeats it at line 407, and the CLI passes it through at line 525. Observed: direct rescored_from = /private/tmp/claude-501/-Users-<user>-Documents-email-project/.../round1/s4_src.json. The md line has the same absolute path. CLI (--results-dir set to the scratchpad) rc 0, and s4_out/regex_20261025T004111Z.json and .md both contain the absolute path. That path includes the username '<user>' via the scratchpad dir name. There is no normalisation, so a /Users/... input would be stored the same way. A relative input is stored as typed, relative to the caller's cwd. Worktree results/ still has 43 files, nothing written there. Read-only scan of results/*.json and *.md: zero rescored_from keys and zero absolute paths or usernames, so the issue is latent. Severity low is right: it only triggers when someone passes an absolute path and then commits the output.
+
+**Proposed fix.** In rescored_result (or main), normalise before storing: p = Path(source).resolve(); try: rel = p.relative_to(ROOT).as_posix() except ValueError: rel = p.name; store "rescored_from": rel. markdown() then shows the safe value with no change of its own.
+
+**Proposed regression test.** test_rescored_from_is_repo_relative: rescored_result(saved, ROOT/'results'/'x.json', ...)['rescored_from'] == 'results/x.json', and for a path outside ROOT (tmp_path/'y.json') it equals 'y.json', and markdown(result) contains no absolute path
+
+### S-5 (low, security_data): brokers.csv republishes sensitive real-licensee statuses (Deceased, plus 'Probation - Active') keyed by public license number
+
+**Where:** `data/brokers.csv:122`
+
+```
+tx-121,TX Licensee 121,trec_2026-10-20,TX,263746-B,Broker Individual,Deceased,2023-06-17,Moore,,,,,
+```
+
+**Claim.** Known issue #6 covers the fact that the TREC rows can be re-identified (names removed, license numbers kept, documented in README line 104). This finding is about something else: which facts get published about those identifiable people. scripts/build_brokers.py:67 copies Status verbatim and samples 'other_invalid' with no filter, so the committed CSV contains one real licensee marked 'Deceased' (tx-121, 263746-B, Moore County, the only row from that county) and one marked 'Probation - Active' (tx-131, 334893-B, Bexar), which is a disciplinary status. The README says license numbers are kept, but it never says death or disciplinary status is republished. Neither value is needed: the gate excludes any non-Active status, no test references tx-121, 263746 or 'Deceased', and the 'Suspended' case is already covered by a fictional row (fx-25). TREC publishes this data itself, so the harm is small. That makes it a data-minimization and disclosure gap, not a leak. The rest of the CSV is clean: all 200 TREC names are placeholders, there are no emails, phones, URLs or street addresses, and every TREC row's market, property-type, transaction-type and deal-range fields are blank.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round1/verify_S-5.py  (script scans data/brokers.csv: columns, status Counter, PII regexes for email/phone/url/street per column, placeholder-name check, non-blank enrich fields on trec rows, county Counter and singletons, Deceased rows, and greps tests/ for deceased|tx-121|263746). Also: grep -n -E 'Probation|Suspended|Deceased' data/brokers.csv
+```
+
+**Observed (verifier).** Output: rows 226; 14 columns; trec rows 200; status counts Active 176, 'Expired less than 6 months' 29, Inactive 17, Deceased 1, 'Probation - Active' 1, 'Expired more than 6 months' 1, Suspended 1 (Suspended is fictional fx-25); no PII-like hits in any column; names non-placeholder: []; trec rows with any non-blank enrich field: 0; counties 50, singletons 18; deceased rows [('tx-121','263746-B','Moore',1)]; tests refs: ''. A repo-wide grep (excluding .env, .venv and brokers.csv) finds no other reference to Deceased, tx-121 or 263746. The snippet matches line 122 exactly. I kept it rather than rejecting it as a duplicate of #6: #6 and README line 104 cover identifiability (license numbers kept), but they don't disclose or justify publishing death or disciplinary status. I widened the claim to include tx-131 'Probation - Active' (brokers.csv:132), the same kind of gap. Severity stays low: TREC already publishes these values, so this is minimization/hardening, and nothing in the matcher changes.
+
+**Proposed fix.** In scripts/build_brokers.py sample_trec, exclude rows whose Status is 'Deceased' or contains 'Probation' (or map statuses to a coarse non-Active label when copying), then rebuild. Cover the excluded statuses with FICT- rows in data/fictional_brokers.csv so the gate still sees them. Add a README data-section note that statuses revealing death or discipline are excluded from the real sample.
+
+**Proposed regression test.** test_real_broker_rows_have_no_sensitive_status: no row in data/brokers.csv with source starting 'trec_' has license_status == 'Deceased' or 'Probation' in license_status
+
+### S-6 (low, security_data): requirements.txt pins httpx 0.x, which nothing uses at runtime; the HTTP stack that carries the API key (httpx2/httpcore2/truststore) and opentelemetry-api come from unpinned ranges
+
+**Where:** `requirements.txt:6`
+
+```
+httpx==0.28.1
+```
+
+**Claim.** anthropic 1.15.0 declares Requires-Dist httpx2<3,>=2.0.0 (not httpx). Its package has 125 import lines for httpx2 and none for httpx 0.x, and the client's MRO ends in httpx2.Client, so the transport that sends x-api-key and the post text is httpx2 (which pulls httpcore2==2.15.1, truststore>=0.10, idna>=3.18). starlette's TestClient also prefers httpx2 and only falls back to httpx. In the repo, httpx 0.x shows up only as a type annotation (tests/test_red_team.py:31 'from httpx import Response'), and api.py:42 just names the 'httpx' logger. So the httpx==0.28.1 pin controls nothing on the key-carrying path. httpx2, httpcore2, truststore (which handles TLS trust), h11, opentelemetry-api (the OTel hook from S-2), starlette and pydantic_core are all unpinned, and there are no hashes, so a fresh install can resolve different versions of the TLS/HTTP stack. The README does not claim reproducible installs. The finding is that the explicit pin looks like it controls the transport but doesn't, not that a prototype leaves transitive deps unpinned.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round2/verify_S-6.py
+
+import importlib.metadata as md, re, sys, os
+W="$WT"
+sys.path.insert(0, W)
+pins={l.split("==")[0].strip().lower() for l in open(W+"/requirements.txt") if "==" in l}
+print("pinned:", sorted(pins))
+print("anthropic Requires-Dist:", [r for r in md.requires("anthropic") if "extra" not in r])
+print("httpx2 Requires-Dist:", [r for r in md.requires("httpx2") if "extra" not in r])
+import anthropic
+sp=os.path.dirname(anthropic.__file__); h2=h0=0
+for root,_,fs in os.walk(sp):
+    for f in fs:
+        if f.endswith(".py"):
+            t=open(os.path.join(root,f),encoding="utf-8").read()
+            h2+=len(re.findall(r"^\s*(?:import|from) httpx2\b",t,re.M)); h0+=len(re.findall(r"^\s*(?:import|from) httpx\b(?!2)",t,re.M))
+print("anthropic pkg: httpx2 import lines=",h2," httpx(0.x) import lines=",h0)
+c=anthropic.Anthropic(api_key="sk-fake-not-a-key")
+print("SDK http client MRO:", [k.__module__+"."+k.__name__ for k in type(c._client).__mro__][:3])
+from fastapi.testclient import TestClient
+import starlette.testclient as st
+print("TestClient httpx module:", st.httpx.__name__)
+for d in ["httpx2","httpcore2","truststore","h11","opentelemetry-api","starlette","pydantic_core","anyio","jiter","httpx"]:
+    print(f"{d:18} installed={md.version(d):10} pinned={'yes' if d in pins else 'NO'}")
+print("hashes:", "--hash" in open(W+"/requirements.txt").read())
+```
+
+**Observed (verifier).** Observed: anthropic Requires-Dist [..., 'httpx2<3,>=2.0.0', 'opentelemetry-api<2,>=1.1.0', 'pydantic<3,>=1.10.0', ...]; httpx2 Requires-Dist httpcore2==2.15.1, truststore>=0.10, idna>=3.18, anyio>=4.10; anthropic pkg: httpx2 import lines=125, httpx(0.x) import lines=0; SDK http client MRO ends in httpx2.Client; TestClient httpx module: httpx2; pinned=['anthropic','fastapi','httpx','pydantic','pytest','python-dotenv','uvicorn']; httpx2 2.15.1, httpcore2 2.15.1, truststore 0.10.5, h11 0.16.0, opentelemetry-api 1.45.1, starlette 1.10.0, pydantic_core 2.50.1 all pinned=NO; hashes: False. Snippet verified verbatim at requirements.txt:6. The README (line 112) only says 'pip install -r requirements.txt' and makes no reproducibility claim, so this stays low (hardening). Unpinned transitive deps alone would be rejected; this is confirmed because of the repo-specific angle: the one HTTP pin is on a library the SDK doesn't use.
+
+**Proposed fix.** Pin httpx2 (and through it httpcore2/truststore) explicitly, or better, generate a full lock with hashes (pip-compile --generate-hashes > requirements.lock) and install with pip install --require-hashes -r requirements.lock. Either drop httpx==0.28.1 (change the test annotation to httpx2.Response) or add a comment saying it is test-only.
+
+**Proposed regression test.** test_lockfile_pins_sdk_transport: every non-extra, platform-applicable Requires-Dist of anthropic and httpx2 (httpx2, httpcore2, truststore, opentelemetry-api, ...) appears in the lock file with == and at least one --hash, and the installed versions match it
+
+### S-7 (low, security_data): .gitignore ignores only the exact name `.env`; `.env.local`, `.env.production`, `*.pem`, `*.key` are not ignored
+
+**Where:** `.gitignore:3`
+
+```
+.env
+```
+
+**Claim.** The only secret pattern in .gitignore is the exact name `.env` (line 3). `git check-ignore --no-index` reports .env.local, .env.production, .env.development.local, secrets.pem and x.key as NOT ignored, and no global excludesfile or info/exclude covers them. The repo itself never uses these names: README:116 tells users to put the key in `.env`, and the only loader, scripts/eval.py:559, is `load_dotenv(ROOT / ".env")` (api.py reads os.environ only). So this needs an operator to deviate from the docs, e.g. a key copied into `.env.local` out of habit, where it would not even be loaded. If that happens, eval.py:394 counts the untracked file as a dirty tree (`git status --porcelain`), and the extractor-improver loop commits before every eval (loop/DRAFT.md:31,60; .claude/agents/extractor-improver.md:16-17), so a broad `git add` would commit the key. No `git add -A` appears anywhere in the repo, so the 'git add -A' path is plausible but not shown. Low: hardening/defense in depth.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round2/verify_S-7.py
+--- verify_S-7.py ---
+import subprocess
+W = "$WT"
+for p in [".env", ".env.local", ".env.production", ".env.development.local", "secrets.pem", "x.key", ".env.example"]:
+    r = subprocess.run(["git", "-C", W, "check-ignore", "--no-index", "-v", p], capture_output=True, text=True)
+    print(f"{p:24} rc={r.returncode} {r.stdout.strip() or 'NOT ignored'}")
+src = open(W + "/scripts/eval.py").read()
+print("eval.py loads only ROOT/.env:", 'load_dotenv(ROOT / ".env"' in src, "| dirty = git status --porcelain:", '"status", "--porcelain"' in src)
+```
+
+**Observed (verifier).** Observed: .env rc=0 (.gitignore:3:.env); .env.local, .env.production, .env.development.local, secrets.pem, x.key rc=1 NOT ignored; .env.example rc=1 (should stay tracked, and it is). eval.py loads only ROOT/.env: True; dirty = git status --porcelain: True. Snippet '.env' matches .gitignore line 3 exactly. No ~/.gitignore_global, ~/.config/git/ignore or core.excludesfile; info/exclude has no entries. Not a duplicate of the known issues or round-1 findings. I narrowed the claim: no code or doc reads or suggests .env variants, and no script runs `git add -A`, so exposure needs operator deviation plus a broad add. Severity stays low.
+
+**Proposed fix.** Change .gitignore to: `.env`, `.env.*`, `!.env.example`, `*.pem`, `*.key`. Optionally add a pre-commit hook or a check in loop/check_success.py that refuses to commit staged content matching the Anthropic key prefix `<anthropic-key-prefix>`.
+
+**Proposed regression test.** test_gitignore_covers_env_variants: for each of .env, .env.local, .env.production, .env.development.local, x.pem, x.key, `git check-ignore --no-index -q <p>` returns 0, and for .env.example it returns 1 (still tracked).
+
+### S-8 (low, security_data): Agent-editable Playbook tells the loop agent to load .env itself in ad-hoc probe code, contradicting the fixed 'Never read .env' rule; the Playbook is self-propagating agent instructions
+
+**Where:** `loop/DRAFT.md:61`
+
+```
+- Before relying on an API feature, probe it with one call on one dev post through `ClaudeExtractor` (load `.env` via `load_dotenv(path)` without printing anything). Cheaper than burning 3 evals on a 400 (learned in iteration 1).
+```
+
+**Claim.** loop/DRAFT.md:61 sits in '## Playbook (EDITABLE: how to iterate well)' and instructs every future extractor-improver iteration to open/parse .env in its own ad-hoc probe code via load_dotenv(path). This contradicts FIXED rule DRAFT.md:34 '- Never read `.env`.', the agent definition .claude/agents/extractor-improver.md:27 '- Never open, read, or print `.env`, and never print the API key or any part of it.', and HANDOFF.md:67 "Don't open `.env`; `eval.py` loads it." (scripts/eval.py:559 is the only sanctioned loader). The line was absent at tag loop-start and was added by the agent itself in commit 4a5941e ('Record iteration 1 ...', Co-Authored-By Claude). check_success.py protects only DRAFT.md's (FIXED) sections (PROTECTED excludes loop/DRAFT.md; fixed_sections() compares FIXED blocks only), so the agent can write instructions into its own manual that loosen a fixed rule with no guard noticing. Impact is limited: the instruction says not to print anything and the key stays in-process, so this is an agent-instruction/policy hardening issue, not a code leak.
+
+**Reproduction.**
+
+```
+$PY -I $SCRATCH/round2/verify_S-8.py
+
+import sys, subprocess, re
+WT = "$WT"
+sys.path.insert(0, WT)
+def rd(p): return open(f"{WT}/{p}", encoding="utf-8").read()
+draft = rd("loop/DRAFT.md").splitlines()
+sec = None; secmap = {}
+for i, l in enumerate(draft, 1):
+    if l.startswith("## "): sec = l[3:]
+    secmap[i] = sec
+hits = [(i, l) for i, l in enumerate(draft, 1) if "load_dotenv" in l or ".env" in l]
+for i, l in hits: print(f"DRAFT:{i} [{secmap[i]}] {l[:110]}")
+for i, l in hits:
+    s = secmap[i]; print("line", i, "EDITABLE" if s and "(EDITABLE" in s else "FIXED" if s and "(FIXED)" in s else "?")
+fixed_forbid = [(i, l) for i, l in enumerate(draft, 1) if secmap[i] and "(FIXED)" in secmap[i] and re.search(r"Never read `\.env`", l)]
+print("FIXED rule:", fixed_forbid)
+permits = [l for i, l in enumerate(draft, 1) if secmap[i] and "(FIXED)" in secmap[i] and ("load_dotenv" in l or "probe" in l.lower())]
+print("FIXED lines permitting load_dotenv/probe:", permits)
+agent = rd(".claude/agents/extractor-improver.md").splitlines()
+print("AGENT:", [(i, l) for i, l in enumerate(agent, 1) if ".env" in l])
+import loop.check_success as cs
+print("DRAFT in PROTECTED:", "loop/DRAFT.md" in cs.PROTECTED)
+mutated = "\n".join(draft).replace("load `.env` via `load_dotenv(path)`", "cat .env freely")
+print("fixed_sections unchanged after EDITABLE mutation:", cs.fixed_sections("\n".join(draft)) == cs.fixed_sections(mutated))
+orig = subprocess.run(["git","-C",WT,"show","loop-start:loop/DRAFT.md"],capture_output=True,text=True).stdout
+print("line present at loop-start:", "load_dotenv" in orig)
+print(subprocess.run(["git","-C",WT,"blame","-L61,61","--porcelain","loop/DRAFT.md"],capture_output=True,text=True).stdout.splitlines()[0])
+```
+
+**Observed (verifier).** Observed: 'DRAFT:34 [Rules (FIXED)] - Never read `.env`. ...'; 'DRAFT:61 [Playbook (EDITABLE: how to iterate well)] ... load `.env` via `load_dotenv(path)` ...'; line 34 FIXED, line 61 EDITABLE; FIXED lines permitting load_dotenv/probe: [] ; AGENT:27 '- Never open, read, or print `.env`, ...'; DRAFT in PROTECTED: False; fixed_sections unchanged after rewriting line 61 to 'cat .env freely': True; line present at loop-start: False; blame line 61 -> 4a5941e (commit 'Record iteration 1: strict mode kept, dev mean 0.885 -> 0.926', Co-Authored-By: Claude Opus 5.5) so the agent wrote it. HANDOFF.md:67 "Don't open `.env`; `eval.py` loads it." Only other load_dotenv in tracked files: scripts/eval.py:557/559. Nuance (not grounds to reject): FIXED DRAFT.md:42 says 'Confirm against the API that strict mode works ... before relying on it', which motivated a probe, but no FIXED rule authorizes load_dotenv outside eval.py. Snippet verbatim at line 61 (extended to full line). Severity low kept: agent-instruction contradiction, nothing printed or leaked; .env not opened by this verifier.
+
+**Proposed fix.** Replace DRAFT.md:61 with a probe that goes through the sanctioned loader, e.g. add a `--limit 1 --results-dir <tmp>` probe mode to scripts/eval.py (human-owned) or state 'probe with scripts/eval.py on one post; never load .env yourself'. Add an Allowed-content rule to the FIXED Rules ('EDITABLE sections may not relax a FIXED rule') and a guard in check_success.py that fails when an EDITABLE section mentions `.env`/`load_dotenv`, or when any tracked file other than scripts/eval.py calls load_dotenv(.
+
+**Proposed regression test.** test_loop_playbook_never_loads_env: parse loop/DRAFT.md into sections; assert no line in any (EDITABLE...) section contains 'load_dotenv' or '`.env`'; and `git grep -l 'load_dotenv('` returns only scripts/eval.py.
+
+### S-10 (low, security_data): Loop agent's FIXED holdout ban is keyed on a literal "split": "all"; three pre-loop results files have no split key yet hold 26 holdout raw outputs each, and data/holdout_v3.jsonl is not named in any ban
+
+**Where:** `.claude/agents/extractor-improver.md:13`
+
+```
+Never open `data/holdout.jsonl` or any results file with `"split": "all"`, and never look at posts whose `split` is `"holdout"`.
+```
+
+**Claim.** The holdout ban in the FIXED/protected rule text (extractor-improver.md:13, DRAFT.md:32 'Rules (FIXED)') is a denylist on the literal value "split": "all". results/claude_20261024T231514Z.json, regex_20261024T224548Z.json and regex_20261024T224817Z.json (all committed before tag loop-start) have NO split key, carry datasets ['holdout','posts'], and each holds 26 holdout posts with raw model outputs (15 holdout.jsonl + 11 posts.jsonl holdout split). eval.py:398 and check_success.py:133 both treat a missing key as 'all', so the code's semantics and the agent-facing rule disagree. Mitigations reduce this to a wording gap: DRAFT.md:39 (FIXED) names claude_20261024T231514Z.json as the pre-loop holdout run (though only says it is 'excluded from the loop's checks', not 'never open'), the two regex files are not Claude files the agent is told to read, step 1 points the agent at the newest '"split": "dev"' file, and the per-post 'split: holdout' clause still covers the posts inside. Separately, data/holdout_v3.jsonl (split 'holdout_v3', described by tests/test_holdout_v3.py as final-eval ground truth) is named in neither ban, and the post-level clause matches only 'holdout', not 'holdout_v3'. holdout_v3 was added at 19:03, after phase5-done (18:45), so it could not have leaked into the completed loop; the gap matters only if the loop is reused. Distinct from S-8: S-8 is agent-EDITABLE text loosening a rule; here the defect is in the protected FIXED rule text itself. No evidence any leakage happened; this is eval-integrity hardening, not a secret leak.
+
+**Reproduction.**
+
+```
+$PY -I -B $SCRATCH/round3/verify_S-10.py
+
+import json, glob, os, subprocess
+W="$WT"
+posts={}
+for l in open(f"{W}/data/posts.jsonl"):
+    if l.strip(): r=json.loads(l); posts[r["id"]]=r.get("split")
+hold_ids={json.loads(l)["id"] for l in open(f"{W}/data/holdout.jsonl") if l.strip()}
+for f in sorted(glob.glob(f"{W}/results/*.json")):
+    d=json.load(open(f))
+    if not isinstance(d.get("datasets"),dict): continue
+    n=sum(1 for name,ds in d["datasets"].items() for pid,rec in ds["records"].items()
+          if (pid in hold_ids or posts.get(pid)=="holdout") and rec.get("raw") is not None)
+    any_v3=any(pid.startswith("v3-") for ds in d["datasets"].values() for pid in ds["records"])
+    print(os.path.basename(f), "split=",d.get("split","<missing>"), "datasets=",sorted(d["datasets"]), "holdout_raw=",n, "v3=",any_v3)
+def g(*a): return subprocess.run(["git",*a],cwd=W,capture_output=True,text=True).stdout.strip()
+print("loop-start:", g("log","-1","--format=%h %cI","loop-start"))
+for p in ["data/holdout_v3.jsonl","tests/test_holdout_v3.py","results/claude_20261024T231514Z.json","results/regex_20261024T224548Z.json","results/regex_20261024T224817Z.json","loop/DRAFT.md",".claude/agents/extractor-improver.md"]:
+    print(p, "first:", g("log","--diff-filter=A","--format=%h %cI","--",p).splitlines()[-1:] , "in loop-start:", bool(g("ls-tree","loop-start","--",p)))
+print("v3 in agent md/DRAFT:", "holdout_v3" in open(f"{W}/.claude/agents/extractor-improver.md").read(), "holdout_v3" in open(f"{W}/loop/DRAFT.md").read())
+print("v3 in eval.py:", "holdout_v3" in open(f"{W}/scripts/eval.py").read(), "| in check_success:", "holdout_v3" in open(f"{W}/loop/check_success.py").read())
+print("phase5-done tag:", g("tag","-l"))
+```
+
+**Observed (verifier).** Observed: claude_20261024T231514Z.json split=<missing> datasets=['holdout','posts'] holdout_raw=26; regex_20261024T224548Z.json and regex_20261024T224817Z.json same (missing, 26); all 17 dev runs split=dev datasets=['posts_dev'] holdout_raw=0; claude_20261024T234359Z.json split=all (covered by rule). All three key-less files are in tag loop-start. 'holdout_v3' absent from extractor-improver.md, DRAFT.md, eval.py, check_success.py. holdout_v3.jsonl first commit 3c54b35 19:03:22 vs loop-start 18:23:41 and phase5-done 18:45:42 -> created after the loop finished, so no leak path in the past run. check_success.dev_checks reads only datasets['posts_dev'] of runs filtered by r.get('split','all')=='dev', so the gate itself cannot score holdout. Snippet verified verbatim at line 13. Severity kept low (and narrowed): DRAFT.md:39 already names the Claude pre-loop holdout file, so the practical gap is the two regex files plus holdout_v3 for future reuse. Note: eval.py does not read holdout_v3 at all, so 'final-eval ground truth' is per the test docstring only.
+
+**Proposed fix.** Change the FIXED rule (agent md + DRAFT.md Rules) to an allowlist: 'Open only results files whose top-level "split" is exactly "dev"; a file with no split key counts as all and is forbidden.' Name every holdout artifact explicitly: data/holdout.jsonl, data/holdout_v3.jsonl, and posts whose split starts with "holdout". Optionally have eval.py always write the split key (and backfill nothing in results/, which is frozen).
+
+**Proposed regression test.** test_loop_rules_cover_every_holdout_artifact: for every results/*.json containing a holdout id with raw output, assert the allowlist rule (split=='dev') excludes it; assert extractor-improver.md and DRAFT.md FIXED Rules both mention data/holdout_v3.jsonl and use a split=='dev' allowlist.
