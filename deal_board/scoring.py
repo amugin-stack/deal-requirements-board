@@ -213,7 +213,7 @@ def score(posts: list[JSONObject], records: dict[str, JSONObject]) -> JSONObject
             for f in KEY_FIELDS:
                 o = field_outcome(f, gold[f], pred[f])
                 fields[f][o] += 1
-                if o not in ("correct", "correct_missing"):
+                if o not in GOOD_OUTCOMES:
                     fail(p, f, o, gold[f], pred[f])
             exp, got = expected_missing(gold), set(pred["missing_fields"])
             o = "correct" if exp == got else "wrong"
