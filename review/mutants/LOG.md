@@ -230,3 +230,82 @@ Gaps found:
 | api-27 | `match_post` | killed | 81 | test_api.py (2), test_red_team.py (79) |  |
 | api-28 | `get_matcher` | survived | 0 | - | medium |
 | api-30 | `match_post` | killed | 1 | test_api.py (1) |  |
+
+## Round 4
+
+Final round allowed (max 4). Writers got the round-3 kill list (`kill_list_r3.json`) and the
+full "already recorded" exclusion list (rounds 1-3 gaps, including everything in
+`cli/build_brokers.py`, `get_matcher`'s fallback, the county table and `load_brokers` dedup).
+The gate writer took the extraction path that produces the deal's state
+(`extractors/__init__.py`, `extractors/claude.py`, the regex wrapper, `State`, `config.py`;
+never `extractors/frozen/`). The match/API writer took the rest of the client-visible path:
+`followup.py`, `MatchRequest`, `BodySizeLimit`, error handlers, logging, response assembly.
+No mutant could build a real Anthropic client; the Claude-path verifier used a fake client.
+
+- mutants: 36 (gate-60..73, api-41..56, match-61..66)
+- killed: 29
+- survived: 7, all verified `differs`; none equivalent
+- new survivors by severity: high 2 (`gate-69`, `gate-71`), medium 1 (`api-44`),
+  low 4 (`gate-63`, `api-45`, `api-49`, `api-56`)
+- new_high_medium_survivors: 3
+
+Gaps found:
+1. `ClaudeExtractor` is never tested with a null state on a post that contains an uppercase
+   two-letter word like "IN" or "OK". With `gate-69`, a guessed state routes the deal to brokers
+   from a state the post never named.
+2. The cached regex extractor is never given two different posts through one instance. With
+   `gate-71`, a prefix cache returns the first post's state for the second, so a TX-only broker
+   comes back for an Oklahoma deal.
+3. The body-size cap is only tested well above the limit (`api-44`, off by one at exactly 64 KiB).
+
+## Stop
+
+Stopped after round 4, the maximum. The loop did **not** converge: round 4 still added 3
+high/medium survivors, so `check_success.py` check (d) fails by design, and the check is
+frozen and stays unedited. Each round found new gaps in code the previous round hadn't reached (round 1: the
+gate and match; round 2: what feeds the gate; round 3: the CSV builder; round 4: extraction),
+while the gate expression itself (`is_licensed`) was killed in every variant except the
+substring-state one. A fifth round would most likely keep finding gaps in less-tested modules
+(`followup.py` was fully killed; `cli/eval.py`, `config.py` beyond `use_claude`, and the
+extractor internals were never mutated).
+
+Totals: 160 mutants; 114 killed; 45 survived (13 high, 14 medium, 18 low); 1 equivalent.
+
+| id | target | status | killed_by | killing test files | severity |
+|---|---|---|---|---|---|
+| gate-60 | `ExtractedFields._upper_state` | killed | 1 | test_red_team.py (1) |  |
+| gate-61 | `State` | killed | 4 | test_brokers.py (1), test_compliance.py (1), test_matcher.py (1), test_red_team.py (1) |  |
+| gate-62 | `KEY_FIELDS` | killed | 4 | test_api.py (1), test_config.py (1), test_followup.py (1), test_red_team.py (1) |  |
+| gate-63 | `ExtractedFields._upper_state` | survived | 0 | - | low |
+| gate-64 | `parse_requirement` | killed | 1 | test_red_team.py (1) |  |
+| gate-65 | `parse_requirement` | killed | 5 | test_eval.py (1), test_eval_compare.py (1), test_scoring_stats.py (3) |  |
+| gate-66 | `parse_requirement` | killed | 34 | test_eval.py (1), test_eval_compare.py (7), test_packaging_compat.py (6), test_red_team.py (13), test_scoring_stats.py (7) |  |
+| gate-67 | `INPUT_SCHEMA` | killed | 2 | test_packaging_compat.py (2) |  |
+| gate-68 | `TOOL` | killed | 3 | test_claude_strict.py (1), test_packaging_compat.py (2) |  |
+| gate-69 | `ClaudeExtractor.extract` | survived | 0 | - | high |
+| gate-70 | `_strict_schema` | killed | 3 | test_claude_strict.py (1), test_packaging_compat.py (2) |  |
+| gate-71 | `RegexExtractor.extract` | survived | 0 | - | high |
+| gate-72 | `RegexExtractor.extract` | killed | 9 | test_baseline_golden.py (7), test_red_team.py (2) |  |
+| gate-73 | `Settings.use_claude` | killed | 2 | test_config.py (2) |  |
+| api-41 | `MatchRequest` | killed | 1 | test_api.py (1) |  |
+| api-42 | `MatchRequest` | killed | 2 | test_api.py (2) |  |
+| api-43 | `BodySizeLimit.__call__` | killed | 1 | test_api.py (1) |  |
+| api-44 | `BodySizeLimit.__call__` | survived | 0 | - | medium |
+| api-45 | `BodySizeLimit.__call__` | survived | 0 | - | low |
+| api-46 | `_validation_error` | killed | 5 | test_api.py (5) |  |
+| api-47 | `match_post` | killed | 1 | test_api.py (1) |  |
+| api-48 | `match_post` | killed | 1 | test_api.py (1) |  |
+| api-49 | `_post_id` | survived | 0 | - | low |
+| api-50 | `match_post` | killed | 1 | test_api.py (1) |  |
+| api-51 | `match_post` | killed | 15 | test_api.py (2), test_red_team.py (13) |  |
+| api-52 | `match_post` | killed | 3 | test_api.py (3) |  |
+| api-53 | `match_post` | killed | 3 | test_api.py (2), test_red_team.py (1) |  |
+| api-54 | `match_post` | killed | 17 | test_api.py (1), test_red_team.py (16) |  |
+| api-55 | `match_post` | killed | 1 | test_red_team.py (1) |  |
+| api-56 | `BodySizeLimit.__call__` | survived | 0 | - | low |
+| match-61 | `PRIORITY` | killed | 4 | test_api.py (1), test_followup.py (3) |  |
+| match-62 | `follow_up_question` | killed | 12 | test_api.py (2), test_followup.py (8), test_red_team.py (2) |  |
+| match-63 | `follow_up_question` | killed | 10 | test_api.py (1), test_followup.py (9) |  |
+| match-64 | `_QUESTIONS` | killed | 2 | test_followup.py (2) |  |
+| match-65 | `_where` | killed | 6 | test_followup.py (5), test_red_team.py (1) |  |
+| match-66 | `_PROPERTY_LABELS` | killed | 1 | test_followup.py (1) |  |

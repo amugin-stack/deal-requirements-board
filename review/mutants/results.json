@@ -5144,5 +5144,777 @@
       "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order"
     ],
     "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 6.96s"
+  },
+  {
+    "id": "gate-60",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields._upper_state",
+      "file": "deal_board/schema.py"
+    },
+    "description": "State is repaired to its first two letters, so a spelled-out 'Missouri' or 'Minnesota' becomes 'MI' and Michigan brokers are returned for a Missouri/Minnesota deal.",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -140,7 +140,7 @@\n     @field_validator(\"state\", mode=\"before\")\n     @classmethod\n     def _upper_state(cls, v: object) -> str | None:\n-        return v.strip().upper() if isinstance(v, str) and v.strip() else None\n+        return v.strip().upper()[:2] if isinstance(v, str) and v.strip() else None\n \n     @field_validator(\"city\", \"notes\", mode=\"before\")\n     @classmethod\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-nul-suffix]"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 9.65s"
+  },
+  {
+    "id": "gate-61",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "State",
+      "file": "deal_board/schema.py"
+    },
+    "description": "'KS' is replaced by a duplicate 'KY' in the State Literal, so Kansas becomes an invalid state and every Kansas deal fails extraction (Kansas brokers unreachable).",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -33,7 +33,7 @@\n     \"IL\",\n     \"IN\",\n     \"IA\",\n-    \"KS\",\n+    \"KY\",\n     \"KY\",\n     \"LA\",\n     \"ME\",\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_brokers.py::<collection-error>",
+      "tests/test_compliance.py::<collection-error>",
+      "tests/test_matcher.py::<collection-error>",
+      "tests/test_red_team.py::<collection-error>"
+    ],
+    "suite": "4 errors in 2.31s"
+  },
+  {
+    "id": "gate-62",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "KEY_FIELDS",
+      "file": "deal_board/schema.py"
+    },
+    "description": "'state' dropped from KEY_FIELDS, so a deal with no state never lists state as missing and never gets the follow-up question asking for it.",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -97,7 +97,7 @@\n \n \n # Fields a broker needs to act on a post. If one is empty we may ask about it.\n-KEY_FIELDS = (\"state\", \"city\", \"property_type\", \"transaction_type\", \"deal_value_usd\", \"timeline\")\n+KEY_FIELDS = (\"city\", \"property_type\", \"transaction_type\", \"deal_value_usd\", \"timeline\")\n \n \n class ExtractedFields(BaseModel):\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::<collection-error>",
+      "tests/test_config.py::<collection-error>",
+      "tests/test_followup.py::<collection-error>",
+      "tests/test_red_team.py::<collection-error>"
+    ],
+    "suite": "4 errors in 2.33s"
+  },
+  {
+    "id": "gate-63",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields._upper_state",
+      "file": "deal_board/schema.py"
+    },
+    "description": "State validator keeps only the last token of the value, so a multi-state or prose answer like 'TX or OK' / 'near KS' is silently repaired to one state instead of being rejected, routing the deal to that state's brokers.",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -140,7 +140,7 @@\n     @field_validator(\"state\", mode=\"before\")\n     @classmethod\n     def _upper_state(cls, v: object) -> str | None:\n-        return v.strip().upper() if isinstance(v, str) and v.strip() else None\n+        return v.replace(\",\", \" \").replace(\"/\", \" \").split()[-1].upper() if isinstance(v, str) and v.strip() else None\n \n     @field_validator(\"city\", \"notes\", mode=\"before\")\n     @classmethod\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.65s",
+    "verified": "differs",
+    "verifier_note": "DealRequirement(state='TX or OK') or state='near KS' raises ValidationError in the original; the mutant keeps the last word and returns OK / KS, turning an unclear state into a definite one. Neither real extractor can send a multi-word state (the strict Claude tool only allows 2-letter enum codes or null; the frozen regex extractor only returns get_args(State) codes or None), so only a direct schema call shows it.",
+    "demo_output": "orig: 'TX or OK' -> ValidationError; 'near KS' -> ValidationError; 'TX' -> TX | mut: 'TX or OK' -> OK; 'near KS' -> KS; 'TX' -> TX",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_state_validator_rejects_multi_word_state",
+      "file": "tests/test_compliance.py",
+      "asserts": "DealRequirement(is_deal_request=True, state='TX or OK') and state='near KS' each raise pydantic.ValidationError, while state=' tx ' still gives 'TX'."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-64",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "parse_requirement",
+      "file": "deal_board/extractors/__init__.py"
+    },
+    "description": "On a validation failure, parse_requirement repairs the state to its first two letters and retries instead of raising, so 'Missouri' becomes 'MI' and Michigan brokers are matched.",
+    "diff": "--- a/deal_board/extractors/__init__.py\n+++ b/deal_board/extractors/__init__.py\n@@ -20,4 +20,9 @@\n     try:\n         return DealRequirement.model_validate(raw)\n     except ValueError as e:  # pydantic.ValidationError subclasses ValueError\n+        if isinstance(raw.get(\"state\"), str) and len(raw[\"state\"].strip()) > 2:\n+            try:\n+                return DealRequirement.model_validate({**raw, \"state\": raw[\"state\"].strip()[:2].upper()})\n+            except ValueError:\n+                pass\n         raise ExtractionError(f\"invalid output: {e}\") from e\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-nul-suffix]"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 8.40s"
+  },
+  {
+    "id": "gate-65",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "parse_requirement",
+      "file": "deal_board/extractors/__init__.py"
+    },
+    "description": "A missing/null state defaults to 'TX' before validation, so a deal post that names no state (or another state only by city) gets Texas-licensed brokers and no follow-up question.",
+    "diff": "--- a/deal_board/extractors/__init__.py\n+++ b/deal_board/extractors/__init__.py\n@@ -18,6 +18,6 @@\n def parse_requirement(raw: JSONObject) -> DealRequirement:\n     \"\"\"Validate a raw extractor output. Raises ExtractionError instead of repairing bad values.\"\"\"\n     try:\n-        return DealRequirement.model_validate(raw)\n+        return DealRequirement.model_validate({**raw, \"state\": raw.get(\"state\") or \"TX\"})\n     except ValueError as e:  # pydantic.ValidationError subclasses ValueError\n         raise ExtractionError(f\"invalid output: {e}\") from e\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_eval.py::test_eval_scores_fake_claude_outputs",
+      "tests/test_eval_compare.py::test_compare_state_discordant_ids_and_p",
+      "tests/test_scoring_stats.py::test_score_non_deal_rate_and_ci",
+      "tests/test_scoring_stats.py::test_score_preexisting_keys_unchanged[holdout]",
+      "tests/test_scoring_stats.py::test_score_preexisting_keys_unchanged[posts]"
+    ],
+    "suite": "5 failed, 997 passed, 2 skipped, 5 xfailed, 2 warnings in 8.40s"
+  },
+  {
+    "id": "gate-66",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "parse_requirement",
+      "file": "deal_board/extractors/__init__.py"
+    },
+    "description": "Catches TypeError instead of ValueError, so invalid extractor output (bad state) escapes as a raw pydantic ValidationError instead of ExtractionError and crashes callers expecting the documented error.",
+    "diff": "--- a/deal_board/extractors/__init__.py\n+++ b/deal_board/extractors/__init__.py\n@@ -19,5 +19,5 @@\n     \"\"\"Validate a raw extractor output. Raises ExtractionError instead of repairing bad values.\"\"\"\n     try:\n         return DealRequirement.model_validate(raw)\n-    except ValueError as e:  # pydantic.ValidationError subclasses ValueError\n+    except TypeError as e:  # pydantic.ValidationError subclasses ValueError\n         raise ExtractionError(f\"invalid output: {e}\") from e\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_eval.py::test_invalid_output_is_an_error_and_rescore_needs_no_client",
+      "tests/test_eval_compare.py::test_cli_compare_dev_run_with_full_run",
+      "tests/test_eval_compare.py::test_rescore_every_results_file[claude_20261024T231514Z.json]",
+      "tests/test_eval_compare.py::test_rescore_every_results_file[claude_20261024T232452Z.json]",
+      "tests/test_eval_compare.py::test_rescore_every_results_file[claude_20261024T232525Z.json]",
+      "tests/test_eval_compare.py::test_rescore_every_results_file[claude_20261024T232557Z.json]",
+      "tests/test_eval_compare.py::test_rescore_every_results_file[claude_20261024T232649Z.json]",
+      "tests/test_eval_compare.py::test_rescore_every_results_file[claude_20261024T232722Z.json]",
+      "tests/test_packaging_compat.py::test_eval_run_rescores_offline[claude_20261024T231514Z.json]",
+      "tests/test_packaging_compat.py::test_eval_run_rescores_offline[claude_20261024T232452Z.json]",
+      "tests/test_packaging_compat.py::test_eval_run_rescores_offline[claude_20261024T232525Z.json]",
+      "tests/test_packaging_compat.py::test_eval_run_rescores_offline[claude_20261024T232557Z.json]",
+      "tests/test_packaging_compat.py::test_eval_run_rescores_offline[claude_20261024T232649Z.json]",
+      "tests/test_packaging_compat.py::test_eval_run_rescores_offline[claude_20261024T232722Z.json]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-float-huge]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-inf]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-nan]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-null]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-not-a-list]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[negative-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-full-name]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-fullwidth]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-not-a-state]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-nul-suffix]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-spaced-letters]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-tab-inside]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-territory]",
+      "tests/test_scoring_stats.py::test_post_correctness_covers_the_right_posts",
+      "tests/test_scoring_stats.py::test_post_correctness_errored_record_wrong_everywhere",
+      "tests/test_scoring_stats.py::test_post_correctness_matches_score_numerators",
+      "tests/test_scoring_stats.py::test_post_correctness_values",
+      "tests/test_scoring_stats.py::test_score_ci95_on_every_accuracy_cell",
+      "tests/test_scoring_stats.py::test_score_hallucination_rate_and_ci",
+      "tests/test_scoring_stats.py::test_score_non_deal_rate_and_ci"
+    ],
+    "suite": "27 failed, 968 passed, 2 skipped, 5 xfailed, 2 warnings, 7 errors in 8.86s"
+  },
+  {
+    "id": "gate-67",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "INPUT_SCHEMA",
+      "file": "deal_board/extractors/claude.py"
+    },
+    "description": "The Claude tool's state enum is truncated to the first 40 states, so the API-enforced schema can never return states after 'NC' (ND..WY) and those deals come back with a null or forced-wrong state.",
+    "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -75,6 +75,7 @@\n # The tool's input schema as plain JSON, kept by name so tests can inspect it (ToolParam types\n # input_schema as a narrow TypedDict that doesn't list strict mode's extra keys).\n INPUT_SCHEMA: dict[str, Any] = _strict_schema(ExtractedFields.model_json_schema())\n+INPUT_SCHEMA[\"properties\"][\"state\"][\"anyOf\"][0][\"enum\"] = INPUT_SCHEMA[\"properties\"][\"state\"][\"anyOf\"][0][\"enum\"][:40]\n \n TOOL: ToolParam = {\n     \"name\": \"record_deal_requirement\",\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_packaging_compat.py::test_check_success_prompt_version",
+      "tests/test_packaging_compat.py::test_prompt_version_unchanged"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 8.31s"
+  },
+  {
+    "id": "gate-68",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "TOOL",
+      "file": "deal_board/extractors/claude.py"
+    },
+    "description": "Tool strict mode turned off, so the API no longer enforces the state enum/required fields and Claude may return 'Texas' or omit fields (Pydantic still rejects, so it surfaces as extraction errors).",
+    "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -80,7 +80,7 @@\n     \"name\": \"record_deal_requirement\",\n     \"description\": \"Record the structured requirement extracted from one post.\",\n     \"input_schema\": INPUT_SCHEMA,\n-    \"strict\": True,\n+    \"strict\": False,\n }\n \n # Changes whenever the prompt or schema changes, so saved eval results say which version ran.\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_claude_strict.py::test_tool_is_strict",
+      "tests/test_packaging_compat.py::test_check_success_prompt_version",
+      "tests/test_packaging_compat.py::test_prompt_version_unchanged"
+    ],
+    "suite": "3 failed, 999 passed, 2 skipped, 5 xfailed, 2 warnings in 8.19s"
+  },
+  {
+    "id": "gate-69",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "ClaudeExtractor.extract",
+      "file": "deal_board/extractors/claude.py"
+    },
+    "description": "When Claude returns a null state, extract infers it from the first standalone two-capital-letter token in the post that is a valid state code (e.g. 'IN', 'OK', 'ME'), so a no-state post gets brokers from a guessed state.",
+    "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -168,7 +168,14 @@\n         self.last_usage: Usage | None = None\n \n     def extract(self, text: str) -> DealRequirement:\n-        return parse_requirement(self.extract_raw(text))\n+        raw = self.extract_raw(text)\n+        if raw.get(\"state\") is None:\n+            import re\n+            from typing import get_args\n+            from deal_board.schema import State\n+            guess = next((t for t in re.findall(r\"\\b[A-Z]{2}\\b\", text) if t in get_args(State)), None)\n+            raw = {**raw, \"state\": guess}\n+        return parse_requirement(raw)\n \n     def extract_raw(self, text: str) -> dict[str, object]:\n         \"\"\"The tool call's input exactly as Claude returned it, before validation.\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 8.19s",
+    "verified": "differs",
+    "verifier_note": "A fake Anthropic client (no network) returns a tool_use with state null for the post 'Fictional client wants a retail buy, call me IN the morning': the original keeps state None and match() excludes the Active IN fictional broker (fail closed); the mutant takes the word 'IN' as the state and returns that broker for a deal whose state was never given. This is on the real POST /match path whenever the Claude extractor is used. Existing fake-client tests never pair a null state with a post containing an uppercase word that is also a state code.",
+    "demo_output": "orig: state None | matches [] | excluded 1 | mut: state IN | matches ['fx-demo-01'] | excluded 0",
+    "severity": "high",
+    "proposed_test": {
+      "name": "test_claude_null_state_is_not_guessed_from_text",
+      "file": "tests/test_claude_strict.py",
+      "asserts": "ClaudeExtractor with a fake client returning state null on 'Fictional client wants a retail buy, call me IN the morning' gives requirement.state is None, and match() on it with the proposed fixture (Active, unexpired IN broker) returns no matches and excluded_for_licensing == 1."
+    },
+    "proposed_fixture": {
+      "broker_id": "fx-mut-69",
+      "name": "Fictional Broker IN-Mut",
+      "source": "fictional",
+      "license_state": "IN",
+      "license_number": "FICT-IN-9069",
+      "license_type": "Broker Individual",
+      "license_status": "Active",
+      "license_expiration": "2028-01-31",
+      "county": "",
+      "markets": "",
+      "property_types": "retail",
+      "transaction_types": "buy",
+      "min_deal_usd": "",
+      "max_deal_usd": ""
+    }
+  },
+  {
+    "id": "gate-70",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "_strict_schema",
+      "file": "deal_board/extractors/claude.py"
+    },
+    "description": "Strict schema lists only the first property as required, so Claude may omit state (and other fields) entirely and the omission is indistinguishable from 'post did not say'.",
+    "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -61,7 +61,7 @@\n             node.pop(\"minimum\", None)\n             if node.get(\"type\") == \"object\" and \"properties\" in node:\n                 node[\"additionalProperties\"] = False\n-                node[\"required\"] = list(node[\"properties\"])\n+                node[\"required\"] = list(node[\"properties\"])[:1]\n             for v in node.values():\n                 walk(v)\n         elif isinstance(node, list):\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_claude_strict.py::test_all_properties_required_and_closed",
+      "tests/test_packaging_compat.py::test_check_success_prompt_version",
+      "tests/test_packaging_compat.py::test_prompt_version_unchanged"
+    ],
+    "suite": "3 failed, 999 passed, 2 skipped, 5 xfailed, 2 warnings in 9.41s"
+  },
+  {
+    "id": "gate-71",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "RegexExtractor.extract",
+      "file": "deal_board/extractors/regex_baseline.py"
+    },
+    "description": "Wrapper caches results keyed on the first 40 characters of the post, so two posts with the same opening ('Looking for a broker for my client...') reuse the first post's state and get the wrong state's brokers.",
+    "diff": "--- a/deal_board/extractors/regex_baseline.py\n+++ b/deal_board/extractors/regex_baseline.py\n@@ -74,9 +74,10 @@\n \n     def __init__(self) -> None:\n         self._impl = _FROZEN_CLASS()\n+        self._cache: dict[str, object] = {}\n \n     def extract(self, text: str) -> DealRequirement:\n-        result = self._impl.extract(text)\n+        result = self._cache.setdefault(text[:40], self._impl.extract(text))\n         if not isinstance(result, DealRequirement):\n             raise TypeError(f\"frozen RegexExtractor returned {type(result).__name__}, not DealRequirement\")\n         return result\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.58s",
+    "verified": "differs",
+    "verifier_note": "Two posts sharing their first 40 characters ('Looking for a broker for a retail deal: buy a retail center in Dallas, TX' and the same text ending 'in Tulsa, OK') through the app's real cached extractor (api._regex_extractor via override), as_of 2026-10-20: the original reads the second post as OK and returns the OK broker; the mutant reuses the cached TX result and returns fx-demo-01, licensed only in TX, for an Oklahoma deal. Golden tests build a fresh RegexExtractor() per post and no test sends two posts with a shared opening through one instance; in production the lru_cached singleton would leak results between clients.",
+    "demo_output": "orig: POST '...Dallas, TX' -> state TX matches ['fx-demo-01']; POST '...Tulsa, OK' -> state OK matches ['fx-demo-02'] | mut: POST '...Dallas, TX' -> TX ['fx-demo-01']; POST '...Tulsa, OK' -> state TX matches ['fx-demo-01']",
+    "severity": "high",
+    "proposed_test": {
+      "name": "test_regex_extractor_does_not_reuse_results_for_shared_prefix",
+      "file": "tests/test_api.py",
+      "asserts": "With get_extractor overridden to the real cached api._regex_extractor and brokers [Active TX fictional, Active OK fictional], two posts sharing their first 40 characters but ending 'Dallas, TX' and 'Tulsa, OK': the second response has requirement.state == 'OK' and only the OK broker's id in matches."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-72",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "RegexExtractor.extract",
+      "file": "deal_board/extractors/regex_baseline.py"
+    },
+    "description": "Wrapper fills a null extracted state with 'TX' via model_copy (no revalidation), so a deal post naming no state is matched against Texas-licensed brokers while missing_fields still says state is missing.",
+    "diff": "--- a/deal_board/extractors/regex_baseline.py\n+++ b/deal_board/extractors/regex_baseline.py\n@@ -79,4 +79,6 @@\n         result = self._impl.extract(text)\n         if not isinstance(result, DealRequirement):\n             raise TypeError(f\"frozen RegexExtractor returned {type(result).__name__}, not DealRequirement\")\n+        if result.is_deal_request and result.state is None:\n+            result = result.model_copy(update={\"state\": \"TX\"})\n         return result\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[holdout/h03]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[holdout/h09]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s02]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s10]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s11]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s12]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s22]",
+      "tests/test_red_team.py::test_known_regex_state_leaks_are_pinned",
+      "tests/test_red_team.py::test_regex_path_is_not_vacuous"
+    ],
+    "suite": "9 failed, 993 passed, 2 skipped, 5 xfailed, 2 warnings in 9.33s"
+  },
+  {
+    "id": "gate-73",
+    "round": 4,
+    "author": "gate-writer",
+    "target": {
+      "function": "Settings.use_claude",
+      "file": "deal_board/config.py"
+    },
+    "description": "use_claude requires DEAL_EXTRACTOR to be empty, so any non-empty value (not just 'regex', e.g. 'claude') silently forces the regex baseline.",
+    "diff": "--- a/deal_board/config.py\n+++ b/deal_board/config.py\n@@ -85,7 +85,7 @@\n     @property\n     def use_claude(self) -> bool:\n         \"\"\"Use the Claude extractor: a key is set and DEAL_EXTRACTOR doesn't force regex.\"\"\"\n-        return self.has_api_key and self.deal_extractor != FORCE_REGEX\n+        return self.has_api_key and self.deal_extractor == \"\"\n \n     def api_key_value(self) -> str | None:\n         \"\"\"The plaintext key, or None. The only way to it; meant for `anthropic.Anthropic(api_key=...)`.\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_config.py::test_use_claude_truth_table[sk-test-SECRET-do-not-leak-0123-anything-else-True]",
+      "tests/test_config.py::test_use_claude_truth_table[sk-test-SECRET-do-not-leak-0123-claude-True]"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 9.30s"
+  },
+  {
+    "id": "api-41",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "MatchRequest",
+      "file": "deal_board/api.py"
+    },
+    "description": "max_length is MAX_POST_CHARS + 1, so a 4001-char post is accepted and sent to the extractor instead of a 422.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -65,7 +65,7 @@\n     rather than sent to the extractor. The upper bound caps model cost and latency per request.\n     \"\"\"\n \n-    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS)]\n+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS + 1)]\n \n \n class BrokerMatch(BaseModel):\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[4001-chars]"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 10.33s"
+  },
+  {
+    "id": "api-42",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "MatchRequest",
+      "file": "deal_board/api.py"
+    },
+    "description": "strip_whitespace disabled, so a whitespace-only post passes validation and is sent to the extractor (and padded posts count whitespace toward the 4000 cap).",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -65,7 +65,7 @@\n     rather than sent to the extractor. The upper bound caps model cost and latency per request.\n     \"\"\"\n \n-    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS)]\n+    text: Annotated[str, StringConstraints(strip_whitespace=False, min_length=1, max_length=MAX_POST_CHARS)]\n \n \n class BrokerMatch(BaseModel):\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[whitespace-only]",
+      "tests/test_api.py::test_length_limit_applies_after_stripping[4000-chars-padded]"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 10.24s"
+  },
+  {
+    "id": "api-43",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "BodySizeLimit.__call__",
+      "file": "deal_board/api.py"
+    },
+    "description": "Streaming size check only runs when a Content-Length was declared, so a chunked body with no length header bypasses the 64 KiB cap.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -247,7 +247,7 @@\n                 return\n             body = message.get(\"body\", b\"\")\n             size += len(body)\n-            if size > self.max_bytes:\n+            if declared is not None and size > self.max_bytes:\n                 await self._reject(send)\n                 return\n             chunks.append(body)\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_oversize_chunked_body_without_length_is_413"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 10.03s"
+  },
+  {
+    "id": "api-44",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "BodySizeLimit.__call__",
+      "file": "deal_board/api.py"
+    },
+    "description": "Off-by-one: streaming check uses >=, so a body of exactly max_bytes is rejected with 413.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -247,7 +247,7 @@\n                 return\n             body = message.get(\"body\", b\"\")\n             size += len(body)\n-            if size > self.max_bytes:\n+            if size >= self.max_bytes:\n                 await self._reject(send)\n                 return\n             chunks.append(body)\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.92s",
+    "verified": "differs",
+    "verifier_note": "The real ASGI app called directly with a valid JSON body of exactly MAX_BODY_BYTES (65536) bytes, one chunk, correct Content-Length, extractor and matcher faked: the original returns 200, the mutant 413, so the cap is one byte lower than documented and a valid request is refused. Both 413 tests use bodies well over the limit; none sends exactly the limit. Reaching 64 KiB needs whitespace padding beyond any 4000-char post, so it is an edge case, but it is a client-visible validation boundary.",
+    "demo_output": "orig: body of exactly 65536 bytes -> 200 {\"extractor\":\"regex\",...} | mut: same body -> 413 {\"detail\":\"request body too large\"}",
+    "severity": "medium",
+    "proposed_test": {
+      "name": "test_body_of_exactly_max_bytes_is_accepted",
+      "file": "tests/test_api.py",
+      "asserts": "A JSON body padded with whitespace to exactly api.MAX_BODY_BYTES bytes with a matching Content-Length returns 200 and the extractor is called once; MAX_BODY_BYTES + 1 bytes returns 413."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "api-45",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "BodySizeLimit.__call__",
+      "file": "deal_board/api.py"
+    },
+    "description": "Non-numeric Content-Length is no longer rejected, so int() raises inside the middleware and the client gets a 500 instead of 413.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -234,7 +234,7 @@\n             return\n \n         declared = dict(scope.get(\"headers\") or []).get(b\"content-length\")\n-        if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):\n+        if declared is not None and int(declared) > self.max_bytes:\n             await self._reject(send)\n             return\n \n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 10.17s",
+    "verified": "differs",
+    "verifier_note": "ASGI call with header Content-Length: abc: the original rejects it with 413 and a fixed detail; in the mutant int(b'abc') raises inside the middleware and the client gets a plain-text 500. Under the project's uvicorn 0.54 + h11 0.16, h11 rejects a non-numeric Content-Length before the app sees it, and TestClient/httpx always send a numeric length, so a real client can't reach it.",
+    "demo_output": "orig: Content-Length: abc -> 413 {\"detail\":\"request body too large\"} | mut: 500 'Internal Server Error' (ValueError in middleware)",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_non_numeric_content_length_is_rejected_not_500",
+      "file": "tests/test_api.py",
+      "asserts": "Calling the BodySizeLimit-wrapped app over ASGI with header (b'content-length', b'abc') returns 413 with body {\"detail\": \"request body too large\"} and no exception propagates."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "api-46",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_validation_error",
+      "file": "deal_board/api.py"
+    },
+    "description": "Handler drops `ctx` instead of `input`, so a 422 echoes the rejected post text back to the client (and proxy logs).",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -299,7 +299,7 @@\n     whole post. It's the caller's own text, but there's no reason to reflect it into responses\n     (and from there into proxy or client logs); `loc`, `msg` and `ctx` say what was wrong.\n     \"\"\"\n-    errors = [{k: v for k, v in err.items() if k != \"input\"} for err in exc.errors()]\n+    errors = [{k: v for k, v in err.items() if k != \"ctx\"} for err in exc.errors()]\n     return JSONResponse(\n         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,\n         content={\"detail\": jsonable_encoder(errors)},\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[4001-chars]",
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[empty]",
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[missing-text]",
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[whitespace-only]",
+      "tests/test_api.py::test_invalid_body_is_rejected_before_extraction[wrong-field]"
+    ],
+    "suite": "5 failed, 997 passed, 2 skipped, 5 xfailed, 2 warnings in 9.99s"
+  },
+  {
+    "id": "api-47",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Success log line records the post text instead of its hash, writing client details to the logs.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -388,7 +388,7 @@\n \n     logger.info(\n         \"matched post=%s chars=%d extractor=%s matches=%d excluded=%d\",\n-        post_id,\n+        text,\n         len(text),\n         extractor.name,\n         len(matches),\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_post_text_never_reaches_logs[success]"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 9.82s"
+  },
+  {
+    "id": "api-48",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Extraction-failure warning logs the exception text (pydantic errors embed post fragments) instead of only its class name.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -343,7 +343,7 @@\n     try:\n         requirement = extractor.extract(text)\n     except ExtractionError as e:\n-        logger.warning(\"extraction failed post=%s extractor=%s error=%s\", post_id, extractor.name, type(e).__name__)\n+        logger.warning(\"extraction failed post=%s extractor=%s error=%s\", post_id, extractor.name, str(e))\n         raise HTTPException(\n             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,\n             detail=\"could not extract a deal requirement from this post\",\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_post_text_never_reaches_logs[extraction-error]"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 9.91s"
+  },
+  {
+    "id": "api-49",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_post_id",
+      "file": "deal_board/api.py"
+    },
+    "description": "Post-id hash truncated to 4 hex chars, so distinct posts collide in logs and correlation breaks.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -308,7 +308,7 @@\n \n def _post_id(text: str) -> str:\n     \"\"\"A short, stable fingerprint for correlating logs with a post without storing the post.\"\"\"\n-    return hashlib.sha256(text.encode()).hexdigest()[:12]\n+    return hashlib.sha256(text.encode()).hexdigest()[:4]\n \n \n @app.post(\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 10.31s",
+    "verified": "differs",
+    "verifier_note": "One fictional post via TestClient with a handler on deal_board.api's logger: the original logs a 12-hex post id, the mutant a 4-hex one (65,536 values), so ids start colliding after a few hundred posts. Nothing reaches clients and no post text leaks; tests only check the post text is absent from logs.",
+    "demo_output": "orig: log 'matched post=458d863be780 chars=35 ...' | mut: log 'matched post=458d chars=35 ...'",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_logged_post_id_is_12_hex_sha256_prefix",
+      "file": "tests/test_api.py",
+      "asserts": "After a successful POST /match with caplog at INFO, the 'matched' line contains post=<sha256(POST.strip().encode()).hexdigest()[:12]> and the post= value matches [0-9a-f]{12}."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "api-50",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Matches are reshaped from reversed(result.matches), so the client sees the worst-fit licensed broker first.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -383,7 +383,7 @@\n             score=m.score,\n             reasons=list(m.reasons),\n         )\n-        for m in result.matches\n+        for m in reversed(result.matches)\n     ]\n \n     logger.info(\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 10.24s"
+  },
+  {
+    "id": "api-51",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "ExtractionError mapped to 503 instead of 422, so an unparseable post is reported as a service outage (clients retry).",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -345,7 +345,7 @@\n     except ExtractionError as e:\n         logger.warning(\"extraction failed post=%s extractor=%s error=%s\", post_id, extractor.name, type(e).__name__)\n         raise HTTPException(\n-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,\n+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,\n             detail=\"could not extract a deal requirement from this post\",\n         ) from e\n     except anthropic.APIError as e:\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_extraction_error_is_422_with_readable_detail",
+      "tests/test_api.py::test_post_text_never_reaches_logs[extraction-error]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-float-huge]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-inf]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-nan]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-null]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-not-a-list]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[negative-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-full-name]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-fullwidth]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-not-a-state]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-nul-suffix]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-spaced-letters]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-tab-inside]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-territory]"
+    ],
+    "suite": "15 failed, 987 passed, 2 skipped, 5 xfailed, 2 warnings in 10.22s"
+  },
+  {
+    "id": "api-52",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "anthropic.APIError mapped to 500 instead of 503, so an upstream outage looks like an extractor bug.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -357,7 +357,7 @@\n             getattr(e, \"status_code\", None),\n         )\n         raise HTTPException(\n-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,\n+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n             detail=\"extraction service unavailable\",\n         ) from e\n     except Exception as e:\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_post_text_never_reaches_logs[api-error]",
+      "tests/test_api.py::test_upstream_api_error_is_503_without_leaking_upstream_text[connection]",
+      "tests/test_api.py::test_upstream_api_error_is_503_without_leaking_upstream_text[status]"
+    ],
+    "suite": "3 failed, 999 passed, 2 skipped, 5 xfailed, 2 warnings in 10.20s"
+  },
+  {
+    "id": "api-53",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Generic extractor crash returns the exception text in the 500 detail, which may quote the post.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -367,7 +367,7 @@\n         logger.error(\"extractor crashed post=%s extractor=%s error=%s\", post_id, extractor.name, type(e).__name__)\n         raise HTTPException(\n             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n-            detail=\"extraction failed unexpectedly\",\n+            detail=f\"extraction failed unexpectedly: {e}\",\n         ) from None\n \n     # Licensing gating, non-deal posts and missing states are the matcher's job; the API only\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_real_regex_extractor_overflow_is_500_not_crash",
+      "tests/test_api.py::test_unexpected_extractor_crash_is_fixed_500_without_post_text",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[extractor-raises]"
+    ],
+    "suite": "3 failed, 999 passed, 2 skipped, 5 xfailed, 2 warnings in 10.87s"
+  },
+  {
+    "id": "api-54",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "API reports excluded_for_licensing as len(brokers) - len(matches) instead of the matcher's count, so licensed brokers cut by the limit are reported as unlicensed.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -401,6 +401,6 @@\n         extractor=cast(Literal[\"claude\", \"regex\"], extractor.name),\n         requirement=requirement,\n         matches=matches,\n-        excluded_for_licensing=result.excluded_for_licensing,\n+        excluded_for_licensing=len(brokers) - len(matches),\n         follow_up_question=follow_up_question(requirement),\n     )\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_non_deal_post_has_no_matches_and_no_follow_up",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[huge-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-notes]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-yes-validated]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-empty-despite-nulls]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[non-deal-with-full-requirement]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-is-deal-request-zero]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-missing-fields-empty]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-non-deal-with-missing-fields]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-01]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-04]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-21]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-28]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-29]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-30]"
+    ],
+    "suite": "17 failed, 985 passed, 2 skipped, 5 xfailed, 2 warnings in 10.96s"
+  },
+  {
+    "id": "api-55",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Follow-up question only sent when there are no matches, so a matched deal missing city/value/timeline never gets its question.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -402,5 +402,5 @@\n         requirement=requirement,\n         matches=matches,\n         excluded_for_licensing=result.excluded_for_licensing,\n-        follow_up_question=follow_up_question(requirement),\n+        follow_up_question=follow_up_question(requirement) if not matches else None,\n     )\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-with-follow-up]"
+    ],
+    "suite": "1 failed, 1002 passed, 2 skipped, 4 xfailed, 2 warnings in 10.62s"
+  },
+  {
+    "id": "api-56",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "BodySizeLimit.__call__",
+      "file": "deal_board/api.py"
+    },
+    "description": "Body is replayed without deferring to the real receive, so after the body the app sees an immediate disconnect instead of waiting on the client.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -255,7 +255,7 @@\n                 break\n \n         replay: list[Message] = [{\"type\": \"http.request\", \"body\": b\"\".join(chunks), \"more_body\": False}]\n-        await self.app(scope, _replay(replay, then=receive), send)\n+        await self.app(scope, _replay(replay), send)\n \n     @staticmethod\n     async def _reject(send: Send) -> None:\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 10.72s",
+    "verified": "differs",
+    "verifier_note": "Through TestClient every response is identical (the only route is a sync def returning JSON, nothing calls receive() after the body). Calling BodySizeLimit directly with a probe app that calls receive() a second time while the client is connected: the original keeps waiting on the real receive, the mutant immediately returns a fake http.disconnect, which would break disconnect detection for a future streaming route. No test drives BodySizeLimit/_replay directly.",
+    "demo_output": "orig: POST /match 200 (same body); 2nd receive() via BodySizeLimit: still waiting | mut: POST /match 200 (same body); 2nd receive(): http.disconnect",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_body_size_limit_defers_to_real_receive_after_body",
+      "file": "tests/test_api.py",
+      "asserts": "A probe ASGI app wrapped in BodySizeLimit, driven by a hand-written receive that sends one body message then blocks: the probe's second receive() does not return within 0.2s (no synthetic http.disconnect)."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "match-61",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "PRIORITY",
+      "file": "deal_board/followup.py"
+    },
+    "description": "transaction_type ranked above state, so a deal missing both is asked about deal type while it can't match any broker for lack of a state.",
+    "diff": "--- a/deal_board/followup.py\n+++ b/deal_board/followup.py\n@@ -15,8 +15,8 @@\n # only makes the match less precise. This order deliberately differs from\n # KEY_FIELDS, which is the schema's display order, not a priority.\n PRIORITY: tuple[str, ...] = (\n+    \"transaction_type\",\n     \"state\",\n-    \"transaction_type\",\n     \"property_type\",\n     \"city\",\n     \"deal_value_usd\",\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_missing_state_excludes_everyone_and_asks_for_state",
+      "tests/test_followup.py::test_missing_state_names_the_city",
+      "tests/test_followup.py::test_missing_state_without_city",
+      "tests/test_followup.py::test_state_outranks_everything"
+    ],
+    "suite": "4 failed, 998 passed, 2 skipped, 5 xfailed, 2 warnings in 10.35s"
+  },
+  {
+    "id": "match-62",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "follow_up_question",
+      "file": "deal_board/followup.py"
+    },
+    "description": "State is always asked first even when present, so a complete TX deal is asked 'Which state...?' and a deal missing city never gets the city question.",
+    "diff": "--- a/deal_board/followup.py\n+++ b/deal_board/followup.py\n@@ -110,6 +110,6 @@\n         return None\n     missing = set(req.missing_fields)\n     for field in PRIORITY:\n-        if field in missing:\n+        if field in missing or field == \"state\":\n             return _QUESTIONS[field](req)\n     return None\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_follow_up_targets_remaining_gap_when_state_is_known",
+      "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order",
+      "tests/test_followup.py::test_complete_deal_gets_no_question",
+      "tests/test_followup.py::test_highest_priority_gap_wins[city-Which city is the office property in?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[deal_value_usd-What is the client's price or budget for the office property in Austin?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[property_type-What type of property is it: single-family, condo/townhome, multifamily, retail, office, industrial, land, or mixed-use?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[timeline-When does the client need to close on the office property in Austin: within 30 days, in 1-3 months, or later?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[transaction_type-Is the client buying, selling, leasing, or doing a 1031 exchange for the property?]",
+      "tests/test_followup.py::test_known_fields_make_questions_specific",
+      "tests/test_followup.py::test_uses_missing_fields_order_independently",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[json-state-in-city-ks]"
+    ],
+    "suite": "12 failed, 990 passed, 2 skipped, 5 xfailed, 2 warnings in 10.01s"
+  },
+  {
+    "id": "match-63",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "follow_up_question",
+      "file": "deal_board/followup.py"
+    },
+    "description": "Priority iterated in reverse, so the least important gap (timeline) is asked before a missing state.",
+    "diff": "--- a/deal_board/followup.py\n+++ b/deal_board/followup.py\n@@ -109,7 +109,7 @@\n     if not req.is_deal_request:\n         return None\n     missing = set(req.missing_fields)\n-    for field in PRIORITY:\n+    for field in reversed(PRIORITY):\n         if field in missing:\n             return _QUESTIONS[field](req)\n     return None\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_missing_state_excludes_everyone_and_asks_for_state",
+      "tests/test_followup.py::test_highest_priority_gap_wins[city-Which city is the office property in?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[deal_value_usd-What is the client's price or budget for the office property in Austin?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[property_type-What type of property is it: single-family, condo/townhome, multifamily, retail, office, industrial, land, or mixed-use?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[transaction_type-Is the client buying, selling, leasing, or doing a 1031 exchange for the property?]",
+      "tests/test_followup.py::test_known_fields_make_questions_specific",
+      "tests/test_followup.py::test_missing_state_names_the_city",
+      "tests/test_followup.py::test_missing_state_without_city",
+      "tests/test_followup.py::test_state_outranks_everything",
+      "tests/test_followup.py::test_uses_missing_fields_order_independently"
+    ],
+    "suite": "10 failed, 992 passed, 2 skipped, 5 xfailed, 2 warnings in 9.88s"
+  },
+  {
+    "id": "match-64",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_QUESTIONS",
+      "file": "deal_board/followup.py"
+    },
+    "description": "Missing city mapped to the state question, so a deal with a known state is asked which state it is in.",
+    "diff": "--- a/deal_board/followup.py\n+++ b/deal_board/followup.py\n@@ -93,7 +93,7 @@\n     \"state\": _ask_state,\n     \"transaction_type\": _ask_transaction_type,\n     \"property_type\": _ask_property_type,\n-    \"city\": _ask_city,\n+    \"city\": _ask_state,\n     \"deal_value_usd\": _ask_deal_value,\n     \"timeline\": _ask_timeline,\n }\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_followup.py::test_highest_priority_gap_wins[city-Which city is the office property in?]",
+      "tests/test_followup.py::test_known_fields_make_questions_specific"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 10.15s"
+  },
+  {
+    "id": "match-65",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_where",
+      "file": "deal_board/followup.py"
+    },
+    "description": "_where uses the state instead of the city, so questions read ' in TX' and drop the city anchor.",
+    "diff": "--- a/deal_board/followup.py\n+++ b/deal_board/followup.py\n@@ -47,7 +47,7 @@\n \n def _where(req: DealRequirement) -> str:\n     \"\"\"' in Austin' when the city is known, else ''. Keeps questions anchored to the post.\"\"\"\n-    return f\" in {req.city}\" if req.city else \"\"\n+    return f\" in {req.state}\" if req.state else \"\"\n \n \n def _property(req: DealRequirement) -> str:\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_followup.py::test_highest_priority_gap_wins[deal_value_usd-What is the client's price or budget for the office property in Austin?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[property_type-What type of property is it: single-family, condo/townhome, multifamily, retail, office, industrial, land, or mixed-use?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[timeline-When does the client need to close on the office property in Austin: within 30 days, in 1-3 months, or later?]",
+      "tests/test_followup.py::test_highest_priority_gap_wins[transaction_type-Is the client buying, selling, leasing, or doing a 1031 exchange for the property?]",
+      "tests/test_followup.py::test_known_fields_make_questions_specific",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-with-follow-up]"
+    ],
+    "suite": "6 failed, 997 passed, 2 skipped, 4 xfailed, 2 warnings in 7.21s"
+  },
+  {
+    "id": "match-66",
+    "round": 4,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_PROPERTY_LABELS",
+      "file": "deal_board/followup.py"
+    },
+    "description": "'other' property type labeled 'other', so questions say 'other property' instead of 'property'.",
+    "diff": "--- a/deal_board/followup.py\n+++ b/deal_board/followup.py\n@@ -37,7 +37,7 @@\n     PropertyType.industrial: \"industrial\",\n     PropertyType.land: \"land\",\n     PropertyType.mixed_use: \"mixed-use\",\n-    PropertyType.other: \"\",  # \"other\" adds nothing to the question\n+    PropertyType.other: \"other\",  # \"other\" adds nothing to the question\n }\n \n # Same reasoning as above: a new PropertyType must get a label, or questions would KeyError.\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_followup.py::test_known_fields_make_questions_specific"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 7.19s"
   }
 ]
