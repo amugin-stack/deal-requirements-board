@@ -448,23 +448,30 @@ def changes_since(tag: str) -> list[tuple[str, str]] | None:
 def commits_since(tag: str) -> list[tuple[str, list[tuple[str, str]]]] | None:
     """(sha, changes) for every commit in tag..HEAD, oldest first; None if git fails.
 
-    Each commit is checked two ways, and either view failing the allow-list fails the history
-    check: its own diff against its parent (`diff-tree --root`, so an edit later reverted is still
-    seen), and its whole tree against `tag`. The second view is what catches a merge commit that
-    carries an edit of its own (an "evil merge", invisible to plain diff-tree) or a merged-in
-    unrelated root; the first is what keeps an edit to an already-added results file visible.
+    Each commit's own diff against its parent (`diff-tree --root`, so an edit later reverted is
+    still seen) is checked for every commit. Commits on the ancestry path from `tag` to HEAD are
+    also checked as whole trees against `tag`: that catches a merge commit carrying an edit of its
+    own (an "evil merge", invisible to plain diff-tree). Off that path (e.g. main's commits merged
+    into a loop branch) a whole-tree view would only report the loop's own setup as missing, and no
+    counted run can sit there: unreachable_runs fails any run not between tag and HEAD.
     """
     revs = git("rev-list", "--reverse", f"{tag}..HEAD")
-    if revs.returncode != 0:
+    on_path = git("rev-list", "--ancestry-path", f"{tag}..HEAD")
+    if revs.returncode != 0 or on_path.returncode != 0:
         return None
+    ancestry = set(on_path.stdout.split())
     out: list[tuple[str, list[tuple[str, str]]]] = []
     for sha in revs.stdout.split():
         own = git("diff-tree", "--root", "--no-commit-id", "--name-status", "--no-renames", "-r", "-z", sha)
-        snapshot = git("diff", "--name-status", "--no-renames", "-z", tag, sha)
-        if own.returncode != 0 or snapshot.returncode != 0:
+        if own.returncode != 0:
             return None
         changes = parse_name_status(own.stdout)
-        out.append((sha, changes + [c for c in parse_name_status(snapshot.stdout) if c not in changes]))
+        if sha in ancestry:
+            snapshot = git("diff", "--name-status", "--no-renames", "-z", tag, sha)
+            if snapshot.returncode != 0:
+                return None
+            changes += [c for c in parse_name_status(snapshot.stdout) if c not in changes]
+        out.append((sha, changes))
     return out
 
 
