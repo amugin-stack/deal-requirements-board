@@ -128,3 +128,32 @@ The `is_deal_request` rule says "asks for a broker, agent, buyer, or property fo
 |---|---|---|---|---|
 | 1 | v3-06 | text "retail or office" → "retail OR office"; tag `or_word_collision` added | The brief requires "OR" used as an English word, and A's set had none. Capitalizing an existing "or" adds the case without changing meaning. | none: no state is named, so `state` stays null for both labelers' reading |
 | 2 | v3-16 | tag `or_state` → `state_named_full` | The post spells out "Oregon" and contains no bare "OR", so the old tag was misleading. | none |
+
+## Adversarial review (step 6)
+
+A read-only reviewer (Opus) read only `schema.py`, the final data file and this doc. I checked each finding against the schema and the owner's brief before deciding what to do. **No label was changed.**
+
+### Label findings
+
+| record · field | reviewer's point | lead verification | outcome |
+|---|---|---|---|
+| v3-09 · `deal_value_usd` (`null`) | `schema.py` has no "vague amount → null" rule. "Mid six figures" is a client budget, so a range-style reading would give ~600000. | Correct that the schema text is silent. But the owner's brief for this set says "mid six figures" "should label as null". | **Kept `null`.** This convention is not in the schema; add a one-line rule to the `deal_value_usd` description. |
+| v3-23 · state/city/property/transaction (all `null`) | The post names a property in "Austin, TX", and no schema rule says non-deal fields are null. | Correct that the field descriptions don't say it. But the owner's brief requires "non-deal posts have every other field null", and the test enforces it. A non-deal has nothing to route. | **Kept all `null`.** This convention is not in the schema. The scorer should either skip the other fields for non-deals or the schema should state the rule. |
+| v3-15 · `is_deal_request` (`true`) | The schema contradicts itself (see above). | Agree; already flagged. | **Kept `true`.** Still the one record I would consider dropping. |
+| v3-09, v3-16 · `city` | "near/outside X" is neither a region nor the property's city, so the schema doesn't decide it. | Agree; already flagged. | **Kept `null`.** Would drop the field from scoring. |
+
+The reviewer found no states guessed from cities, no excluded amounts (rent, $/sf, NOI, appraisal) used as budgets, no misbucketed timelines, and no real names.
+
+### Dataset weaknesses (logged, not fixed)
+
+These are not fixed, because rewriting post texts after double-labeling would void the agreement figures. They should guide a v4 set.
+
+1. **Schema example strings appear in posts.** "$4M+" (v3-12), "45 days" (v3-12), "6 months" (v3-11), "2 weeks" (v3-18), "ASAP" (v3-05, v3-09), "no rush" (v3-06, v3-17), "NNN" (v3-11, v3-12) and "property management" (v3-15) are the schema's own examples. v3-18 also says the buyer "doesn't care about" the appraisal and NOI. About 9 of 19 deal posts test the example strings rather than generalization. No post restates a whole rule sentence.
+2. **Near-duplicate pairs:** v3-09/v3-16 (land, near/outside a city), v3-11/v3-19 (lease, $/sf nulled, over_90), v3-07/v3-08 ("IN" collision plus ambiguous city), v3-14/v3-18 (weeks → within_30 buy), v3-06/v3-17 ("no rush").
+3. **Unnatural boundary wording.** "In 31 days" and "91 days from now" hit the bucket edges more cleanly than real posts do. Nothing tests "4–5 weeks" or "3 months".
+4. **Easy non-deals.** There is no hard negative (a lender request phrased like a deal, or a "just sold" post with property details) and no hard positive (a deal with no explicit ask).
+5. **Shared conventions.** Items 1–2 in the label table above are conventions both labelers applied that `schema.py` never states. This is the shared-blind-spot risk that kappa cannot detect, and the strongest reason for a human spot check.
+
+### Changes from review
+
+None. The log table above is unchanged.
