@@ -401,7 +401,7 @@ def _post_id(text: str) -> str:
     response_model=MatchResponse,
     responses={
         413: {"model": ErrorDetail, "description": "Request body over the size limit"},
-        500: {"model": ErrorDetail, "description": "The extractor failed unexpectedly"},
+        500: {"model": ErrorDetail, "description": "The extractor or the matching step failed unexpectedly"},
         503: {"model": ErrorDetail, "description": "Extraction service or matcher unavailable"},
     },
 )
@@ -417,10 +417,10 @@ def match_post(
     A plain `def`: extraction is a blocking network call, so FastAPI runs this in its threadpool
     instead of stalling the event loop.
 
-    Extraction failures are mapped here with `HTTPException` rather than global handlers, because
-    only the route knows the post id to log alongside the error class. Neither branch logs or
-    returns exception text: pydantic errors embed input values (i.e. parts of the post), and
-    upstream API errors can carry request details.
+    Extraction failures, and any error after extraction, are mapped here with `HTTPException`
+    rather than global handlers, because only the route knows the post id to log alongside the
+    error class. No branch logs or returns exception text: pydantic errors embed input values
+    (i.e. parts of the post), and upstream API errors can carry request details.
     """
     text = body.text  # already stripped by MatchRequest
     post_id = _post_id(text)
@@ -455,8 +455,35 @@ def match_post(
             detail="extraction failed unexpectedly",
         ) from None
 
-    # Licensing gating, non-deal posts and missing states are the matcher's job; the API only
-    # reshapes what it returns.
+    try:
+        return _respond(requirement, extractor.name, brokers, as_of, match, post_id=post_id, chars=len(text))
+    except Exception as e:
+        # A bug after extraction: the matcher, the reshaping, the follow-up or the response model
+        # (e.g. an extractor name outside the Literal). Mapped like the extractor crash above, so
+        # the documented JSON 500 and the post-id log line hold instead of Starlette's text/plain
+        # 500, and no exception text (which might quote the requirement) is logged or returned.
+        logger.error("matching failed post=%s extractor=%s error=%s", post_id, extractor.name, type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="matching failed unexpectedly",
+        ) from None
+
+
+def _respond(
+    requirement: DealRequirement,
+    extractor_name: str,
+    brokers: list[Broker],
+    as_of: date,
+    match: MatchFn,
+    *,
+    post_id: str,
+    chars: int,
+) -> MatchResponse:
+    """Everything `match_post` does after extraction: match, reshape, build the response, log.
+
+    Licensing gating, non-deal posts and missing states are the matcher's job; this only
+    reshapes what it returns. Split out so the route can map any error in it to one fixed 500.
+    """
     result = match(requirement, brokers, as_of)
     matches = [
         BrokerMatch(
@@ -471,21 +498,23 @@ def match_post(
         for m in result.matches
     ]
 
-    logger.info(
-        "matched post=%s chars=%d extractor=%s matches=%d excluded=%d",
-        post_id,
-        len(text),
-        extractor.name,
-        len(matches),
-        result.excluded_for_licensing,
-    )
-
-    return MatchResponse(
+    response = MatchResponse(
         # Extractor.name is a plain str; MatchResponse validates it against the Literal at runtime
-        # (an unknown name fails validation, as before), so the cast only informs the type checker.
-        extractor=cast(Literal["claude", "regex"], extractor.name),
+        # (an unknown name fails validation, which the route maps to its 500), so the cast only
+        # informs the type checker.
+        extractor=cast(Literal["claude", "regex"], extractor_name),
         requirement=requirement,
         matches=matches,
         excluded_for_licensing=result.excluded_for_licensing,
         follow_up_question=follow_up_question(requirement),
     )
+    # Logged once the response exists, so a failed request logs only the route's error line.
+    logger.info(
+        "matched post=%s chars=%d extractor=%s matches=%d excluded=%d",
+        post_id,
+        chars,
+        extractor_name,
+        len(matches),
+        result.excluded_for_licensing,
+    )
+    return response
