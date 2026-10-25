@@ -10,7 +10,7 @@ from datetime import date
 
 from pydantic import BaseModel
 
-from deal_board.brokers import TX_CITY_TO_COUNTY, Broker
+from deal_board.brokers import SALES_AGENT, TX_CITY_TO_COUNTY, Broker
 from deal_board.cities import market_key
 from deal_board.schema import DealRequirement
 
@@ -130,7 +130,7 @@ def _score(req: DealRequirement, broker: Broker) -> tuple[Match, int]:
     """Return the match and how many rules earned points (the first tie-breaker)."""
     points = [p for rule in RULES if (p := rule(req, broker)) is not None]
     reasons = [text for _, text in points]
-    if broker.license_type == "Sales Agent":
+    if broker.license_type == SALES_AGENT:
         reasons.append(SALES_AGENT_NOTE)
     return Match(broker=broker, score=sum(n for n, _ in points), reasons=reasons), len(points)
 

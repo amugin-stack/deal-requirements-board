@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from deal_board import api
 from deal_board import brokers as broker_store
-from deal_board.brokers import Broker, load_brokers
+from deal_board.brokers import Broker, LicenseType, load_brokers
 from deal_board.extractors import ExtractionError
 from deal_board.schema import DealRequirement, PropertyType, Timeline, TransactionType
 
@@ -75,7 +75,9 @@ class FakeMatcher:
         return MatchResult(matches=self.matches, excluded_for_licensing=self.excluded)
 
 
-def make_broker(broker_id: str, name: str, license_number: str, license_type: str = "Broker Individual") -> Broker:
+def make_broker(
+    broker_id: str, name: str, license_number: str, license_type: LicenseType = "Broker Individual"
+) -> Broker:
     return Broker(
         broker_id=broker_id,
         name=name,

@@ -12,12 +12,13 @@ import random
 import sys
 from datetime import date, datetime
 
+from deal_board.brokers import LICENSE_TYPES
 from deal_board.paths import REPO_ROOT
 
 SEED = 20261020
 AS_OF = date(2026, 10, 20)  # download date; used only to pick the strata, not by the matcher
 N_VALID, N_INVALID = 150, 50
-PEOPLE = {"Sales Agent", "Broker Individual"}  # companies aren't people to match with
+PEOPLE = frozenset(LICENSE_TYPES)  # companies aren't people to match with; Broker accepts only these
 ROOT = REPO_ROOT
 FIELDS = [
     "broker_id",

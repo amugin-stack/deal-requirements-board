@@ -6,6 +6,7 @@ This module only loads data. The compliance filter and scoring live in matcher.p
 import csv
 from datetime import date
 from pathlib import Path
+from typing import Literal, get_args
 
 from pydantic import BaseModel, field_validator
 
@@ -13,6 +14,13 @@ from deal_board.paths import DATA_DIR
 from deal_board.schema import PropertyType, State, TransactionType
 
 BROKERS_CSV = DATA_DIR / "brokers.csv"
+
+# The license types we match, spelled exactly as TREC writes them. A closed set, because the
+# matcher adds the sales-agent referral note by exact comparison: a padded or misspelled
+# "sales agent" must fail at load rather than reach a poster without that note.
+LicenseType = Literal["Broker Individual", "Sales Agent"]
+LICENSE_TYPES: tuple[LicenseType, ...] = get_args(LicenseType)
+SALES_AGENT: LicenseType = "Sales Agent"
 
 # Deal posts name cities; TREC records counties. Each city maps to its main county only.
 # Austin, Houston, Dallas, and San Antonio spill into neighboring counties; we ignore that.
@@ -35,7 +43,7 @@ class Broker(BaseModel):
     source: str  # "trec_<date>" for a real license record, "fictional" otherwise
     license_state: State
     license_number: str
-    license_type: str  # "Broker Individual" or "Sales Agent"
+    license_type: LicenseType
     license_status: str  # verbatim from the source; never edited
     license_expiration: date | None  # None means unknown, which the matcher treats as not licensed
     county: str | None
