@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from fnmatch import fnmatchcase
+from pathlib import Path, PurePosixPath
 
 from deal_board.schema import KEY_FIELDS, JSONObject
 
@@ -24,6 +27,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 LOOP_START_TAG = "loop-start"
 BASELINE_TAG = "baseline-v1"
+# The paths the guard used to diff. The allow-list below supersedes them: every one is outside
+# it, and so is everything else the loop could use to game the numbers (a conftest.py, a
+# pytest.ini, a scoring/ package shadowing scoring.py, ...). Kept as the named high-value set.
 PROTECTED = [  # anything the loop could edit to make the numbers look better without improving the extractor
     "loop/check_success.py",
     "deal_board/scoring.py",
@@ -39,18 +45,27 @@ PROTECTED = [  # anything the loop could edit to make the numbers look better wi
     "deal_board/paths.py",  # P10: where eval reads data from
     "pyproject.toml",  # P10: pytest config (addopts could deselect the tests the guard runs)
 ]
-# P10 moved files into the deal_board package. The guard compares each moved file's current
-# content with its content at the tag under the path it had then, so a rename by itself is not
-# counted as an edit. (P10 also reformatted most of them, so they do differ from loop-start.)
+# P10 moved the frozen baseline into the deal_board package; it is compared with its blob at
+# baseline-v1 under the path it had then, so the move by itself is not counted as an edit.
 PATH_AT_TAG = {
-    "deal_board/scoring.py": "scoring.py",
-    "deal_board/schema.py": "schema.py",
-    "deal_board/cli/eval.py": "scripts/eval.py",
-    "deal_board/extractors/__init__.py": "extractors/__init__.py",
     "deal_board/extractors/frozen/regex_baseline.py": "extractors/regex_baseline.py",
 }
 BASELINE = "deal_board/extractors/frozen/regex_baseline.py"
 DRAFT = "loop/DRAFT.md"  # only its "(FIXED)" sections are protected; the agent edits the rest
+
+# The guard is an allow-list over every change since loop-start (committed, uncommitted and
+# untracked): the loop may edit these paths ...
+ALLOWED_CHANGES = frozenset({"deal_board/extractors/claude.py", DRAFT, "loop/LESSONS.md", "loop/state.json"})
+# ... delete the extractor's pre-P10 path (P10 moved it; a move is a delete plus an add, and
+# moved files other than the extractor still count as changes, which is fine: the loop is done) ...
+ALLOWED_DELETIONS = frozenset({"extractors/claude.py"})
+# ... and add new files only here: (directory, name patterns). Exact parent directory, so
+# tests/test_x/conftest.py does not slip through as "tests/test_*".
+ALLOWED_ADDITIONS = (("results", ("claude_*.json", "claude_*.md")), ("tests", ("test_*.py",)))
+MAX_LISTED = 25  # offenders shown in a check's detail; the rest are counted
+# The suite's one known skip: tests/test_packaging_compat.py skips results/baseline-v1_comparison.json
+# because it is not an eval-run file. Any further skip, or any deselected test, fails 'tests pass'.
+MAX_SKIPPED = 1
 
 # Dev gate (posts.jsonl, split == "dev", 24 posts). Averaged over the last REPEATS runs of one prompt.
 REPEATS = 3
@@ -209,6 +224,57 @@ def final_checks(finals: list[JSONObject], dev_passed: RunIdentity | None) -> li
     ]
 
 
+def change_allowed(status: str, path: str) -> bool:
+    """status: a `git diff --name-status --no-renames` letter (A, M, D, T, ...); untracked is A."""
+    if path in ALLOWED_CHANGES or (status == "D" and path in ALLOWED_DELETIONS):
+        return True
+    p = PurePosixPath(path)
+    return status == "A" and any(
+        str(p.parent) == folder and any(fnmatchcase(p.name, pat) for pat in patterns)
+        for folder, patterns in ALLOWED_ADDITIONS
+    )
+
+
+def disallowed_changes(changes: Iterable[tuple[str, str]]) -> list[str]:
+    """'STATUS path' for each change outside the allow-list, sorted and deduplicated."""
+    return sorted({f"{status} {path}" for status, path in changes if not change_allowed(status, path)})
+
+
+def parse_name_status(z_output: str) -> list[tuple[str, str]]:
+    """(status, path) pairs from `git diff --name-status --no-renames -z` output."""
+    parts = z_output.split("\0")
+    if parts and parts[-1] == "":
+        parts.pop()
+    return [(parts[i][:1], parts[i + 1]) for i in range(0, len(parts) - 1, 2)]
+
+
+def listing(items: list[str]) -> str:
+    shown = ", ".join(items[:MAX_LISTED])
+    return shown + (f" (+{len(items) - MAX_LISTED} more)" if len(items) > MAX_LISTED else "")
+
+
+def allow_list_check(changes: list[tuple[str, str]]) -> Check:
+    offenders = disallowed_changes(changes)
+    detail = f"changed outside the allow-list: {listing(offenders)}" if offenders else "only allowed paths changed"
+    return Check("protected files unchanged", not offenders, f"vs tag {LOOP_START_TAG}: {detail}")
+
+
+def tests_check(returncode: int, output: str) -> Check:
+    """Pass only on exit 0 with at least one pass, no deselected tests and at most MAX_SKIPPED skips.
+
+    Exit 0 alone is not enough: a conftest or config that skips or deselects tests also exits 0.
+    """
+    last = (output.strip().splitlines() or ["no output"])[-1]
+    counts = {word: int(n) for n, word in re.findall(r"(\d+) (\w+)", last)}
+    ok = (
+        returncode == 0
+        and counts.get("passed", 0) > 0
+        and counts.get("deselected", 0) == 0
+        and counts.get("skipped", 0) <= MAX_SKIPPED
+    )
+    return Check("tests pass", ok, f"{last} (max {MAX_SKIPPED} skipped, 0 deselected)")
+
+
 # ---- repository I/O below; the checks above are pure and unit-tested ----
 
 
@@ -236,17 +302,38 @@ def fixed_sections(markdown: str) -> list[str]:
     return [s.strip() for s in sections if s.splitlines()[0].endswith("(FIXED)")]
 
 
+def changes_since(tag: str) -> list[tuple[str, str]] | None:
+    """Every change from `tag` to the working tree, untracked files as additions; None if git fails.
+
+    `git diff <tag>` covers committed, staged and unstaged edits. Untracked files come from
+    `git ls-files --others --exclude-standard` (the files `git status --porcelain
+    --untracked-files=all` reports as ??), which is unambiguous to parse with -z.
+    """
+    diff = git("diff", "--name-status", "--no-renames", "-z", tag)
+    untracked = git("ls-files", "--others", "--exclude-standard", "-z")
+    if diff.returncode != 0 or untracked.returncode != 0:
+        return None
+    return parse_name_status(diff.stdout) + [("A", p) for p in untracked.stdout.split("\0") if p]
+
+
 def guard_checks() -> list[Check]:
-    protected = all(unchanged_since(LOOP_START_TAG, path) for path in PROTECTED)
+    changes = changes_since(LOOP_START_TAG)
+    protected = (
+        Check("protected files unchanged", False, f"git diff against tag {LOOP_START_TAG} failed")
+        if changes is None
+        else allow_list_check(changes)
+    )
     original = git("show", f"{LOOP_START_TAG}:{DRAFT}").stdout
     draft_fixed = bool(original) and fixed_sections(original) == fixed_sections((ROOT / DRAFT).read_text())
     baseline = unchanged_since(BASELINE_TAG, BASELINE)
-    tests = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=ROOT, capture_output=True, text=True)
+    tests = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=ROOT, capture_output=True, text=True
+    )
     return [
-        Check("protected files unchanged", protected, f"vs tag {LOOP_START_TAG}: {', '.join(PROTECTED)}"),
+        protected,
         Check("draft FIXED sections unchanged", draft_fixed, f"{DRAFT} vs tag {LOOP_START_TAG}"),
         Check("baseline frozen", baseline, f"regex_baseline.py vs {BASELINE_TAG}"),
-        Check("tests pass", tests.returncode == 0, (tests.stdout.strip().splitlines() or ["no output"])[-1]),
+        tests_check(tests.returncode, tests.stdout),
     ]
 
 
