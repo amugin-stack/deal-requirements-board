@@ -37,6 +37,6 @@ marking it confirmed or rejected. No network, no key, no repo edits.
 - Surfaces checked and clean: four weakened gates (month-only expiry, 1-day grace,
   status endswith "Active", unknown expiry allowed) each fail the suite; model-supplied
   missing_fields is recomputed; first tool_use wins; follow-ups never imply a licensed match;
-  git history never held .env, data/raw/ or real names (only the `sk-ant-XXXX` test
+  git history never held .env, data/raw/ or real names (only the redacted key-prefix test
   placeholder); /docs and /openapi.json expose only the schema; 404/405/413 bodies fixed;
   SDK logger pin holds after import; shared broker list never mutated; no cross-request state.
