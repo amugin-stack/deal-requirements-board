@@ -258,19 +258,6 @@ Gaps found:
    comes back for an Oklahoma deal.
 3. The body-size cap is only tested well above the limit (`api-44`, off by one at exactly 64 KiB).
 
-## Stop
-
-Stopped after round 4, the maximum. The loop did **not** converge: round 4 still added 3
-high/medium survivors, so `check_success.py` check (d) fails by design, and the check is
-frozen and stays unedited. Each round found new gaps in code the previous round hadn't reached (round 1: the
-gate and match; round 2: what feeds the gate; round 3: the CSV builder; round 4: extraction),
-while the gate expression itself (`is_licensed`) was killed in every variant except the
-substring-state one. A fifth round would most likely keep finding gaps in less-tested modules
-(`followup.py` was fully killed; `cli/eval.py`, `config.py` beyond `use_claude`, and the
-extractor internals were never mutated).
-
-Totals: 160 mutants; 114 killed; 45 survived (13 high, 14 medium, 18 low); 1 equivalent.
-
 | id | target | status | killed_by | killing test files | severity |
 |---|---|---|---|---|---|
 | gate-60 | `ExtractedFields._upper_state` | killed | 1 | test_red_team.py (1) |  |
@@ -309,3 +296,16 @@ Totals: 160 mutants; 114 killed; 45 survived (13 high, 14 medium, 18 low); 1 equ
 | match-64 | `_QUESTIONS` | killed | 2 | test_followup.py (2) |  |
 | match-65 | `_where` | killed | 6 | test_followup.py (5), test_red_team.py (1) |  |
 | match-66 | `_PROPERTY_LABELS` | killed | 1 | test_followup.py (1) |  |
+
+## Stop
+
+Stopped after round 4, the maximum. The loop did **not** converge: round 4 still added 3
+high/medium survivors, so `check_success.py` check (d) fails by design, and the check is
+frozen and stays unedited. Each round found new gaps in code the previous round hadn't reached (round 1: the
+gate and match; round 2: what feeds the gate; round 3: the CSV builder; round 4: extraction),
+while the gate expression itself (`is_licensed`) was killed in every variant except the
+substring-state one. A fifth round would most likely keep finding gaps in less-tested modules
+(`followup.py` was fully killed; `cli/eval.py`, `config.py` beyond `use_claude`, and the
+extractor internals were never mutated).
+
+Totals: 160 mutants; 114 killed; 45 survived (13 high, 14 medium, 18 low); 1 equivalent.
