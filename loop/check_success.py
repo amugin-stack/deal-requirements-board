@@ -2,9 +2,15 @@
 
   python loop/check_success.py --stage dev     # tuning gate: last 3 dev-split runs of the current prompt
   python loop/check_success.py --stage final   # one-shot confirmation on both holdout sets
+  python loop/check_success.py --stage dev --loop-start <40-hex sha>   # a new loop's start commit
 
 The thresholds are fixed for the whole loop. The loop agent must never edit this file or any other
 protected path; the guard check fails if it does. A dev pass unlocks exactly one final run.
+
+Starting a new loop: commit the setup as C, tag `loop-start` at C, record C's full sha outside the
+repository, and run every check with `--loop-start C`. The pin below can't name the commit that
+contains it, so a new loop's start commit comes from whoever runs the guard (the orchestrator),
+which the loop agent can't change. Without the option the guard uses the pin (the original loop).
 """
 
 from __future__ import annotations
@@ -619,11 +625,38 @@ def current_identity() -> RunIdentity | None:
     return None if sha is None else RunIdentity(current_prompt_version(), model, sha)
 
 
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def resolve_loop_start(value: str) -> str | None:
+    """The commit `--loop-start` names, or None if it isn't a full sha of an existing commit.
+
+    A ref name (e.g. `loop-start`) or a short sha is refused: either can be moved or made
+    ambiguous by the loop agent, which would bring back the movable reference point.
+    """
+    if not _FULL_SHA.fullmatch(value):
+        return None
+    found = git("rev-parse", "--verify", "--quiet", f"{value}^{{commit}}")
+    return value if found.returncode == 0 and found.stdout.strip() == value else None
+
+
 def main(argv: list[str] | None = None) -> int:
+    global LOOP_START_REV
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", choices=["dev", "final"], required=True)
     ap.add_argument("--json", action="store_true", help="print machine-readable results")
+    ap.add_argument(
+        "--loop-start",
+        metavar="SHA",
+        help="full 40-hex sha of this loop's start commit, supplied by the orchestrator (default: the pin)",
+    )
     args = ap.parse_args(argv)
+    if args.loop_start is not None:
+        start = resolve_loop_start(args.loop_start)
+        if start is None:
+            print(f"--loop-start must be the full sha of an existing commit, got {args.loop_start!r}", file=sys.stderr)
+            return 2
+        LOOP_START_REV = start  # every comparison and 'tags unmoved' read this global
 
     version = current_prompt_version()
     identity = current_identity()
