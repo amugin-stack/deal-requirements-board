@@ -32,6 +32,7 @@ from deal_board.scoring import (
     DEAL_VALUE_TOLERANCE,
     FIELD_OUTCOMES,
     SCORED_FIELDS,
+    SCORING_VERSION,
     load_posts,
     paired_comparison,
     post_correctness,
@@ -308,6 +309,9 @@ def rescore(saved: JSONObject) -> JSONObject:
     return out
 
 
+# The regex baseline run, scored deal-only, that replaces the legacy all-posts summary.
+SUPERSEDING_BASELINE_RUN = "results/regex_20261024T224817Z.json"
+
 RUN_ONLY_KEYS = ("usage", "repeat", "cache_enabled")
 
 
@@ -316,7 +320,14 @@ def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject
     a rescore makes no API calls, and copying them would report the old run's cost (and name the
     file as a repeat) as if this run had spent it. The source file keeps them."""
     kept = {k: v for k, v in saved.items() if k not in RUN_ONLY_KEYS}
-    return {**kept, "timestamp": stamp, "git": git, "rescored_from": str(source), "datasets": rescore(saved)}
+    return {
+        **kept,
+        "timestamp": stamp,
+        "git": git,
+        "scoring_version": SCORING_VERSION,
+        "rescored_from": str(source),
+        "datasets": rescore(saved),
+    }
 
 
 def compare_results(a: JSONObject, b: JSONObject) -> JSONObject:
@@ -529,6 +540,8 @@ def save(result: JSONObject, results_dir: Path | None = None) -> Path:
 def load_run(path: Path) -> JSONObject:
     """Load an eval-run results file, exiting with status 2 (no traceback) for anything else,
     e.g. results/baseline-v1_comparison.json, which is a summary with no raw outputs to re-score.
+    That file scores the key fields on all posts (non-deal posts earn correct_missing credit), so
+    its numbers disagree with every current one; the message names the run that supersedes it.
 
     A missing, unreadable, empty or non-JSON path (say the run's .md twin) gets the same one-line
     exit: --rescore and --compare are read-only, so a traceback would only bury the actual mistake.
@@ -538,8 +551,16 @@ def load_run(path: Path) -> JSONObject:
     except (OSError, ValueError) as e:  # ValueError covers JSONDecodeError and UnicodeDecodeError
         print(f"error: can't load {path} as an eval run results file: {type(e).__name__}: {e}", file=sys.stderr)
         raise SystemExit(2) from None
-    if not isinstance(saved, dict) or "datasets" not in saved:
-        print(f"error: {path} has no 'datasets' key, so it is not an eval run results file", file=sys.stderr)
+    if not isinstance(saved, dict):
+        print(f"error: {path} is not a JSON object, so it is not an eval run results file", file=sys.stderr)
+        raise SystemExit(2)
+    if "datasets" not in saved:
+        print(
+            f"error: {path} has no 'datasets' key: it is a legacy summary that predates deal-only scoring, "
+            "not an eval run results file; "
+            f"results/baseline-v1_comparison.json is superseded by {SUPERSEDING_BASELINE_RUN}",
+            file=sys.stderr,
+        )
         raise SystemExit(2)
     return saved
 
@@ -578,6 +599,7 @@ def run_once(
         "timestamp": stamp,
         "git": git_info(),
         "scoring": SCORING_NOTE,
+        "scoring_version": SCORING_VERSION,
         "repeat": {"index": index, "of": of},
         "cache_enabled": cache is not None,
     }

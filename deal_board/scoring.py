@@ -32,6 +32,10 @@ BINARY_OUTCOMES = ("correct", "wrong", "error")
 GOOD_OUTCOMES = ("correct", "correct_missing")
 SCORED_FIELDS: tuple[str, ...] = ("is_deal_request", *KEY_FIELDS, "missing_fields")
 Z_95: float = 1.96
+# Bumped whenever a rule above changes what a score means, and written into every results file, so a
+# number can always be traced to the rules that produced it. Version 1 is deal-only field scoring with
+# Wilson intervals; results/baseline-v1_comparison.json predates it (key fields scored on all posts).
+SCORING_VERSION = 1
 
 
 def wilson_interval(successes: int, n: int, z: float = Z_95) -> tuple[float, float]:
