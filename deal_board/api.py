@@ -9,13 +9,18 @@ Design notes:
 - `matcher.py` is built on a separate branch. It's imported lazily inside `get_matcher`, so this
   module imports and runs without it.
 - The post text is user content and may hold client details. It is never logged; we log a short
-  SHA-256 prefix and the length, which is enough to correlate a request without storing it.
+  HMAC-SHA256 prefix under a random per-process key, plus the length. That correlates the log
+  lines of one request (and repeats of a post within one process) without storing the post, and
+  because the key never leaves memory, a log reader can't confirm a guessed or templated post by
+  hashing it offline. Ids don't match across processes or restarts.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
+import secrets
 from collections.abc import Callable, Sequence
 from datetime import date
 from functools import lru_cache
@@ -325,9 +330,18 @@ def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     )
 
 
+# Key for `_post_id`. Random per process and never logged or read from the environment, so an id
+# can't be recomputed from a candidate post outside this process (an unkeyed hash could be).
+_POST_ID_KEY: bytes = secrets.token_bytes(32)
+
+
 def _post_id(text: str) -> str:
-    """A short, stable fingerprint for correlating logs with a post without storing the post."""
-    return hashlib.sha256(text.encode()).hexdigest()[:12]
+    """A short fingerprint for correlating log lines with a post without storing the post.
+
+    HMAC-SHA256 under the per-process `_POST_ID_KEY`: stable within a process, not reproducible
+    from the text alone.
+    """
+    return hmac.new(_POST_ID_KEY, text.encode(), hashlib.sha256).hexdigest()[:12]
 
 
 @app.post(
