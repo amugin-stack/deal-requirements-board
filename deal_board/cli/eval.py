@@ -354,13 +354,18 @@ def source_label(source: Path) -> str:
 def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject) -> JSONObject:
     """A rescore's own results dict. It drops the source run's usage, repeat and cache_enabled:
     a rescore makes no API calls, and copying them would report the old run's cost (and name the
-    file as a repeat) as if this run had spent it. The source file keeps them."""
+    file as a repeat) as if this run had spent it. The source file keeps them.
+
+    'scoring' is the current SCORING_NOTE, because the scores are recomputed under the current
+    rules (and the .md prints that note); the source's note is kept as 'source_scoring'."""
     kept = {k: v for k, v in saved.items() if k not in RUN_ONLY_KEYS}
     return {
         **kept,
         "request_sha": saved.get("request_sha"),  # the source run's, or None for runs that predate it
         "timestamp": stamp,
         "git": git,
+        "scoring": SCORING_NOTE,
+        "source_scoring": saved.get("scoring"),
         "scoring_version": SCORING_VERSION,
         "rescored_from": source_label(source),
         "datasets": rescore(saved),
