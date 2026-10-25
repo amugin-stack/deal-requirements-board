@@ -30,3 +30,35 @@ candidates: 12
 confirmed: 8
 rejected: 4
 new_confirmed: 8
+
+## Round 2
+
+Reviewers were given the round-1 ledger (confirmed and rejected, with rejection reasons) and
+asked for different, systematically enumerated surfaces. Both returned an empty candidate list,
+so no verifiers ran. Probe scripts are in the scratchpad (`r2-correctness/`, `r2-api/`).
+
+Surfaces probed that held:
+
+- **correctness:** expiration == as_of is inclusive, including leap days (2028-02-29); bad CSV date
+  formats are rejected; status `"Active "`/`"active"` and lowercase `license_state` fail closed or are
+  rejected; `excluded_for_licensing` is right for non-deal, no-state, empty and duplicate lists;
+  `limit` 0, negative and larger than the list; ties break on broker_id; deal size at min/max and 0;
+  min > max never matches; unicode whitespace in city/notes/state; enum names are rejected;
+  every follow-up branch; `_strict_schema` keys; `PROMPT_VERSION` stability; first `tool_use` taken;
+  non-dict tool input becomes ExtractionError; `_split_list` and invalid list enums.
+- **api_contract:** 4000/4001 code points (ASCII, emoji, combining marks); unicode-whitespace
+  stripping; lone surrogates give a clean 422; 65536/65537-byte bodies; 4000 astral chars as
+  escapes (48011 bytes) still 200; chunked bodies; README example response reproduced exactly
+  (225 excluded of 226); published ValidationError schema has `input` optional; no sentinel post
+  text in any log record at DEBUG on every error path; every `anthropic.APIError` subclass → 503
+  with a fixed body; cached broker list unchanged; 8 threads × 20 posts byte-identical.
+
+candidates: 0
+confirmed: 0
+rejected: 0
+new_confirmed: 0
+
+## Result
+
+Converged after 2 rounds: 12 candidates, 8 confirmed (5 correctness, 3 api_contract), 4 rejected
+(2 correctness, 2 api_contract). Every confirmed finding is rated low by its verifier.
