@@ -20,11 +20,13 @@ import importlib.util
 import json
 import math
 import re
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -48,9 +50,14 @@ CHECK_ORDER = [
     "records",
     "errors",
     "complete",
+    "first_look",
+    "labels",
+    "provenance",
     "git_clean",
     "git_ancestor",
     "prompt",
+    "model",
+    "raw_consistent",
     "scores",
     "intervals",
     "non_deal",
@@ -271,7 +278,10 @@ def test_run_happy_path_writes_one_final_eval_file(
     path = good_run(run_mod, env)
     out = capsys.readouterr().out
     assert re.fullmatch(r"claude_\d{8}T\d{6}Z(-\d+)?\.json", path.name)
-    assert sorted(p.name for p in env.results.iterdir()) == [path.name, path.with_suffix(".md").name]
+    # The .look marker (written before the first call) shares the stem; see the review regressions.
+    assert sorted(p.name for p in env.results.iterdir()) == sorted(
+        [path.name, path.with_suffix(".md").name, path.with_suffix(".look").name]
+    )
     saved = load(path)
     assert saved["extractor"] == "claude"
     assert saved["model"] == "fake-model" and saved["prompt_version"] == PROMPT
@@ -304,9 +314,18 @@ def test_run_final_eval_block(run_mod: ModuleType, env: Env) -> None:
         "branch": "main",
         "data_sha256": hashlib.sha256(env.data.read_bytes()).hexdigest(),
         "second_look": False,
+        "expected_model": None,
+        "marker": path_stem_look(fe),
         "complete": True,
         "aborted": None,
     }
+
+
+def path_stem_look(fe: dict[str, object]) -> str:
+    """The marker name the run reported; its shape is checked by the review regression tests."""
+    name = fe["marker"]
+    assert isinstance(name, str) and name.startswith("claude_") and name.endswith(".look")
+    return name
 
 
 def test_run_usage_is_usage_totals(run_mod: ModuleType, env: Env) -> None:
@@ -1169,3 +1188,256 @@ def test_tools_never_touch_repo_results_or_cache() -> None:
             continue
         if isinstance(data, dict):
             assert data.get("split") != "holdout_v3" and "holdout_v3" not in data.get("datasets", {}), p
+
+
+# ---------------------------------------------------------------------------------------------
+# Regression tests for the adversarial review's confirmed findings (one or more per finding).
+# Unlike the tests above, these were written by the lead after reading the implementations.
+# ---------------------------------------------------------------------------------------------
+
+V3_CLAUDE_PRIOR: JSONObject = {"extractor": "claude", "split": "holdout_v3", "datasets": {}}
+
+
+def run_refused_by(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str], rule: str, hooks: object, *extra: str
+) -> None:
+    """Exit 2 with a REFUSED line naming `rule`, and no results file written."""
+    capsys.readouterr()
+    before = set(result_jsons(env))
+    rc = call_run(run_mod, argv(env, "claude", *extra), hooks)
+    err = capsys.readouterr().err
+    assert rc == 2, err
+    assert any(rule in line for line in refusal_lines(err)), err
+    assert set(result_jsons(env)) == before
+
+
+def test_review_results_dir_outside_guard_is_refused(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 1a: a look written outside the guarded results dir would be invisible to the next run."""
+    guard = env.tmp / "guarded"
+    hooks = make_hooks(run_mod, env, Factory(FakeExtractor(env)), guard_results=(guard,))
+    run_refused_by(run_mod, env, capsys, "results-dir", hooks)
+
+
+def test_review_results_dir_inside_guard_is_allowed(run_mod: ModuleType, env: Env) -> None:
+    """Finding 1a: the confinement rule still allows a results dir inside a guard dir."""
+    hooks = make_hooks(run_mod, env, Factory(FakeExtractor(env)), guard_results=(env.tmp,))
+    assert call_run(run_mod, argv(env), hooks) == 0
+
+
+@pytest.mark.parametrize(
+    "name", ["claude_20261025T000000Z.json.bak", "claude_20261025T000000Z.JSON", "claude_x.Json.old"]
+)
+def test_review_renamed_prior_look_still_refuses(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str], name: str
+) -> None:
+    """Finding 1b/1c: renaming an earlier look's file (suffix or case) doesn't hide it."""
+    _write_prior(env.results, V3_CLAUDE_PRIOR, name)
+    run_refused_by(run_mod, env, capsys, "one-look", make_hooks(run_mod, env, Factory(FakeExtractor(env))))
+
+
+def test_review_prior_look_in_symlinked_dir_refuses(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 1d: an earlier look reachable only through a symlinked directory is still found."""
+    elsewhere = env.tmp / "elsewhere"
+    _write_prior(elsewhere, V3_CLAUDE_PRIOR)
+    env.results.mkdir(parents=True)
+    (env.results / "linked").symlink_to(elsewhere, target_is_directory=True)
+    run_refused_by(run_mod, env, capsys, "one-look", make_hooks(run_mod, env, Factory(FakeExtractor(env))))
+
+
+def test_review_truncated_prior_file_refuses(run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str]) -> None:
+    """Finding 1e: a half-written claude_*.json (killed mid-save) can't be proven not a look."""
+    env.results.mkdir(parents=True)
+    (env.results / "claude_20261025T000000Z.json").write_text('{"extractor": "claude", "split": "hol')
+    run_refused_by(run_mod, env, capsys, "one-look", make_hooks(run_mod, env, Factory(FakeExtractor(env))))
+
+
+def test_review_marker_exists_before_first_call(run_mod: ModuleType, env: Env) -> None:
+    """Finding 1f: the .look marker is on disk before the extractor is first called."""
+    seen: list[list[str]] = []
+
+    class Watching(FakeExtractor):
+        def extract_raw(self, text: str) -> dict[str, object]:
+            seen.append(sorted(p.name for p in env.results.glob("*.look")))
+            return super().extract_raw(text)
+
+    good_run(run_mod, env, fake=Watching(env))
+    assert seen and len(seen[0]) == 1 and seen[0][0].startswith("claude_")
+
+
+def test_review_save_failure_leaves_marker_and_blocks_rerun(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 1f/9: if saving fails after the calls, exit 1, redacted error, and the marker blocks a rerun."""
+    hooks = make_hooks(run_mod, env, Factory(FakeExtractor(env)))
+
+    def broken_save(result: JSONObject, results_dir: Path | None = None) -> Path:
+        raise OSError(f"disk full while writing (key {SECRET})")
+
+    monkeypatch.setattr(run_mod.ev, "save", broken_save)
+    capsys.readouterr()
+    assert call_run(run_mod, argv(env), hooks) == 1
+    cap = capsys.readouterr()
+    assert SECRET not in cap.out + cap.err
+    assert "ERROR:" in cap.err
+    assert result_jsons(env) == [] and len(list(env.results.glob("*.look"))) == 1
+    monkeypatch.undo()
+    run_refused_by(run_mod, env, capsys, "one-look", make_hooks(run_mod, env, Factory(FakeExtractor(env))))
+
+
+def test_review_git_history_look_refuses(run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str]) -> None:
+    """Finding 1b: a look that was committed and later deleted from disk is found in git history."""
+    base: Any = make_hooks(run_mod, env, Factory(FakeExtractor(env)))
+    hooks = dataclasses.replace(
+        base,
+        history_looks=lambda extractor, ids: ["abc1234:results/claude_old.json"] if extractor == "claude" else [],
+    )
+    run_refused_by(run_mod, env, capsys, "one-look", hooks)
+
+
+def test_review_history_scan_parses_blobs(run_mod: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Finding 1b: the default history scan applies the same look rule to committed blobs."""
+    blobs = (
+        ("r1:results/claude_a.json", json.dumps(V3_CLAUDE_PRIOR)),
+        ("r1:results/regex_a.json", json.dumps({**V3_CLAUDE_PRIOR, "extractor": "regex"})),
+        ("r1:results/claude_b.json", "not json"),
+    )
+    monkeypatch.setattr(run_mod, "_history_candidates", lambda: blobs)
+    assert run_mod._history_looks("claude", frozenset()) == ["r1:results/claude_a.json"]
+
+
+@pytest.mark.parametrize(
+    "prior",
+    [
+        {"extractor": "claude", "split": "all", "datasets": {"holdout": {"path": "data/holdout_v3.jsonl"}}},
+        {"extractor": "claude", "split": "all", "datasets": {"x": {"path": "p", "records": {"t-03": {}}}}},
+    ],
+)
+def test_review_look_detected_by_path_or_ids(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str], prior: JSONObject
+) -> None:
+    """Finding 7: a peek via a repointed DATASETS entry is caught by dataset path or record ids."""
+    _write_prior(env.results, prior)
+    run_refused_by(run_mod, env, capsys, "one-look", make_hooks(run_mod, env, Factory(FakeExtractor(env))))
+
+
+def test_review_expect_model_mismatch_refuses(
+    run_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 8: --expect-model pins the model, so a DEAL_MODEL override can't swap it silently."""
+    hooks = make_hooks(run_mod, env, Factory(FakeExtractor(env)))
+    run_refused_by(run_mod, env, capsys, "model", hooks, "--expect-model", "claude-haiku-5-5")
+
+
+@pytest.mark.parametrize(
+    ("change", "check"),
+    [
+        (_set(("final_eval", "second_look"), True), "first_look"),
+        (_set(("final_eval", "branch"), "feature"), "first_look"),
+        (_del(("final_eval", "protocol")), "first_look"),
+        (_set(("final_eval", "data_sha256"), "0" * 64), "labels"),
+        (_set(("rescored_from",), "results/x.json"), "provenance"),
+        (_set(("cache_enabled",), True), "provenance"),
+        (_set(("usage", "cache_hits"), 25), "provenance"),
+        (_set(("datasets", "holdout_v3", "records", "t-01", "call", "cached"), True), "provenance"),
+        (_set(("model",), None), "model"),
+    ],
+)
+def test_review_validate_rejects_unclean_look(
+    validate_mod: ModuleType,
+    env: Env,
+    good_file: Path,
+    capsys: pytest.CaptureFixture[str],
+    change: Callable[[JSONObject], None],
+    check: str,
+) -> None:
+    """Finding 2: second looks, other branches, changed labels, rescores, cache use and a null model all FAIL."""
+    v = validate_file(validate_mod, capsys, variant(env, good_file, change), vhooks(validate_mod, env))
+    assert v.rc == 1 and check in v.fails, v.out
+
+
+def test_review_validate_expect_model(
+    validate_mod: ModuleType, env: Env, good_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 8: validate.py --expect-model rejects a file from another model."""
+    v = validate_file(validate_mod, capsys, good_file, vhooks(validate_mod, env), "--expect-model", "claude-haiku-5-5")
+    assert v.rc == 1 and v.fails == ["model"], v.out
+
+
+def test_review_validate_prediction_tamper(
+    validate_mod: ModuleType, env: Env, good_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 4: editing predictions and the stored scores consistently still FAILs raw_consistent."""
+
+    def tamper(data: JSONObject) -> None:
+        ds = data["datasets"]["holdout_v3"]
+        for pid in ("t-01", "t-02", "t-03"):
+            ds["records"][pid]["prediction"]["city"] = "Dallas"
+        ds["scores"] = json.loads(json.dumps(score(env.posts, ds["records"])))
+
+    v = validate_file(validate_mod, capsys, variant(env, good_file, tamper), vhooks(validate_mod, env))
+    assert v.rc == 1 and v.fails == ["raw_consistent"], v.out
+
+
+def test_review_is_ancestor_has_no_head_fallback(validate_mod: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Finding 5: a commit that is HEAD but not on main is not accepted."""
+    commit = "ab" * 20
+
+    def fake_git(*args: str) -> subprocess.CompletedProcess[str]:
+        if args[0] == "merge-base":
+            return subprocess.CompletedProcess(list(args), 1, "", "")
+        return subprocess.CompletedProcess(list(args), 0, commit + "\n", "")
+
+    monkeypatch.setattr(validate_mod, "_git_ok", fake_git)
+    assert validate_mod.is_ancestor(commit) is False
+
+
+def test_review_tables_refuses_rescore(
+    tables_mod: ModuleType, env: Env, pair: V3Pair, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 3: a rescored file is not a look, so tables.py refuses it."""
+    pair.claude.write_text(json.dumps({**pair.claude_data, "rescored_from": "results/claude_x.json"}))
+    rc, _, err = call_tables(tables_mod, capsys, [pair.regex, pair.claude])
+    assert rc == 2 and err.startswith("ERROR:")
+
+
+def test_review_tables_warns_on_label_change(
+    tables_mod: ModuleType, env: Env, pair: V3Pair, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 3: labels edited after the run produce a loud warning in the v3 section."""
+    with env.data.open("a") as f:
+        f.write("\n")
+    rc, out, _ = call_tables(tables_mod, capsys, [pair.regex, pair.claude])
+    assert rc == 0 and out.count("WARNING: labels changed since this run") == 2
+
+
+def test_review_tables_requires_final_eval_block(
+    tables_mod: ModuleType, env: Env, pair: V3Pair, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 6: a v3 file without final_eval wasn't made by run.py and can't be called a final look."""
+    pair.claude.write_text(json.dumps({k: v for k, v in pair.claude_data.items() if k != "final_eval"}))
+    rc, _, err = call_tables(tables_mod, capsys, [pair.regex, pair.claude])
+    assert rc == 2 and "final_eval" in err
+
+
+def test_review_tables_flags_non_boolean_dirty(
+    tables_mod: ModuleType, env: Env, pair: V3Pair, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 6: a dirty flag that isn't exactly false is shown as not provably clean."""
+    pair.claude.write_text(json.dumps({**pair.claude_data, "git": {**pair.claude_data["git"], "dirty": "true"}}))
+    rc, out, _ = call_tables(tables_mod, capsys, [pair.regex, pair.claude])
+    assert rc == 0 and "not provably clean" in out
+
+
+def test_review_tables_incomplete_run_has_no_delta(
+    tables_mod: ModuleType, env: Env, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 10: Δ is n/a when a run is incomplete, since the accuracies cover different posts."""
+    p = write_pair(env, complete=False)
+    rc, out, _ = call_tables(tables_mod, capsys, [p.regex, p.claude])
+    assert rc == 0
+    rows = table_rows(sections(out)["v3"])
+    assert all(rows[f][3] == "n/a" for f in SCORED_FIELDS), rows
