@@ -12,10 +12,16 @@ deal_board.scoring so the final file is scored exactly like every earlier result
 
 Exit codes: 0 complete run written; 1 aborted part-way, partial file written; 2 refused (nothing
 written) or an argparse usage error.
+
+Before the first extractor call a `<extractor>_<stamp>.look` marker is created in the results dir.
+It is never removed: if the process is killed (SIGKILL, power loss) or saving fails, the marker is
+the evidence that a look happened, and the one-look guard refuses the next run because of it.
 """
 
 import argparse
+import functools
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Callable, Iterator
@@ -58,6 +64,7 @@ class Hooks:
     data_path: Path
     guard_results_dirs: tuple[Path, ...]
     guard_cache_dirs: tuple[Path, ...]
+    history_looks: Callable[[str, frozenset[str]], list[str]] = lambda extractor, ids: _history_looks(extractor, ids)
 
 
 class Refusal(Exception):
@@ -109,6 +116,37 @@ def default_hooks() -> Hooks:
     )
 
 
+@functools.cache
+def _history_candidates() -> tuple[tuple[str, str], ...]:
+    """(rev:path, blob text) of every results/ file in any commit that mentions holdout_v3.
+
+    Why history: the files on disk can be renamed, deleted or `git clean`ed after a look, but a
+    committed look stays in the object store. Cached because history doesn't change mid-process.
+    """
+
+    def git(*args: str) -> str:
+        return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout
+
+    revs = git("rev-list", "--all").split()
+    if not revs:
+        return ()
+    hits = git("grep", "-l", "-F", "-e", SPLIT, "-e", "v3-", *revs, "--", "results/").splitlines()
+    return tuple((hit, git("show", hit)) for hit in hits)
+
+
+def _history_looks(extractor: str, ids: frozenset[str]) -> list[str]:
+    """Committed results files (rev:path) anywhere in git history that record this extractor on holdout_v3."""
+    out = []
+    for where, text in _history_candidates():
+        try:
+            data = json.loads(text)
+        except ValueError:
+            continue
+        if is_look(data, extractor, ids):
+            out.append(where)
+    return out
+
+
 def redact(text: str, secret: str | None) -> str:
     """Scrub the key from a message: exception text from an SDK or network layer can echo it."""
     return text.replace(secret, REDACTED) if secret else text
@@ -136,13 +174,30 @@ def dataset_path_string(path: Path) -> str:
 
 def _json_files(directory: Path) -> Iterator[Path]:
     """Recursive *.json under directory; a missing or unreadable directory just yields nothing,
-    because a guard that crashes is a guard someone will be tempted to switch off."""
+    because a guard that crashes is a guard someone will be tempted to switch off.
+
+    Matches `.json` case-insensitively and anywhere in the name (`x.json.bak`, `x.JSON`) and
+    follows symlinked directories, so renaming or relinking an earlier file doesn't hide it.
+    """
+    yield from (p for p in _all_files(directory) if ".json" in p.name.lower())
+
+
+def _all_files(directory: Path) -> Iterator[Path]:
+    """Every file under directory, following symlinks once per real directory (no loops)."""
     if not directory.is_dir():
         return
-    try:
-        yield from (p for p in sorted(directory.rglob("*.json")) if p.is_file())
-    except OSError:
-        return
+    seen: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(directory, followlinks=True):
+        real = os.path.realpath(dirpath)
+        if real in seen:
+            dirnames[:] = []
+            continue
+        seen.add(real)
+        dirnames.sort()
+        for name in sorted(filenames):
+            path = Path(dirpath) / name
+            if path.is_file():
+                yield path
 
 
 def _load_json(path: Path) -> Any:
@@ -153,19 +208,51 @@ def _load_json(path: Path) -> Any:
         return None
 
 
-def find_earlier_look(extractor: str, dirs: list[Path]) -> Path | None:
-    """The first results file that already records this extractor on holdout_v3, if any.
+def is_look(data: Any, extractor: str, ids: frozenset[str]) -> bool:
+    """Whether a parsed results file records `extractor` on holdout_v3.
 
-    Matches on split *or* datasets so a file from any code path (this script, a hand-run
-    deal-eval, a rescore) counts as a look.
+    Matches on split, dataset name, dataset path *or* record ids, so a file from any code path
+    (this script, a hand-run deal-eval with DATASETS repointed, a rescore) counts as a look.
     """
+    if not isinstance(data, dict) or data.get("extractor") != extractor:
+        return False
+    if data.get("split") == SPLIT:
+        return True
+    datasets = data.get("datasets")
+    if not isinstance(datasets, dict):
+        return False
+    for name, ds in datasets.items():
+        if name == SPLIT:
+            return True
+        if not isinstance(ds, dict):
+            continue
+        if str(ds.get("path", "")).endswith(f"{SPLIT}.jsonl"):
+            return True
+        records = ds.get("records")
+        if isinstance(records, dict) and ids & records.keys():
+            return True
+    return False
+
+
+def find_earlier_look(extractor: str, dirs: list[Path], ids: frozenset[str] = frozenset()) -> Path | None:
+    """The first file in dirs that shows this extractor already looked at holdout_v3, if any.
+
+    Besides parseable results files this counts a `<extractor>_*.look` marker (a run started,
+    whatever happened next) and an unparseable `<extractor>_*` JSON file (a save killed half-way
+    can't be proven not to be a look).
+    """
+    prefix = f"{extractor}_"
     for directory in dirs:
-        for p in _json_files(directory):
-            data = _load_json(p)
-            if not isinstance(data, dict) or data.get("extractor") != extractor:
+        for p in _all_files(directory):
+            name = p.name.lower()
+            if name.startswith(prefix) and name.endswith(".look"):
+                return p
+            if ".json" not in name:
                 continue
-            datasets = data.get("datasets")
-            if data.get("split") == SPLIT or (isinstance(datasets, dict) and SPLIT in datasets):
+            data = _load_json(p)
+            if data is None and name.startswith(prefix):
+                return p
+            if is_look(data, extractor, ids):
                 return p
     return None
 
@@ -200,6 +287,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--results-dir", type=Path, default=ev.RESULTS_DIR, help="where the .json + .md are written")
     ap.add_argument("--cache-dir", type=Path, default=ev.CACHE_DIR, help="raw-output cache to inspect (never written)")
     ap.add_argument("--allow-second-look", action="store_true", help="skip the one-look refusal (owner approval only)")
+    ap.add_argument(
+        "--expect-model",
+        default=None,
+        help="required Claude model id, e.g. claude-haiku-5-5 (PROTOCOL.md always passes it; a DEAL_MODEL "
+        "override would otherwise change the model silently)",
+    )
     return ap.parse_args(argv)
 
 
@@ -221,19 +314,54 @@ def check_preconditions(args: argparse.Namespace, hooks: Hooks, posts: list[JSON
         if not hooks.has_api_key():
             raise Refusal("key", "no Anthropic API key is configured (set it in the shell or .env); nothing was run")
     if not args.allow_second_look:
-        earlier = find_earlier_look(args.extractor, [args.results_dir, *hooks.guard_results_dirs])
-        if earlier is not None:
+        ids = frozenset(str(p["id"]) for p in posts)
+        earlier = find_earlier_look(args.extractor, [args.results_dir, *hooks.guard_results_dirs], ids)
+        where = str(earlier) if earlier is not None else next(iter(hooks.history_looks(args.extractor, ids)), None)
+        if where is not None:
             raise Refusal(
                 "one-look",
-                f"{earlier} already holds a {SPLIT} results file for {args.extractor}; a second run needs the "
+                f"{where} already records a {SPLIT} look for {args.extractor}; a second run needs the "
                 "owner's written approval and --allow-second-look",
             )
+    # A look written outside the guarded dirs would be invisible to the next run's guard.
+    target = Path(args.results_dir).resolve()
+    guards = [Path(d).resolve() for d in hooks.guard_results_dirs]
+    if guards and not any(target.is_relative_to(g) for g in guards):
+        raise Refusal("results-dir", f"{args.results_dir} is outside {', '.join(map(str, guards))}")
     cached = find_cached_post(
         [str(p["text"]) for p in posts], args.expect_prompt, [args.cache_dir, *hooks.guard_cache_dirs]
     )
     if cached is not None:
         raise Refusal("cache", f"{cached} is a cached extractor output for a {SPLIT} post, so it was already seen")
     return git
+
+
+def write_marker(args: argparse.Namespace, stamp: str, git: GitState, data_sha256: str) -> Path:
+    """Create `<extractor>_<stamp>.look` before the first extractor call, never overwriting.
+
+    Why: if the process dies before eval.save (kill -9, disk full), there would otherwise be no
+    trace on disk and the guard would allow a silent rerun. The marker is committed with the results.
+    """
+    directory = Path(args.results_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "extractor": args.extractor,
+        "split": SPLIT,
+        "timestamp": stamp,
+        "git": {"commit": git.commit, "dirty": git.dirty},
+        "data_sha256": data_sha256,
+        "second_look": bool(args.allow_second_look),
+        "note": "a look at holdout_v3 started; the results file with the same extractor and timestamp records it",
+    }
+    for i in range(1, 1000):
+        path = directory / (f"{args.extractor}_{stamp}.look" if i == 1 else f"{args.extractor}_{stamp}-{i}.look")
+        try:
+            with path.open("x", encoding="utf-8") as f:
+                f.write(json.dumps(payload, indent=2))
+        except FileExistsError:
+            continue
+        return path
+    raise OSError(f"no free marker name for {args.extractor}_{stamp}")
 
 
 def title(extractor: str, second_look: bool, completed: int, total: int, complete: bool) -> str:
@@ -273,6 +401,8 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
                 "prompt",
                 f"the built extractor reports prompt {meta.get('prompt_version')!r}, expected {args.expect_prompt!r}",
             )
+        if args.extractor == "claude" and args.expect_model is not None and meta.get("model") != args.expect_model:
+            raise Refusal("model", f"the built extractor uses {meta.get('model')!r}, expected {args.expect_model!r}")
     except Refusal as r:
         err(f"REFUSED: {r.rule}: {r.explanation}")
         return 2
@@ -281,6 +411,11 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
         return 2
 
     stamp = ev.timestamp()
+    try:
+        marker = write_marker(args, stamp, git, data_sha256)
+    except OSError as e:
+        err(f"ERROR: can't write the look marker in {args.results_dir}: {type(e).__name__}: {e}")
+        return 2
     records: dict[str, JSONObject] = {}
     failure: BaseException | None = None
     try:
@@ -289,41 +424,48 @@ def main(argv: list[str] | None = None, hooks: Hooks | None = None) -> int:
     except BaseException as e:  # Ctrl-C and SystemExit too: a partial run is still a look
         failure = e
 
-    done = [p for p in posts if str(p["id"]) in records]
-    complete = failure is None
-    datasets: JSONObject = {
-        SPLIT: {"path": dataset_path_string(hooks.data_path), "records": records, "scores": score(done, records)}
-    }
-    model = meta.get("model") if args.extractor == "claude" else None
-    result: JSONObject = {
-        "extractor": args.extractor,
-        "model": model,
-        "prompt_version": meta.get("prompt_version") if args.extractor == "claude" else None,
-        "split": SPLIT,
-        "timestamp": stamp,
-        "git": {"commit": git.commit, "dirty": git.dirty},
-        "scoring": ev.SCORING_NOTE,
-        "repeat": {"index": 1, "of": 1},
-        "cache_enabled": False,
-        "usage": ev.usage_totals(datasets, model),
-        "final_eval": {
-            "protocol": PROTOCOL,
-            "branch": git.branch,
-            "data_sha256": data_sha256,
-            "second_look": bool(args.allow_second_look),
-            "complete": complete,
-            "aborted": None
-            if failure is None
-            else {"completed": len(done), "total": len(posts), "error_type": type(failure).__name__},
-        },
-        "datasets": datasets,
-    }
-    result = _redact_obj(result, secret)
-    json_path = ev.save(result, args.results_dir)
-    md_lines = ev.markdown(result).split("\n")
-    md_lines[0] = title(args.extractor, bool(args.allow_second_look), len(done), len(posts), complete)
-    md = "\n".join(md_lines)
-    json_path.with_suffix(".md").write_text(md, encoding="utf-8")
+    try:
+        done = [p for p in posts if str(p["id"]) in records]
+        complete = failure is None
+        datasets: JSONObject = {
+            SPLIT: {"path": dataset_path_string(hooks.data_path), "records": records, "scores": score(done, records)}
+        }
+        model = meta.get("model") if args.extractor == "claude" else None
+        result: JSONObject = {
+            "extractor": args.extractor,
+            "model": model,
+            "prompt_version": meta.get("prompt_version") if args.extractor == "claude" else None,
+            "split": SPLIT,
+            "timestamp": stamp,
+            "git": {"commit": git.commit, "dirty": git.dirty},
+            "scoring": ev.SCORING_NOTE,
+            "repeat": {"index": 1, "of": 1},
+            "cache_enabled": False,
+            "usage": ev.usage_totals(datasets, model),
+            "final_eval": {
+                "protocol": PROTOCOL,
+                "branch": git.branch,
+                "data_sha256": data_sha256,
+                "second_look": bool(args.allow_second_look),
+                "expected_model": args.expect_model,
+                "marker": marker.name,
+                "complete": complete,
+                "aborted": None
+                if failure is None
+                else {"completed": len(done), "total": len(posts), "error_type": type(failure).__name__},
+            },
+            "datasets": datasets,
+        }
+        result = _redact_obj(result, secret)
+        json_path = ev.save(result, args.results_dir)
+        md_lines = ev.markdown(result).split("\n")
+        md_lines[0] = title(args.extractor, bool(args.allow_second_look), len(done), len(posts), complete)
+        md = "\n".join(md_lines)
+        json_path.with_suffix(".md").write_text(md, encoding="utf-8")
+
+    except Exception as e:  # the look happened; the marker stays as its evidence
+        err(f"ERROR: the run finished but saving failed ({marker} records the look): {type(e).__name__}: {e}")
+        return 1
 
     print(redact(md, secret))
     print(redact(f"saved {json_path}", secret))
