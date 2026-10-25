@@ -338,6 +338,19 @@ SUPERSEDING_BASELINE_RUN = "results/regex_20261024T224817Z.json"
 RUN_ONLY_KEYS = ("usage", "repeat", "cache_enabled")
 
 
+def source_label(source: Path) -> str:
+    """How a rescore names its source: repo-relative POSIX when under ROOT, else the bare file name.
+
+    Results are committed, so the caller's path as typed (often absolute, with the local username
+    and directory layout in it) must never be written into them.
+    """
+    resolved = Path(source).resolve()
+    try:
+        return resolved.relative_to(ROOT.resolve()).as_posix()
+    except ValueError:  # outside the repo
+        return resolved.name
+
+
 def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject) -> JSONObject:
     """A rescore's own results dict. It drops the source run's usage, repeat and cache_enabled:
     a rescore makes no API calls, and copying them would report the old run's cost (and name the
@@ -349,7 +362,7 @@ def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject
         "timestamp": stamp,
         "git": git,
         "scoring_version": SCORING_VERSION,
-        "rescored_from": str(source),
+        "rescored_from": source_label(source),
         "datasets": rescore(saved),
     }
 
