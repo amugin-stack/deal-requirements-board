@@ -1,15 +1,16 @@
 """Run extractors on the labeled sets and score them. The independent holdout is the headline number.
 
-  python scripts/eval.py                      # baseline, plus Claude if ANTHROPIC_API_KEY is set
-  python scripts/eval.py --extractor regex
-  python scripts/eval.py --rescore results/claude_20261024T120000Z.json   # no API calls
-  python scripts/eval.py --compare results/A.json results/B.json         # paired test, writes nothing
-  python scripts/eval.py --extractor claude --repeats 3                  # run-to-run variance
-  python scripts/eval.py --extractor claude --no-cache                   # bypass the raw-output cache
+  python -m deal_board.cli.eval                      # baseline, plus Claude if ANTHROPIC_API_KEY is set
+  python -m deal_board.cli.eval --extractor regex
+  python -m deal_board.cli.eval --rescore results/claude_20261024T120000Z.json   # no API calls
+  python -m deal_board.cli.eval --compare results/A.json results/B.json         # paired test, writes nothing
+  python -m deal_board.cli.eval --extractor claude --repeats 3                  # run-to-run variance
+  python -m deal_board.cli.eval --extractor claude --no-cache                   # bypass the raw-output cache
 
 Each run writes results/<extractor>_<UTC timestamp>.json (provenance, every raw output, every
-prediction, scores, token usage and cost) and a matching .md table. Scoring rules live in scoring.py.
+prediction, scores, token usage and cost) and a matching .md table. Scoring rules live in deal_board/scoring.py.
 """
+
 import argparse
 import hashlib
 import inspect
@@ -19,16 +20,15 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from extractors import ExtractionError, Extractor, parse_requirement  # noqa: E402
-from schema import KEY_FIELDS  # noqa: E402
-from scoring import (  # noqa: E402
+from deal_board import config, paths
+from deal_board.extractors import ExtractionError, Extractor, parse_requirement
+from deal_board.schema import KEY_FIELDS, JSONObject
+from deal_board.scoring import (
     DEAL_VALUE_TOLERANCE,
     FIELD_OUTCOMES,
     SCORED_FIELDS,
@@ -38,7 +38,8 @@ from scoring import (  # noqa: E402
     score,
 )
 
-RESULTS_DIR = ROOT / "results"
+ROOT = paths.REPO_ROOT
+RESULTS_DIR = paths.RESULTS_DIR
 CACHE_DIR = ROOT / ".cache" / "extractor"
 DATASETS = {  # headline first
     "holdout": "data/holdout.jsonl",
@@ -83,6 +84,14 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def source_sha256(obj: object) -> str:
+    """sha256 of the source file that defines type(obj): the cache's request fingerprint."""
+    source = inspect.getsourcefile(type(obj))
+    if source is None:  # a builtin or C extension; never true for the extractors here
+        raise RuntimeError(f"no source file for {type(obj).__name__}, so the cache can't fingerprint it")
+    return file_sha256(Path(source))
+
+
 def cache_key(model: str, prompt_version: str, text: str) -> str:
     """Hash of (model, prompt version, post text).
 
@@ -107,8 +116,9 @@ class RawCache:
     outputs of a request that no longer exists. None means the caller doesn't fingerprint.
     """
 
-    def __init__(self, directory: Path, model: str, prompt_version: str,
-                 request_fingerprint: str | None = None) -> None:
+    def __init__(
+        self, directory: Path, model: str, prompt_version: str, request_fingerprint: str | None = None
+    ) -> None:
         self.directory, self.model, self.prompt_version = Path(directory), model, prompt_version
         self.request_fingerprint = request_fingerprint
         self._looked_up: set[str] = set()
@@ -116,11 +126,15 @@ class RawCache:
     def _path(self, key: str) -> Path:
         return self.directory / f"{key}.json"
 
-    def _identity(self, text: str) -> dict:
-        return {"model": self.model, "prompt_version": self.prompt_version, "text_sha256": text_sha256(text),
-                "request_sha256": self.request_fingerprint}
+    def _identity(self, text: str) -> JSONObject:
+        return {
+            "model": self.model,
+            "prompt_version": self.prompt_version,
+            "text_sha256": text_sha256(text),
+            "request_sha256": self.request_fingerprint,
+        }
 
-    def get(self, text: str) -> dict | None:
+    def get(self, text: str) -> JSONObject | None:
         """The cached entry for text, or None (a miss).
 
         Only the first lookup of a key on this instance can hit. The CLI shares one instance
@@ -136,14 +150,14 @@ class RawCache:
         self._looked_up.add(key)
         try:
             entry = json.loads(self._path(key).read_text())
-        except (OSError, ValueError):  # missing file, or not valid JSON
+        except OSError, ValueError:  # missing file, or not valid JSON
             return None
         identity = self._identity(text)
         if not isinstance(entry, dict) or any(entry.get(k) != v for k, v in identity.items()):
             return None
         return entry if all(k in entry for k in ENTRY_FIELDS) else None
 
-    def put(self, text: str, entry: dict) -> None:
+    def put(self, text: str, entry: JSONObject) -> None:
         """Store entry for text (latest wins), stamped with the identity that get() verifies.
 
         Written to a temp file then os.replace'd, so a crash mid-write never leaves a
@@ -161,7 +175,7 @@ class RawCache:
             raise
 
 
-def to_record(raw: dict | None, error: str | None = None) -> dict:
+def to_record(raw: JSONObject | None, error: str | None = None) -> JSONObject:
     """Turn one raw output into a scored record. Used for fresh runs and for re-scoring."""
     if raw is None:
         return {"raw": None, "prediction": None, "error": error}
@@ -171,13 +185,21 @@ def to_record(raw: dict | None, error: str | None = None) -> dict:
         return {"raw": raw, "prediction": None, "error": str(e)}
 
 
-def call_extractor(extractor: Extractor, text: str) -> dict:
-    if hasattr(extractor, "extract_raw"):  # Claude: keep the output before validation
+@runtime_checkable
+class RawExtractor(Protocol):
+    """An extractor that can return its output before validation (Claude). isinstance() on this
+    checks only that `extract_raw` exists, the same test as hasattr."""
+
+    def extract_raw(self, text: str) -> dict[str, object]: ...
+
+
+def call_extractor(extractor: Extractor, text: str) -> JSONObject:
+    if isinstance(extractor, RawExtractor):  # Claude: keep the output before validation
         return extractor.extract_raw(text)
     return extractor.extract(text).model_dump(mode="json")  # baseline output is already validated
 
 
-def fresh_entry(extractor: Extractor, text: str) -> dict:
+def fresh_entry(extractor: Extractor, text: str) -> JSONObject:
     """Call the extractor once and describe the outcome as a cache entry (minus its identity).
 
     Model failures (refusal, no tool call) become an entry with `error` set: they are outcomes
@@ -192,18 +214,25 @@ def fresh_entry(extractor: Extractor, text: str) -> dict:
         error = str(e)
     latency = time.perf_counter() - start
     usage = getattr(extractor, "last_usage", None)  # regex has none
-    return {"raw": raw, "error": error,
-            "input_tokens": usage.input_tokens if usage else None,
-            "output_tokens": usage.output_tokens if usage else None,
-            "latency_s": latency}
+    return {
+        "raw": raw,
+        "error": error,
+        "input_tokens": usage.input_tokens if usage else None,
+        "output_tokens": usage.output_tokens if usage else None,
+        "latency_s": latency,
+    }
 
 
-def call_info(entry: dict, cached: bool) -> dict:
-    return {"cached": cached, "input_tokens": entry["input_tokens"],
-            "output_tokens": entry["output_tokens"], "latency_s": entry["latency_s"]}
+def call_info(entry: JSONObject, cached: bool) -> JSONObject:
+    return {
+        "cached": cached,
+        "input_tokens": entry["input_tokens"],
+        "output_tokens": entry["output_tokens"],
+        "latency_s": entry["latency_s"],
+    }
 
 
-def run_post(extractor: Extractor, text: str, cache: RawCache | None) -> dict:
+def run_post(extractor: Extractor, text: str, cache: RawCache | None) -> JSONObject:
     """One scored record with its `call` provenance; a cache hit keeps the original call's numbers."""
     entry = cache.get(text) if cache is not None else None
     cached = entry is not None
@@ -214,7 +243,7 @@ def run_post(extractor: Extractor, text: str, cache: RawCache | None) -> dict:
     return {**to_record(entry["raw"], entry["error"]), "call": call_info(entry, cached)}
 
 
-def run_posts(extractor: Extractor, posts: list[dict], cache: RawCache | None = None) -> dict[str, dict]:
+def run_posts(extractor: Extractor, posts: list[JSONObject], cache: RawCache | None = None) -> dict[str, JSONObject]:
     return {p["id"]: run_post(extractor, p["text"], cache) for p in posts}
 
 
@@ -223,12 +252,12 @@ def select(split: str) -> dict[str, str]:
     return DATASETS if split == "all" else {"posts_dev": DATASETS["posts"]}
 
 
-def load_split(path: str, split: str) -> list[dict]:
+def load_split(path: str, split: str) -> list[JSONObject]:
     posts = load_posts(ROOT / path)
     return posts if split == "all" else [p for p in posts if p.get("split") == split]
 
 
-def evaluate(extractor: Extractor, split: str = "all", cache: RawCache | None = None) -> dict:
+def evaluate(extractor: Extractor, split: str = "all", cache: RawCache | None = None) -> JSONObject:
     out = {}
     for name, path in select(split).items():
         posts = load_split(path, split)
@@ -237,7 +266,7 @@ def evaluate(extractor: Extractor, split: str = "all", cache: RawCache | None = 
     return out
 
 
-def usage_totals(datasets: dict, model: str | None) -> dict:
+def usage_totals(datasets: JSONObject, model: str | None) -> JSONObject:
     """What this run cost. Counts only fresh calls: a cache hit was paid for by an earlier run.
 
     Records without a `call` key (files saved before usage was tracked) are skipped.
@@ -261,13 +290,15 @@ def usage_totals(datasets: dict, model: str | None) -> dict:
     }
 
 
-def rescore_records(records: dict[str, dict]) -> dict[str, dict]:
+def rescore_records(records: dict[str, JSONObject]) -> dict[str, JSONObject]:
     """Rebuild records from their raw outputs, keeping each one's `call` provenance if it has one."""
-    return {pid: {**to_record(r["raw"], r["error"]), **({"call": r["call"]} if "call" in r else {})}
-            for pid, r in records.items()}
+    return {
+        pid: {**to_record(r["raw"], r["error"]), **({"call": r["call"]} if "call" in r else {})}
+        for pid, r in records.items()
+    }
 
 
-def rescore(saved: dict) -> dict:
+def rescore(saved: JSONObject) -> JSONObject:
     """Re-score a saved run against the current labels, from its raw outputs. No API calls."""
     out = {}
     for name, ds in saved["datasets"].items():
@@ -280,7 +311,7 @@ def rescore(saved: dict) -> dict:
 RUN_ONLY_KEYS = ("usage", "repeat", "cache_enabled")
 
 
-def rescored_result(saved: dict, source: Path, stamp: str, git: dict) -> dict:
+def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject) -> JSONObject:
     """A rescore's own results dict. It drops the source run's usage, repeat and cache_enabled:
     a rescore makes no API calls, and copying them would report the old run's cost (and name the
     file as a repeat) as if this run had spent it. The source file keeps them."""
@@ -288,7 +319,7 @@ def rescored_result(saved: dict, source: Path, stamp: str, git: dict) -> dict:
     return {**kept, "timestamp": stamp, "git": git, "rescored_from": str(source), "datasets": rescore(saved)}
 
 
-def compare_results(a: dict, b: dict) -> dict:
+def compare_results(a: JSONObject, b: JSONObject) -> JSONObject:
     """Post-by-post paired comparison of two saved runs, per field.
 
     Both runs are re-scored from their raw outputs against the current labels, so a label fixed
@@ -306,8 +337,10 @@ def compare_results(a: dict, b: dict) -> dict:
         posts = [p for p in load_posts(ROOT / path) if p["id"] in a_records and p["id"] in b_records]
         a_ok = post_correctness(posts, rescore_records(a_records))
         b_ok = post_correctness(posts, rescore_records(b_records))
-        out[path] = {"n_common_posts": len(posts),
-                     "fields": {f: paired_comparison(a_ok[f], b_ok[f]) for f in SCORED_FIELDS}}
+        out[path] = {
+            "n_common_posts": len(posts),
+            "fields": {f: paired_comparison(a_ok[f], b_ok[f]) for f in SCORED_FIELDS},
+        }
     return out
 
 
@@ -315,41 +348,56 @@ def ids(xs: list[str]) -> str:
     return ", ".join(xs) if xs else "–"
 
 
-def format_comparison(cmp: dict, a_name: str, b_name: str) -> str:
-    lines = [f"# Paired comparison: A = `{a_name}`, B = `{b_name}`", "",
-             "Both runs re-scored from raw outputs against the current labels. p is the two-sided "
-             "exact McNemar test (binomial sign test on the posts where exactly one run is right).", ""]
+def format_comparison(cmp: JSONObject, a_name: str, b_name: str) -> str:
+    lines = [
+        f"# Paired comparison: A = `{a_name}`, B = `{b_name}`",
+        "",
+        "Both runs re-scored from raw outputs against the current labels. p is the two-sided "
+        "exact McNemar test (binomial sign test on the posts where exactly one run is right).",
+        "",
+    ]
     if not cmp:
-        return "\n".join(lines + ["No dataset path in common: nothing to compare."])
+        return "\n".join([*lines, "No dataset path in common: nothing to compare."])
     for path, c in cmp.items():
-        lines += [f"## `{path}`: {c['n_common_posts']} common posts", "",
-                  "| field | n | A correct | B correct | B only (B right, A wrong) | A only (A right, B wrong) "
-                  "| p (exact McNemar) |", "|---|---:|---:|---:|---|---|---:|"]
+        lines += [
+            f"## `{path}`: {c['n_common_posts']} common posts",
+            "",
+            "| field | n | A correct | B correct | B only (B right, A wrong) | A only (A right, B wrong) "
+            "| p (exact McNemar) |",
+            "|---|---:|---:|---:|---|---|---:|",
+        ]
         for field, r in c["fields"].items():
-            lines.append(f"| {field} | {r['n']} | {r['a_correct']} | {r['b_correct']} | {ids(r['b_only'])} "
-                         f"| {ids(r['a_only'])} | {r['p_value']:.3g} |")
+            lines.append(
+                f"| {field} | {r['n']} | {r['a_correct']} | {r['b_correct']} | {ids(r['b_only'])} "
+                f"| {ids(r['a_only'])} | {r['p_value']:.3g} |"
+            )
         lines.append("")
     return "\n".join(lines)
 
 
-def field_cell(scores: dict, field: str) -> dict:
-    return scores[field] if field in ("is_deal_request", "missing_fields") else scores["fields"][field]
+def field_cell(scores: JSONObject, field: str) -> JSONObject:
+    cell: JSONObject = scores[field] if field in ("is_deal_request", "missing_fields") else scores["fields"][field]
+    return cell
 
 
-def summarize_repeats(results: list[dict]) -> dict[str, dict[str, dict]]:
+def summarize_repeats(results: list[JSONObject]) -> dict[str, dict[str, JSONObject]]:
     """Mean and range of each field's accuracy across repeated runs: the run-to-run noise floor
     that a prompt change has to beat before it means anything."""
     names = list(dict.fromkeys(name for r in results for name in r["datasets"]))
-    out: dict[str, dict[str, dict]] = {}
+    out: dict[str, dict[str, JSONObject]] = {}
     for name in names:
         out[name] = {}
         for field in SCORED_FIELDS:
-            accs = [field_cell(r["datasets"][name]["scores"], field)["accuracy"]
-                    for r in results if name in r["datasets"]]
+            accs = [
+                field_cell(r["datasets"][name]["scores"], field)["accuracy"] for r in results if name in r["datasets"]
+            ]
             accs = [x for x in accs if x is not None]
-            out[name][field] = {"mean": sum(accs) / len(accs) if accs else None,
-                                "min": min(accs, default=None), "max": max(accs, default=None),
-                                "runs": len(accs)}
+            out[name][field] = {
+                "mean": sum(accs) / len(accs) if accs else None,
+                "min": min(accs, default=None),
+                "max": max(accs, default=None),
+                "runs": len(accs),
+            }
     return out
 
 
@@ -368,7 +416,7 @@ def with_ci(x: float | None, ci: list[float] | None) -> str:
     return f"{pct(x)} [{whole(ci[0])}–{whole(ci[1])}]"
 
 
-def format_repeat_summary(summary: dict[str, dict[str, dict]]) -> str:
+def format_repeat_summary(summary: dict[str, dict[str, JSONObject]]) -> str:
     lines = ["# Repeat summary (accuracy across runs)", ""]
     for name, fields in summary.items():
         lines.append(f"## {name}")
@@ -380,21 +428,24 @@ def format_repeat_summary(summary: dict[str, dict[str, dict]]) -> str:
     return "\n".join(lines)
 
 
-def usage_line(u: dict) -> str:
+def usage_line(u: JSONObject) -> str:
     cost = "unknown (model not in price table)" if u["cost_usd"] is None else f"${u['cost_usd']:.4f}"
     mean = "n/a" if u["latency_s_mean"] is None else f"{u['latency_s_mean']:.2f} s"
-    return (f"**Usage:** {u['api_calls']} API calls, {u['cache_hits']} cache hits, "
-            f"{u['input_tokens']:,} input / {u['output_tokens']:,} output tokens, cost {cost} "
-            f"(prices as of {u['prices_as_of']}), latency {u['latency_s_total']:.1f} s total, {mean} mean.")
+    return (
+        f"**Usage:** {u['api_calls']} API calls, {u['cache_hits']} cache hits, "
+        f"{u['input_tokens']:,} input / {u['output_tokens']:,} output tokens, cost {cost} "
+        f"(prices as of {u['prices_as_of']}), latency {u['latency_s_total']:.1f} s total, {mean} mean."
+    )
 
 
-def git_info() -> dict:
-    def git(*args):
+def git_info() -> JSONObject:
+    def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+
     return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
 
 
-def markdown(result: dict) -> str:
+def markdown(result: JSONObject) -> str:
     split = result.get("split", "all")
     repeat = result.get("repeat", {"index": 1, "of": 1})
     title = f"# Eval: {result['extractor']}" + ("" if split == "all" else f" (split: {split}; holdout not scored)")
@@ -411,34 +462,47 @@ def markdown(result: dict) -> str:
     for name, ds in result["datasets"].items():
         s = ds["scores"]
         title = "holdout (headline)" if name == "holdout" else name
-        lines += [f"## {title}: `{ds['path']}`, {s['n_posts']} posts "
-                  f"({s['n_deal_posts']} deal, {s['n_non_deal_posts']} non-deal)", "",
-                  "| field | accuracy | halluc. rate | " + " | ".join(o.replace("_", "-") for o in FIELD_OUTCOMES) + " |",
-                  "|---|---:|---:|" + "---:|" * len(FIELD_OUTCOMES)]
+        lines += [
+            f"## {title}: `{ds['path']}`, {s['n_posts']} posts "
+            f"({s['n_deal_posts']} deal, {s['n_non_deal_posts']} non-deal)",
+            "",
+            "| field | accuracy | halluc. rate | " + " | ".join(o.replace("_", "-") for o in FIELD_OUTCOMES) + " |",
+            "|---|---:|---:|" + "---:|" * len(FIELD_OUTCOMES),
+        ]
         for field in SCORED_FIELDS:
             c = field_cell(s, field)
             halluc = with_ci(c.get("hallucination_rate"), c.get("hallucination_ci95")) if field in KEY_FIELDS else "–"
             cells = [str(c[o]) if o in c else "–" for o in FIELD_OUTCOMES]
-            lines.append(f"| {field} | {with_ci(c['accuracy'], c.get('ci95'))} | {halluc} | " + " | ".join(cells) + " |")
+            lines.append(
+                f"| {field} | {with_ci(c['accuracy'], c.get('ci95'))} | {halluc} | " + " | ".join(cells) + " |"
+            )
         h = s["non_deal_hallucinations"]
         on_deal = sum(s["fields"][f]["hallucinated"] for f in KEY_FIELDS)
         rate = with_ci(h.get("posts_with_any_rate"), h.get("posts_with_any_ci95"))
-        lines += ["", f"**Hallucinations:** {on_deal} fields on deal posts; {h['fields_filled']} fields "
-                  f"filled on non-deal posts ({h['posts_with_any']} of {s['n_non_deal_posts']} non-deal posts, "
-                  f"{rate}).", "", f"**Failures ({len(s['failures'])}):**", ""]
-        lines += [f"- `{x['id']}` {x['field']} [{x['outcome']}]: expected `{x['expected']}`, got `{x['got']}`"
-                  for x in s["failures"]]
+        lines += [
+            "",
+            f"**Hallucinations:** {on_deal} fields on deal posts; {h['fields_filled']} fields "
+            f"filled on non-deal posts ({h['posts_with_any']} of {s['n_non_deal_posts']} non-deal posts, "
+            f"{rate}).",
+            "",
+            f"**Failures ({len(s['failures'])}):**",
+            "",
+        ]
+        lines += [
+            f"- `{x['id']}` {x['field']} [{x['outcome']}]: expected `{x['expected']}`, got `{x['got']}`"
+            for x in s["failures"]
+        ]
         lines.append("")
     return "\n".join(lines)
 
 
-def result_stem(result: dict) -> str:
+def result_stem(result: JSONObject) -> str:
     repeat = result.get("repeat", {"index": 1, "of": 1})
     stem = f"{result['extractor']}_{result['timestamp']}"
     return stem if repeat["of"] == 1 else f"{stem}_r{repeat['index']}"
 
 
-def save(result: dict, results_dir: Path | None = None) -> Path:
+def save(result: JSONObject, results_dir: Path | None = None) -> Path:
     """Write <stem>.json and <stem>.md, never overwriting: a taken stem gets -2, -3, ...
 
     Two runs in the same second (or a rescore of a just-written file) would otherwise silently
@@ -462,7 +526,7 @@ def save(result: dict, results_dir: Path | None = None) -> Path:
     return json_path
 
 
-def load_run(path: Path) -> dict:
+def load_run(path: Path) -> JSONObject:
     """Load an eval-run results file, exiting with status 2 (no traceback) for anything else,
     e.g. results/baseline-v1_comparison.json, which is a summary with no raw outputs to re-score."""
     saved = json.loads(path.read_text())
@@ -472,24 +536,43 @@ def load_run(path: Path) -> dict:
     return saved
 
 
-def make_extractor(name: str) -> tuple[Extractor, dict]:
+def make_extractor(name: str) -> tuple[Extractor, JSONObject]:
     if name == "regex":
-        from extractors.regex_baseline import RegexExtractor
+        from deal_board.extractors.regex_baseline import RegexExtractor
+
         return RegexExtractor(), {}
-    from extractors.claude import PROMPT_VERSION, ClaudeExtractor
+    from deal_board.extractors.claude import PROMPT_VERSION, ClaudeExtractor
+
     ex = ClaudeExtractor()
     return ex, {"model": ex.model, "prompt_version": PROMPT_VERSION}
 
 
 def timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
-def run_once(name: str, extractor: Extractor, meta: dict, split: str, cache: RawCache | None,
-             stamp: str, index: int, of: int) -> dict:
-    result = {"extractor": name, "model": None, "prompt_version": None, **meta, "split": split,
-              "timestamp": stamp, "git": git_info(), "scoring": SCORING_NOTE,
-              "repeat": {"index": index, "of": of}, "cache_enabled": cache is not None}
+def run_once(
+    name: str,
+    extractor: Extractor,
+    meta: JSONObject,
+    split: str,
+    cache: RawCache | None,
+    stamp: str,
+    index: int,
+    of: int,
+) -> JSONObject:
+    result = {
+        "extractor": name,
+        "model": None,
+        "prompt_version": None,
+        **meta,
+        "split": split,
+        "timestamp": stamp,
+        "git": git_info(),
+        "scoring": SCORING_NOTE,
+        "repeat": {"index": index, "of": of},
+        "cache_enabled": cache is not None,
+    }
     datasets = evaluate(extractor, split, cache)
     return {**result, "usage": usage_totals(datasets, result["model"]), "datasets": datasets}
 
@@ -499,10 +582,19 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     ap.add_argument("--extractor", choices=["regex", "claude", "all"], default="all")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--rescore", type=Path, help="re-score a saved results JSON without re-running")
-    mode.add_argument("--compare", type=Path, nargs=2, metavar=("A", "B"),
-                      help="paired per-post comparison of two saved results JSONs; writes nothing")
-    ap.add_argument("--split", choices=["all", "dev"], default="all",
-                    help="'dev' scores only posts.jsonl's dev split, for prompt tuning without seeing holdout")
+    mode.add_argument(
+        "--compare",
+        type=Path,
+        nargs=2,
+        metavar=("A", "B"),
+        help="paired per-post comparison of two saved results JSONs; writes nothing",
+    )
+    ap.add_argument(
+        "--split",
+        choices=["all", "dev"],
+        default="all",
+        help="'dev' scores only posts.jsonl's dev split, for prompt tuning without seeing holdout",
+    )
     ap.add_argument("--repeats", type=int, default=1, help="run each extractor N times, then summarize")
     ap.add_argument("--no-cache", action="store_true", help="bypass the raw-output cache entirely")
     ap.add_argument("--results-dir", type=Path, help=f"where results are written (default {RESULTS_DIR})")
@@ -529,17 +621,26 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     names = ["regex", "claude"] if args.extractor == "all" else [args.extractor]
-    if "claude" in names and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("NOTE: ANTHROPIC_API_KEY is not set, so the Claude extractor was skipped. "
-              "Running the regex baseline only.\n")
+    if "claude" in names and not config.load_settings().has_api_key:
+        print(
+            "NOTE: ANTHROPIC_API_KEY is not set, so the Claude extractor was skipped. "
+            "Running the regex baseline only.\n"
+        )
         names = ["regex"]
     for name in names:
         extractor, meta = make_extractor(name)
         # One cache instance per extractor per invocation, shared by every repeat (see RawCache.get).
         # The regex baseline is deterministic and free, so it is never cached.
-        cache = (None if name == "regex" or args.no_cache
-                 else RawCache(args.cache_dir or CACHE_DIR, meta["model"], meta["prompt_version"],
-                               file_sha256(Path(inspect.getsourcefile(type(extractor))))))
+        cache = (
+            None
+            if name == "regex" or args.no_cache
+            else RawCache(
+                args.cache_dir or CACHE_DIR,
+                meta["model"],
+                meta["prompt_version"],
+                source_sha256(extractor),
+            )
+        )
         stamp = timestamp()
         results = []
         for k in range(1, args.repeats + 1):
@@ -551,10 +652,15 @@ def main(argv: list[str] | None = None) -> None:
             print(format_repeat_summary(summarize_repeats(results)))
 
 
-if __name__ == "__main__":
-    # Loaded only when run as a script, so tests calling main() never pick up a real key.
-    # A key already set in the shell wins over the file (override=False).
-    from dotenv import load_dotenv
+def run() -> None:
+    """Entry point for `deal-eval` and `python -m deal_board.cli.eval`.
 
-    load_dotenv(ROOT / ".env", override=False)
+    .env is loaded only here, so tests calling main() never pick up a real key.
+    A key already set in the shell wins over the file (override=False).
+    """
+    config.load_dotenv_file()
     main()
+
+
+if __name__ == "__main__":
+    run()

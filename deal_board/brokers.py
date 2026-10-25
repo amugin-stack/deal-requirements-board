@@ -2,15 +2,17 @@
 
 This module only loads data. The compliance filter and scoring live in matcher.py.
 """
+
 import csv
 from datetime import date
 from pathlib import Path
 
 from pydantic import BaseModel, field_validator
 
-from schema import PropertyType, State, TransactionType
+from deal_board.paths import DATA_DIR
+from deal_board.schema import PropertyType, State, TransactionType
 
-BROKERS_CSV = Path(__file__).parent / "data/brokers.csv"
+BROKERS_CSV = DATA_DIR / "brokers.csv"
 
 # Deal posts name cities; TREC records counties. Each city maps to its main county only.
 # Austin, Houston, Dallas, and San Antonio spill into neighboring counties; we ignore that.
@@ -45,12 +47,12 @@ class Broker(BaseModel):
 
     @field_validator("*", mode="before")
     @classmethod
-    def _blank_to_none(cls, v):
+    def _blank_to_none(cls, v: object) -> object:
         return None if v == "" else v
 
     @field_validator("markets", "property_types", "transaction_types", mode="before")
     @classmethod
-    def _split_list(cls, v):
+    def _split_list(cls, v: object) -> object:
         return [x.strip() for x in v.split(";") if x.strip()] if isinstance(v, str) else (v or [])
 
     @property

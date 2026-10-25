@@ -4,20 +4,26 @@ Why a forced tool call instead of asking for JSON in text: the model must answer
 schema's fields, so there's no prose to parse. Pydantic then validates the result. If it fails
 (e.g. state "Oregon" instead of "OR"), we raise rather than repair, so the eval counts it.
 """
+
+from __future__ import annotations
+
 import copy
 import hashlib
 import json
-import os
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any, Protocol, TypeGuard
 
 import anthropic
+from anthropic.types import MessageParam, ToolChoiceToolParam, ToolParam
 
-from extractors import ExtractionError, parse_requirement
-from schema import DealRequirement, ExtractedFields
+from deal_board.config import DEFAULT_MODEL, load_settings
+from deal_board.extractors import ExtractionError, parse_requirement
+from deal_board.schema import DealRequirement, ExtractedFields
 
-# A cheap model. Note: Haiku 5.5 accepts a forced tool_choice, but Opus 5.5 and Sonnet 5.5
-# reject it with a 400. Switching to those would need tool_choice "auto" plus a prompt instruction.
-DEFAULT_MODEL = "claude-haiku-5-5"
+# DEFAULT_MODEL lives in deal_board.config (with the note on why Haiku); re-exported here for
+# anything that imported it from this module.
+__all__ = ["DEFAULT_MODEL", "INPUT_SCHEMA", "PROMPT_VERSION", "SYSTEM_PROMPT", "TOOL", "ClaudeExtractor", "Usage"]
 
 SYSTEM_PROMPT = """You extract deal requirements from posts on a real estate broker referral board.
 
@@ -39,7 +45,8 @@ Broker shorthand: SFR = single-family residence; NNN = triple-net lease; BOM = b
 BOV = broker opinion of value; NOI = net operating income; cap = cap rate; \
 1031 = tax-deferred exchange; 2-flat = two-unit building; co-op agent = cooperating agent."""
 
-def _strict_schema(schema: dict) -> dict:
+
+def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Adapt the Pydantic schema for tool `strict: true` (API-enforced schema, enums included).
 
     Strict mode needs `additionalProperties: false` on objects and every property listed in
@@ -48,7 +55,7 @@ def _strict_schema(schema: dict) -> dict:
     """
     schema = copy.deepcopy(schema)
 
-    def walk(node):
+    def walk(node: object) -> None:
         if isinstance(node, dict):
             node.pop("default", None)
             node.pop("minimum", None)
@@ -65,17 +72,19 @@ def _strict_schema(schema: dict) -> dict:
     return schema
 
 
-TOOL = {
+# The tool's input schema as plain JSON, kept by name so tests can inspect it (ToolParam types
+# input_schema as a narrow TypedDict that doesn't list strict mode's extra keys).
+INPUT_SCHEMA: dict[str, Any] = _strict_schema(ExtractedFields.model_json_schema())
+
+TOOL: ToolParam = {
     "name": "record_deal_requirement",
     "description": "Record the structured requirement extracted from one post.",
-    "input_schema": _strict_schema(ExtractedFields.model_json_schema()),
+    "input_schema": INPUT_SCHEMA,
     "strict": True,
 }
 
 # Changes whenever the prompt or schema changes, so saved eval results say which version ran.
-PROMPT_VERSION = hashlib.sha256(
-    (SYSTEM_PROMPT + json.dumps(TOOL, sort_keys=True)).encode()
-).hexdigest()[:8]
+PROMPT_VERSION = hashlib.sha256((SYSTEM_PROMPT + json.dumps(TOOL, sort_keys=True)).encode()).hexdigest()[:8]
 
 
 @dataclass(frozen=True)
@@ -86,13 +95,74 @@ class Usage:
     output_tokens: int
 
 
+# --- The slice of the Anthropic client this module uses -----------------------------------------
+# Structural types, so `anthropic.Anthropic` and the duck-typed fakes in the tests both fit.
+
+
+class _ContentBlock(Protocol):
+    @property
+    def type(self) -> str: ...
+
+
+class _ToolUseBlock(_ContentBlock, Protocol):
+    @property
+    def input(self) -> dict[str, object]: ...
+
+
+class _Response(Protocol):
+    @property
+    def stop_reason(self) -> str | None: ...
+
+    @property
+    def content(self) -> Sequence[_ContentBlock]: ...
+
+
+class _Messages(Protocol):
+    # Exactly the arguments extract_raw passes, typed with the SDK's own param types, so mypy
+    # checks the call against anthropic's real (overloaded) create and the fakes still fit.
+    def create(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: str,
+        tools: list[ToolParam],
+        tool_choice: ToolChoiceToolParam,
+        messages: list[MessageParam],
+    ) -> _Response: ...
+
+
+class MessagesClient(Protocol):
+    """What ClaudeExtractor needs from a client: `client.messages.create(...)`."""
+
+    @property
+    def messages(self) -> _Messages: ...
+
+
+def _is_tool_use(block: _ContentBlock) -> TypeGuard[_ToolUseBlock]:
+    return block.type == "tool_use"
+
+
+def _default_client(api_key: str | None) -> anthropic.Anthropic:
+    """An Anthropic client using the key from deal_board.config, or a clear error without one.
+
+    Raising here, instead of passing api_key=None, stops the SDK from falling back to its own
+    environment lookup (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN) behind config's back.
+    """
+    if api_key is None:
+        raise RuntimeError("ANTHROPIC_API_KEY is not set; pass a client or set the key to use ClaudeExtractor")
+    return anthropic.Anthropic(api_key=api_key)
+
+
 class ClaudeExtractor:
     name = "claude"
 
-    def __init__(self, client=None, model: str | None = None):
-        # A client can be passed in, so tests can use a fake one and run offline.
-        self.client = client or anthropic.Anthropic()
-        self.model = model or os.environ.get("DEAL_MODEL", DEFAULT_MODEL)
+    def __init__(self, client: MessagesClient | None = None, model: str | None = None) -> None:
+        # A client can be passed in, so tests can use a fake one and run offline. Settings are
+        # read once, here: the key (only when no client is given) and the default model.
+        settings = load_settings()
+        self.client: MessagesClient = client or _default_client(settings.api_key_value())
+        self.model = model or settings.deal_model
         # Usage of the most recent extract_raw call; None before any call or when the response
         # carries no usage (fake clients). Reset per call, so a stale value is never reported.
         self.last_usage: Usage | None = None
@@ -100,7 +170,7 @@ class ClaudeExtractor:
     def extract(self, text: str) -> DealRequirement:
         return parse_requirement(self.extract_raw(text))
 
-    def extract_raw(self, text: str) -> dict:
+    def extract_raw(self, text: str) -> dict[str, object]:
         """The tool call's input exactly as Claude returned it, before validation.
 
         eval.py saves this so results can be re-scored later without calling the API again.
@@ -120,7 +190,7 @@ class ClaudeExtractor:
             self.last_usage = Usage(usage.input_tokens, usage.output_tokens)
         if response.stop_reason == "refusal":
             raise ExtractionError("model refused")
-        call = next((b for b in response.content if b.type == "tool_use"), None)
+        call = next((b for b in response.content if _is_tool_use(b)), None)
         if call is None:
             raise ExtractionError(f"no tool call (stop_reason={response.stop_reason})")
         return call.input

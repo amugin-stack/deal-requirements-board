@@ -5,20 +5,23 @@ FastAPI dependency overrides, so these tests pin the API's own behavior: request
 validation, response shape, follow-up wording, error mapping, and log hygiene.
 The last test runs the real matcher against the real broker data when it exists.
 """
+
 import logging
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date
 
 import anthropic
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-import api
-from brokers import Broker, load_brokers
-from extractors import ExtractionError
-from schema import DealRequirement
+from deal_board import api
+from deal_board import brokers as broker_store
+from deal_board.brokers import Broker, load_brokers
+from deal_board.extractors import ExtractionError
+from deal_board.schema import DealRequirement, PropertyType, Timeline, TransactionType
 
 AS_OF = date(2026, 10, 20)
 # Distinctive enough that a substring hit in logs or a response can only be a leak.
@@ -29,6 +32,7 @@ UPSTREAM_SECRET = "upstream secret sk-ant-XXXX"
 
 
 # --- fakes -------------------------------------------------------------------
+
 
 class Match(BaseModel):
     broker: Broker
@@ -42,7 +46,7 @@ class MatchResult(BaseModel):
 
 
 class FakeExtractor:
-    def __init__(self, result: DealRequirement | Exception, name: str = "claude"):
+    def __init__(self, result: DealRequirement | Exception, name: str = "claude") -> None:
         self.name = name
         self._result = result
         self.calls: list[str] = []
@@ -60,7 +64,7 @@ class FakeMatcher:
 
     matches: list[Match] = field(default_factory=list)
     excluded: int = 0
-    calls: list[tuple] = field(default_factory=list)
+    calls: list[tuple[DealRequirement, list[Broker], date]] = field(default_factory=list)
 
     def __call__(self, req: DealRequirement, brokers: list[Broker], as_of: date) -> MatchResult:
         self.calls.append((req, brokers, as_of))
@@ -99,41 +103,43 @@ FULL_TX_DEAL = DealRequirement(
     is_deal_request=True,
     state="TX",
     city="Austin",
-    property_type="multifamily",
-    transaction_type="buy",
+    property_type=PropertyType.multifamily,
+    transaction_type=TransactionType.buy,
     deal_value_usd=3_200_000,
-    timeline="31_to_90_days",
+    timeline=Timeline.days_31_to_90,
     notes="12 units",
 )
 # Missing state AND transaction_type: the state question must win on priority.
-PORTLAND_NO_STATE = DealRequirement(is_deal_request=True, city="Portland", property_type="retail")
+PORTLAND_NO_STATE = DealRequirement(is_deal_request=True, city="Portland", property_type=PropertyType.retail)
 NOT_A_DEAL = DealRequirement(is_deal_request=False)
 
 
 def api_status_error() -> anthropic.APIStatusError:
-    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-    return anthropic.APIStatusError(UPSTREAM_SECRET, response=httpx.Response(500, request=request), body=None)
+    # httpx2, not httpx: it is the HTTP library anthropic (and starlette's TestClient) are built on.
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    return anthropic.APIStatusError(UPSTREAM_SECRET, response=httpx2.Response(500, request=request), body=None)
 
 
 def api_connection_error() -> anthropic.APIConnectionError:
-    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
     return anthropic.APIConnectionError(message=UPSTREAM_SECRET, request=request)
 
 
 # --- fixtures ----------------------------------------------------------------
 
+
 @pytest.fixture
-def client():
+def client() -> Iterator[TestClient]:
     yield TestClient(api.app)
     api.app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def matcher():
+def matcher() -> FakeMatcher:
     return FakeMatcher()
 
 
-def wire(extractor: FakeExtractor, matcher: FakeMatcher | None = None, brokers: list[Broker] = BROKERS):
+def wire(extractor: FakeExtractor, matcher: FakeMatcher | None = None, brokers: list[Broker] = BROKERS) -> None:
     overrides = api.app.dependency_overrides
     overrides[api.get_extractor] = lambda: extractor
     overrides[api.get_brokers] = lambda: brokers
@@ -144,7 +150,8 @@ def wire(extractor: FakeExtractor, matcher: FakeMatcher | None = None, brokers: 
 
 # --- success paths -----------------------------------------------------------
 
-def test_full_deal_returns_matches_in_matcher_order(client, matcher):
+
+def test_full_deal_returns_matches_in_matcher_order(client: TestClient, matcher: FakeMatcher) -> None:
     matcher.matches = [
         Match(broker=BROKER_A, score=87, reasons=["licensed in TX", "Travis County"]),
         Match(broker=BROKER_B, score=61, reasons=["licensed in TX"]),
@@ -191,7 +198,7 @@ def test_full_deal_returns_matches_in_matcher_order(client, matcher):
     assert as_of == AS_OF
 
 
-def test_extractor_name_is_reported(client, matcher):
+def test_extractor_name_is_reported(client: TestClient, matcher: FakeMatcher) -> None:
     wire(FakeExtractor(FULL_TX_DEAL, name="regex"), matcher)
 
     resp = client.post("/match", json={"text": POST})
@@ -200,7 +207,7 @@ def test_extractor_name_is_reported(client, matcher):
     assert resp.json()["extractor"] == "regex"
 
 
-def test_missing_state_excludes_everyone_and_asks_for_state(client, matcher):
+def test_missing_state_excludes_everyone_and_asks_for_state(client: TestClient, matcher: FakeMatcher) -> None:
     wire(FakeExtractor(PORTLAND_NO_STATE), matcher)
 
     resp = client.post("/match", json={"text": "Retail space wanted in Portland, who can help?"})
@@ -216,7 +223,7 @@ def test_missing_state_excludes_everyone_and_asks_for_state(client, matcher):
     )
 
 
-def test_follow_up_targets_remaining_gap_when_state_is_known(client, matcher):
+def test_follow_up_targets_remaining_gap_when_state_is_known(client: TestClient, matcher: FakeMatcher) -> None:
     # Re-validate so missing_fields is recomputed; model_copy skips validators.
     no_timeline = DealRequirement.model_validate({**FULL_TX_DEAL.model_dump(), "timeline": None})
     wire(FakeExtractor(no_timeline), matcher)
@@ -229,7 +236,7 @@ def test_follow_up_targets_remaining_gap_when_state_is_known(client, matcher):
     assert "licensed in that state" not in question
 
 
-def test_non_deal_post_has_no_matches_and_no_follow_up(client, matcher):
+def test_non_deal_post_has_no_matches_and_no_follow_up(client: TestClient, matcher: FakeMatcher) -> None:
     wire(FakeExtractor(NOT_A_DEAL), matcher)
 
     resp = client.post("/match", json={"text": "Congrats to our team on a record Q3!"})
@@ -245,6 +252,7 @@ def test_non_deal_post_has_no_matches_and_no_follow_up(client, matcher):
 
 # --- request validation ------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -255,7 +263,9 @@ def test_non_deal_post_has_no_matches_and_no_follow_up(client, matcher):
         pytest.param({"body": POST}, id="wrong-field"),
     ],
 )
-def test_invalid_body_is_rejected_before_extraction(client, matcher, payload):
+def test_invalid_body_is_rejected_before_extraction(
+    client: TestClient, matcher: FakeMatcher, payload: dict[str, str]
+) -> None:
     extractor = FakeExtractor(FULL_TX_DEAL)
     wire(extractor, matcher)
 
@@ -278,7 +288,7 @@ def test_invalid_body_is_rejected_before_extraction(client, matcher, payload):
         pytest.param("   " + "x" * 4000 + "\n\n", id="4000-chars-padded"),
     ],
 )
-def test_length_limit_applies_after_stripping(client, matcher, text):
+def test_length_limit_applies_after_stripping(client: TestClient, matcher: FakeMatcher, text: str) -> None:
     extractor = FakeExtractor(FULL_TX_DEAL)
     wire(extractor, matcher)
 
@@ -290,7 +300,8 @@ def test_length_limit_applies_after_stripping(client, matcher, text):
 
 # --- extractor failures ------------------------------------------------------
 
-def test_extraction_error_is_422_with_readable_detail(client, matcher):
+
+def test_extraction_error_is_422_with_readable_detail(client: TestClient, matcher: FakeMatcher) -> None:
     wire(FakeExtractor(ExtractionError("model returned no tool call")), matcher)
 
     resp = client.post("/match", json={"text": POST})
@@ -303,7 +314,9 @@ def test_extraction_error_is_422_with_readable_detail(client, matcher):
 
 
 @pytest.mark.parametrize("error", [api_status_error, api_connection_error], ids=["status", "connection"])
-def test_upstream_api_error_is_503_without_leaking_upstream_text(client, matcher, error):
+def test_upstream_api_error_is_503_without_leaking_upstream_text(
+    client: TestClient, matcher: FakeMatcher, error: Callable[[], Exception]
+) -> None:
     wire(FakeExtractor(error()), matcher)
 
     resp = client.post("/match", json={"text": POST})
@@ -317,6 +330,7 @@ def test_upstream_api_error_is_503_without_leaking_upstream_text(client, matcher
 
 # --- log hygiene -------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "outcome, status",
     [
@@ -325,7 +339,13 @@ def test_upstream_api_error_is_503_without_leaking_upstream_text(client, matcher
         pytest.param(api_status_error(), 503, id="api-error"),
     ],
 )
-def test_post_text_never_reaches_logs(client, matcher, caplog, outcome, status):
+def test_post_text_never_reaches_logs(
+    client: TestClient,
+    matcher: FakeMatcher,
+    caplog: pytest.LogCaptureFixture,
+    outcome: DealRequirement | Exception,
+    status: int,
+) -> None:
     caplog.set_level(logging.DEBUG)
     wire(FakeExtractor(outcome), matcher)
 
@@ -338,7 +358,10 @@ def test_post_text_never_reaches_logs(client, matcher, caplog, outcome, status):
 
 # --- review regressions ------------------------------------------------------
 
-def test_unexpected_extractor_crash_is_fixed_500_without_post_text(client, matcher, caplog):
+
+def test_unexpected_extractor_crash_is_fixed_500_without_post_text(
+    client: TestClient, matcher: FakeMatcher, caplog: pytest.LogCaptureFixture
+) -> None:
     # The frozen regex baseline raises OverflowError on a 400-digit dollar amount.
     caplog.set_level(logging.DEBUG)
     wire(FakeExtractor(OverflowError(f"cannot convert {POST}")), matcher)
@@ -351,7 +374,7 @@ def test_unexpected_extractor_crash_is_fixed_500_without_post_text(client, match
     assert matcher.calls == []
 
 
-def test_real_regex_extractor_overflow_is_500_not_crash(client, matcher):
+def test_real_regex_extractor_overflow_is_500_not_crash(client: TestClient, matcher: FakeMatcher) -> None:
     api.app.dependency_overrides[api.get_matcher] = lambda: matcher
     api.app.dependency_overrides[api.get_extractor] = lambda: api._regex_extractor()
 
@@ -363,14 +386,14 @@ def test_real_regex_extractor_overflow_is_500_not_crash(client, matcher):
     assert resp.json() == {"detail": "extraction failed unexpectedly"}
 
 
-def test_sdk_loggers_stay_above_debug_even_with_debug_root(caplog):
+def test_sdk_loggers_stay_above_debug_even_with_debug_root(caplog: pytest.LogCaptureFixture) -> None:
     # The Anthropic SDK logs request bodies (the post) at DEBUG.
     caplog.set_level(logging.DEBUG)
     for name in ("anthropic", "anthropic._base_client", "httpx", "httpx2"):
         assert logging.getLogger(name).getEffectiveLevel() >= logging.WARNING, name
 
 
-def test_oversize_body_is_413_before_parsing(client, matcher):
+def test_oversize_body_is_413_before_parsing(client: TestClient, matcher: FakeMatcher) -> None:
     extractor = FakeExtractor(FULL_TX_DEAL)
     wire(extractor, matcher)
 
@@ -381,12 +404,12 @@ def test_oversize_body_is_413_before_parsing(client, matcher):
     assert extractor.calls == []
 
 
-def test_oversize_chunked_body_without_length_is_413(client, matcher):
+def test_oversize_chunked_body_without_length_is_413(client: TestClient, matcher: FakeMatcher) -> None:
     extractor = FakeExtractor(FULL_TX_DEAL)
     wire(extractor, matcher)
     chunk = b" " * 16_384
 
-    def stream():
+    def stream() -> Iterator[bytes]:
         yield b'{"text": "'
         for _ in range(api.MAX_BODY_BYTES // len(chunk) + 1):
             yield chunk
@@ -398,21 +421,21 @@ def test_oversize_chunked_body_without_length_is_413(client, matcher):
     assert extractor.calls == []
 
 
-def test_openapi_documents_error_responses(client):
+def test_openapi_documents_error_responses(client: TestClient) -> None:
     responses = client.get("/openapi.json").json()["paths"]["/match"]["post"]["responses"]
     assert {"200", "413", "422", "500", "503"} <= set(responses)
 
 
 @pytest.fixture
-def fresh_extractor_cache(monkeypatch):
+def fresh_extractor_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[dict[str, object]]]:
     """Clears the extractor caches and replaces the Anthropic client so nothing hits the network."""
-    built: list[dict] = []
+    built: list[dict[str, object]] = []
 
     class FakeAnthropic:
-        def __init__(self, **kwargs):
+        def __init__(self, **kwargs: object) -> None:
             built.append(kwargs)
 
-    monkeypatch.setattr(api.anthropic, "Anthropic", FakeAnthropic)
+    monkeypatch.setattr(anthropic, "Anthropic", FakeAnthropic)  # the module object api.py calls through
     api._claude_extractor.cache_clear()
     api._regex_extractor.cache_clear()
     yield built
@@ -430,7 +453,13 @@ def fresh_extractor_cache(monkeypatch):
         pytest.param("", None, "regex", id="empty-key"),
     ],
 )
-def test_extractor_selection_follows_env(monkeypatch, fresh_extractor_cache, key, forced, expected):
+def test_extractor_selection_follows_env(
+    monkeypatch: pytest.MonkeyPatch,
+    fresh_extractor_cache: list[dict[str, object]],
+    key: str | None,
+    forced: str | None,
+    expected: str,
+) -> None:
     for name, value in (("ANTHROPIC_API_KEY", key), ("DEAL_EXTRACTOR", forced)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
@@ -440,7 +469,9 @@ def test_extractor_selection_follows_env(monkeypatch, fresh_extractor_cache, key
     assert api.get_extractor().name == expected
 
 
-def test_claude_client_has_bounded_timeout_and_retries(monkeypatch, fresh_extractor_cache):
+def test_claude_client_has_bounded_timeout_and_retries(
+    monkeypatch: pytest.MonkeyPatch, fresh_extractor_cache: list[dict[str, object]]
+) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.delenv("DEAL_EXTRACTOR", raising=False)
 
@@ -448,13 +479,18 @@ def test_claude_client_has_bounded_timeout_and_retries(monkeypatch, fresh_extrac
     api.get_extractor()
 
     assert fresh_extractor_cache == [
-        {"timeout": api.CLAUDE_TIMEOUT_SECONDS, "max_retries": api.CLAUDE_MAX_RETRIES}
-    ]  # built once, with bounds
+        {"api_key": "test-key", "timeout": api.CLAUDE_TIMEOUT_SECONDS, "max_retries": api.CLAUDE_MAX_RETRIES}
+    ]  # built once, with bounds, and the key passed explicitly from deal_board.config
 
 
-def test_brokers_are_loaded_once(monkeypatch):
-    calls = []
-    monkeypatch.setattr(api.broker_store, "load_brokers", lambda: calls.append(1) or BROKERS)
+def test_brokers_are_loaded_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+
+    def counting_load_brokers() -> list[Broker]:
+        calls.append(1)
+        return BROKERS
+
+    monkeypatch.setattr(broker_store, "load_brokers", counting_load_brokers)  # the module api.py calls through
     api.get_brokers.cache_clear()
     try:
         assert api.get_brokers() is api.get_brokers()
@@ -465,8 +501,9 @@ def test_brokers_are_loaded_once(monkeypatch):
 
 # --- integration with the real matcher ---------------------------------------
 
-def test_real_matcher_only_returns_brokers_licensed_in_the_deal_state(client):
-    pytest.importorskip("matcher")
+
+def test_real_matcher_only_returns_brokers_licensed_in_the_deal_state(client: TestClient) -> None:
+    pytest.importorskip("deal_board.matcher")
     # Real get_matcher and get_brokers; only the extractor and the clock are pinned.
     api.app.dependency_overrides[api.get_extractor] = lambda: FakeExtractor(FULL_TX_DEAL)
     api.app.dependency_overrides[api.get_as_of] = lambda: AS_OF

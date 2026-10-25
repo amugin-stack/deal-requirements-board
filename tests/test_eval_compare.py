@@ -1,20 +1,21 @@
 """--compare, --rescore and compare_results in scripts/eval.py (P6 contract). Written blind to the
 implementation. Reads real results files but never writes into results/."""
+
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from schema import KEY_FIELDS
-from scoring import SCORED_FIELDS, exact_mcnemar_p, load_posts
-from scripts import eval as ev
+from deal_board.cli import eval as ev
+from deal_board.schema import KEY_FIELDS, JSONObject
+from deal_board.scoring import SCORED_FIELDS, exact_mcnemar_p, load_posts
 
 ROOT = Path(__file__).parent.parent
 RESULTS = ROOT / "results"
 POSTS_PATH = "data/posts.jsonl"
 HOLDOUT_PATH = "data/holdout.jsonl"
-LABELS: dict[str, dict] = {p["id"]: p["label"] for p in load_posts(ROOT / POSTS_PATH)}
+LABELS: dict[str, JSONObject] = {p["id"]: p["label"] for p in load_posts(ROOT / POSTS_PATH)}
 REGEX_RUN = RESULTS / "regex_20261024T224817Z.json"
 CLAUDE_RUN = RESULTS / "claude_20261024T234359Z.json"
 SUMMARY = RESULTS / "baseline-v1_comparison.json"
@@ -25,7 +26,7 @@ def listing() -> list[str]:
     return sorted(p.name for p in RESULTS.iterdir())
 
 
-def raw(pid: str, *, wrong_state: bool = False) -> dict:
+def raw(pid: str, *, wrong_state: bool = False) -> JSONObject:
     """The label as a raw output (correct on every field), optionally with the state wrong."""
     out = {**LABELS[pid], "notes": None}
     if wrong_state:
@@ -33,35 +34,56 @@ def raw(pid: str, *, wrong_state: bool = False) -> dict:
     return out
 
 
-def record(pid: str, **kw: Any) -> dict:
-    r = raw(pid, **kw)
+def record(pid: str, *, wrong_state: bool = False) -> JSONObject:
+    r = raw(pid, wrong_state=wrong_state)
     return {"raw": r, "prediction": r, "error": None}
 
 
-def saved(datasets: dict[str, tuple[str, dict[str, dict]]]) -> dict:
+def saved(datasets: dict[str, tuple[str, dict[str, JSONObject]]]) -> JSONObject:
     """A minimal saved-results dict: {name: (path, records)}."""
-    return {"extractor": "fake", "model": None, "datasets": {
-        name: {"path": path, "records": recs} for name, (path, recs) in datasets.items()}}
+    return {
+        "extractor": "fake",
+        "model": None,
+        "datasets": {name: {"path": path, "records": recs} for name, (path, recs) in datasets.items()},
+    }
 
 
 # Deal posts s01, s03, s04 have a labeled state; s02's is null; s05 is a non-deal post.
 # A (named posts_dev) covers s01..s05 with state wrong on s01 and s04; B (named posts) covers
 # s01..s04 plus s07 with state wrong on s03. Common ids: s01..s04.
-A = saved({
-    "posts_dev": (POSTS_PATH, {
-        "s04": record("s04", wrong_state=True), "s01": record("s01", wrong_state=True),
-        "s02": record("s02"), "s03": record("s03"), "s05": record("s05")}),
-    "holdout": (HOLDOUT_PATH, {}),
-})
-B = saved({
-    "posts": (POSTS_PATH, {
-        "s01": record("s01"), "s02": record("s02"), "s03": record("s03", wrong_state=True),
-        "s04": record("s04"), "s07": record("s07", wrong_state=True)}),
-})
+A = saved(
+    {
+        "posts_dev": (
+            POSTS_PATH,
+            {
+                "s04": record("s04", wrong_state=True),
+                "s01": record("s01", wrong_state=True),
+                "s02": record("s02"),
+                "s03": record("s03"),
+                "s05": record("s05"),
+            },
+        ),
+        "holdout": (HOLDOUT_PATH, {}),
+    }
+)
+B = saved(
+    {
+        "posts": (
+            POSTS_PATH,
+            {
+                "s01": record("s01"),
+                "s02": record("s02"),
+                "s03": record("s03", wrong_state=True),
+                "s04": record("s04"),
+                "s07": record("s07", wrong_state=True),
+            },
+        ),
+    }
+)
 
 
 @pytest.fixture(autouse=True)
-def results_untouched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def results_untouched(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     """Every test here leaves results/ exactly as it found it."""
     monkeypatch.setattr(ev, "RESULTS_DIR", tmp_path / "results")
     before = listing()
@@ -143,7 +165,7 @@ def test_eval_runs_found() -> None:
     assert REGEX_RUN in EVAL_RUNS and CLAUDE_RUN in EVAL_RUNS and SUMMARY not in EVAL_RUNS
 
 
-def test_cli_compare_real_files_prints_and_writes_nothing(tmp_path: Path, capsys) -> None:
+def test_cli_compare_real_files_prints_and_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """--compare on two real runs prints a McNemar comparison and writes no files."""
     ev.main(["--compare", str(REGEX_RUN), str(CLAUDE_RUN)])
     out = capsys.readouterr().out
@@ -151,19 +173,22 @@ def test_cli_compare_real_files_prints_and_writes_nothing(tmp_path: Path, capsys
     assert not (tmp_path / "results").exists() or not any((tmp_path / "results").iterdir())
 
 
-def test_cli_compare_dev_run_with_full_run(capsys) -> None:
+def test_cli_compare_dev_run_with_full_run(capsys: pytest.CaptureFixture[str]) -> None:
     """A posts_dev run compares with a full run's posts dataset."""
     dev_run = next(p for p in EVAL_RUNS if list(json.loads(p.read_text())["datasets"]) == ["posts_dev"])
     ev.main(["--compare", str(dev_run), str(CLAUDE_RUN)])
     assert "McNemar" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("argv", [
-    ["--rescore", str(SUMMARY)],
-    ["--compare", str(SUMMARY), str(REGEX_RUN)],
-    ["--compare", str(REGEX_RUN), str(SUMMARY)],
-])
-def test_summary_file_exits_2(argv: list[str], capsys) -> None:
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--rescore", str(SUMMARY)],
+        ["--compare", str(SUMMARY), str(REGEX_RUN)],
+        ["--compare", str(REGEX_RUN), str(SUMMARY)],
+    ],
+)
+def test_summary_file_exits_2(argv: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     """A JSON without datasets exits with status 2 and a one-line message, not a traceback."""
     with pytest.raises(SystemExit) as exc:
         ev.main(argv)

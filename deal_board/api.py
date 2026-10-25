@@ -11,15 +11,15 @@ Design notes:
 - The post text is user content and may hold client details. It is never logged; we log a short
   SHA-256 prefix and the length, which is enough to correlate a request without storing it.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from collections.abc import Callable, Sequence
 from datetime import date
 from functools import lru_cache
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Literal, Protocol, cast
 
 import anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -27,12 +27,14 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-import brokers as broker_store
-from brokers import Broker
-from extractors import ExtractionError, Extractor
-from followup import follow_up_question
-from schema import DealRequirement
+from deal_board import brokers as broker_store
+from deal_board.brokers import Broker
+from deal_board.config import load_settings
+from deal_board.extractors import ExtractionError, Extractor
+from deal_board.followup import follow_up_question
+from deal_board.schema import DealRequirement
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +65,7 @@ class MatchRequest(BaseModel):
     rather than sent to the extractor. The upper bound caps model cost and latency per request.
     """
 
-    text: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS)
-    ]
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS)]
 
 
 class BrokerMatch(BaseModel):
@@ -108,17 +108,27 @@ class ErrorDetail(BaseModel):
 
 # --- Matcher contract ---------------------------------------------------------------------------
 # Structural types for matcher.MatchResult, so this module type-checks without importing it.
+# Read-only properties, because this module only reads them: that makes them covariant, so
+# MatchResult's `list[Match]` fits `Sequence[MatchLike]` (a mutable attribute would be invariant).
 
 
 class MatchLike(Protocol):
-    broker: Broker
-    score: int
-    reasons: list[str]
+    @property
+    def broker(self) -> Broker: ...
+
+    @property
+    def score(self) -> int: ...
+
+    @property
+    def reasons(self) -> Sequence[str]: ...
 
 
 class MatchResultLike(Protocol):
-    matches: Sequence[MatchLike]
-    excluded_for_licensing: int
+    @property
+    def matches(self) -> Sequence[MatchLike]: ...
+
+    @property
+    def excluded_for_licensing(self) -> int: ...
 
 
 MatchFn = Callable[[DealRequirement, list[Broker], date], MatchResultLike]
@@ -130,12 +140,11 @@ MatchFn = Callable[[DealRequirement, list[Broker], date], MatchResultLike]
 def get_extractor() -> Extractor:
     """Claude when `ANTHROPIC_API_KEY` is set, unless `DEAL_EXTRACTOR=regex`; otherwise regex.
 
-    The environment is read on every call so the choice follows the current config, but the
+    Settings are read on every call so the choice follows the current config, but the
     Claude extractor itself is cached: it owns an HTTP client with a connection pool, and
     building one per request would throw that pool away each time.
     """
-    forced = os.environ.get("DEAL_EXTRACTOR", "").strip().lower()
-    if os.environ.get("ANTHROPIC_API_KEY") and forced != "regex":
+    if load_settings().use_claude:
         return _claude_extractor()
     return _regex_extractor()
 
@@ -143,15 +152,18 @@ def get_extractor() -> Extractor:
 @lru_cache(maxsize=1)
 def _claude_extractor() -> Extractor:
     # Imported here so the regex-only path never constructs an Anthropic client.
-    from extractors.claude import ClaudeExtractor
+    from deal_board.extractors.claude import ClaudeExtractor
 
-    client = anthropic.Anthropic(timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES)
+    settings = load_settings()
+    client = anthropic.Anthropic(
+        api_key=settings.api_key_value(), timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES
+    )
     return ClaudeExtractor(client=client)
 
 
 @lru_cache(maxsize=1)
 def _regex_extractor() -> Extractor:
-    from extractors.regex_baseline import RegexExtractor
+    from deal_board.extractors.regex_baseline import RegexExtractor
 
     return RegexExtractor()
 
@@ -186,7 +198,7 @@ def get_matcher() -> MatchFn:
     Only ImportError is mapped; any other error while importing is a bug and stays a 500.
     """
     try:
-        from matcher import match
+        from deal_board.matcher import match
     except ImportError as e:
         logger.error("matcher import failed: %s", type(e).__name__)
         raise MatcherUnavailable from e
@@ -212,11 +224,11 @@ class BodySizeLimit:
     into a 400, which would hide the 413.
     """
 
-    def __init__(self, app, max_bytes: int) -> None:
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
         self.app = app
         self.max_bytes = max_bytes
 
-    async def __call__(self, scope, receive, send) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -242,25 +254,24 @@ class BodySizeLimit:
             if not message.get("more_body", False):
                 break
 
-        replay = [{"type": "http.request", "body": b"".join(chunks), "more_body": False}]
+        replay: list[Message] = [{"type": "http.request", "body": b"".join(chunks), "more_body": False}]
         await self.app(scope, _replay(replay, then=receive), send)
 
     @staticmethod
-    async def _reject(send) -> None:
+    async def _reject(send: Send) -> None:
         response = JSONResponse(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             content={"detail": "request body too large"},
         )
-        await send({"type": "http.response.start", "status": response.status_code,
-                    "headers": response.raw_headers})
+        await send({"type": "http.response.start", "status": response.status_code, "headers": response.raw_headers})
         await send({"type": "http.response.body", "body": response.body})
 
 
-def _replay(messages: list[dict], then=None):
+def _replay(messages: list[Message], then: Receive | None = None) -> Receive:
     """An ASGI `receive` that returns `messages` in order, then defers to `then` (disconnects)."""
     pending = list(messages)
 
-    async def receive():
+    async def receive() -> Message:
         if pending:
             return pending.pop(0)
         if then is not None:
@@ -277,9 +288,7 @@ app.add_middleware(BodySizeLimit, max_bytes=MAX_BODY_BYTES)
 def _matcher_unavailable(_: Request, __: MatcherUnavailable) -> JSONResponse:
     # A handler rather than an HTTPException because it is raised while resolving a dependency,
     # before the route body (and its try/except) runs.
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": "matcher unavailable"}
-    )
+    return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": "matcher unavailable"})
 
 
 @app.exception_handler(RequestValidationError)
@@ -334,15 +343,19 @@ def match_post(
     try:
         requirement = extractor.extract(text)
     except ExtractionError as e:
-        logger.warning("extraction failed post=%s extractor=%s error=%s",
-                       post_id, extractor.name, type(e).__name__)
+        logger.warning("extraction failed post=%s extractor=%s error=%s", post_id, extractor.name, type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="could not extract a deal requirement from this post",
         ) from e
     except anthropic.APIError as e:
-        logger.error("extraction service error post=%s extractor=%s error=%s status=%s",
-                     post_id, extractor.name, type(e).__name__, getattr(e, "status_code", None))
+        logger.error(
+            "extraction service error post=%s extractor=%s error=%s status=%s",
+            post_id,
+            extractor.name,
+            type(e).__name__,
+            getattr(e, "status_code", None),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="extraction service unavailable",
@@ -351,8 +364,7 @@ def match_post(
         # An extractor bug (e.g. the frozen regex baseline overflows on a 400-digit number).
         # Mapped here, not left to the server, so the fixed detail and post-id log line hold and
         # no exception text, which might quote the post, reaches the response or a traceback.
-        logger.error("extractor crashed post=%s extractor=%s error=%s",
-                     post_id, extractor.name, type(e).__name__)
+        logger.error("extractor crashed post=%s extractor=%s error=%s", post_id, extractor.name, type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="extraction failed unexpectedly",
@@ -374,11 +386,19 @@ def match_post(
         for m in result.matches
     ]
 
-    logger.info("matched post=%s chars=%d extractor=%s matches=%d excluded=%d",
-                post_id, len(text), extractor.name, len(matches), result.excluded_for_licensing)
+    logger.info(
+        "matched post=%s chars=%d extractor=%s matches=%d excluded=%d",
+        post_id,
+        len(text),
+        extractor.name,
+        len(matches),
+        result.excluded_for_licensing,
+    )
 
     return MatchResponse(
-        extractor=extractor.name,
+        # Extractor.name is a plain str; MatchResponse validates it against the Literal at runtime
+        # (an unknown name fails validation, as before), so the cast only informs the type checker.
+        extractor=cast(Literal["claude", "regex"], extractor.name),
         requirement=requirement,
         matches=matches,
         excluded_for_licensing=result.excluded_for_licensing,

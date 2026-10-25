@@ -1,34 +1,52 @@
 """The raw-output cache, per-call usage, cost, --repeats and save() rules in scripts/eval.py (P6 contract).
 Written blind to the implementation. Every Claude extractor uses a fake client; nothing touches the network."""
+
+import dataclasses
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace as NS
-from typing import Any
+from typing import Protocol
 
 import pytest
 
-from extractors.claude import PROMPT_VERSION, ClaudeExtractor, Usage
-from schema import DealRequirement, KEY_FIELDS
-from scripts import eval as ev
+from deal_board.cli import eval as ev
+from deal_board.extractors import ExtractionError
+from deal_board.extractors.claude import PROMPT_VERSION, ClaudeExtractor, Usage
+from deal_board.schema import KEY_FIELDS, DealRequirement, JSONObject
 
 ROOT = Path(__file__).parent.parent
 MODEL = "claude-haiku-5-5"
 N_DEV_POSTS = 24
 IN_TOK, OUT_TOK = 100, 20
-OUTPUT = {"is_deal_request": True, "state": "TX", "city": "Austin", "property_type": "single_family",
-          "transaction_type": "buy", "deal_value_usd": 650000, "timeline": "31_to_90_days", "notes": None}
-POSTS = [{"id": f"t{i}", "text": f"Need an agent in Austin, TX, post {i}",
-          "label": {"is_deal_request": True, **dict.fromkeys(KEY_FIELDS)}} for i in range(3)]
+OUTPUT = {
+    "is_deal_request": True,
+    "state": "TX",
+    "city": "Austin",
+    "property_type": "single_family",
+    "transaction_type": "buy",
+    "deal_value_usd": 650000,
+    "timeline": "31_to_90_days",
+    "notes": None,
+}
+POSTS = [
+    {
+        "id": f"t{i}",
+        "text": f"Need an agent in Austin, TX, post {i}",
+        "label": {"is_deal_request": True, **dict.fromkeys(KEY_FIELDS)},
+    }
+    for i in range(3)
+]
 
 
 class FakeClient:
     """Answers every request with the same tool call (or a refusal) and counts calls."""
 
-    def __init__(self, output: dict | None = None, *, refuse: bool = False, usage: bool = True) -> None:
+    def __init__(self, output: JSONObject | None = None, *, refuse: bool = False, usage: bool = True) -> None:
         self.output, self.refuse, self.usage, self.calls, self.messages = output or OUTPUT, refuse, usage, 0, self
 
-    def create(self, **kwargs: Any) -> NS:
+    def create(self, **kwargs: object) -> NS:
         self.calls += 1
         extra = {"usage": NS(input_tokens=IN_TOK, output_tokens=OUT_TOK)} if self.usage else {}
         if self.refuse:
@@ -36,14 +54,21 @@ class FakeClient:
         return NS(stop_reason="tool_use", content=[NS(type="tool_use", input=dict(self.output))], **extra)
 
 
-def entry(text: str, model: str = MODEL, prompt_version: str = PROMPT_VERSION) -> dict:
+def entry(text: str, model: str = MODEL, prompt_version: str = PROMPT_VERSION) -> JSONObject:
     """A well-formed cache entry for text."""
-    return {"model": model, "prompt_version": prompt_version,
-            "text_sha256": hashlib.sha256(text.encode()).hexdigest(), "raw": dict(OUTPUT),
-            "error": None, "input_tokens": IN_TOK, "output_tokens": OUT_TOK, "latency_s": 0.5}
+    return {
+        "model": model,
+        "prompt_version": prompt_version,
+        "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "raw": dict(OUTPUT),
+        "error": None,
+        "input_tokens": IN_TOK,
+        "output_tokens": OUT_TOK,
+        "latency_s": 0.5,
+    }
 
 
-def cache(directory: Path, model: str = MODEL, prompt_version: str = PROMPT_VERSION) -> "ev.RawCache":
+def cache(directory: Path, model: str = MODEL, prompt_version: str = PROMPT_VERSION) -> ev.RawCache:
     return ev.RawCache(directory, model, prompt_version)
 
 
@@ -51,8 +76,14 @@ def results_listing() -> list[str]:
     return sorted(p.name for p in (ROOT / "results").iterdir())
 
 
+class RunMain(Protocol):
+    """The `claude_main` fixture: run ev.main once with CLI args, return that run's fake client."""
+
+    def __call__(self, *extra: str, results_dir: Path, cache_dir: Path) -> FakeClient: ...
+
+
 @pytest.fixture
-def claude_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def claude_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[RunMain]:
     """Run ev.main for the claude extractor with a fresh counting fake; returns (client, results_dir)."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy-not-a-real-key")
     monkeypatch.setattr(ev, "RESULTS_DIR", tmp_path / "results-default")
@@ -60,21 +91,36 @@ def claude_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
     def run(*extra: str, results_dir: Path, cache_dir: Path) -> FakeClient:
         client = FakeClient()
-        monkeypatch.setattr(ev, "make_extractor", lambda *a, **k: (
-            ClaudeExtractor(client=client), {"model": MODEL, "prompt_version": PROMPT_VERSION}))
-        ev.main(["--extractor", "claude", "--split", "dev", "--results-dir", str(results_dir),
-                 "--cache-dir", str(cache_dir), *extra])
+        monkeypatch.setattr(
+            ev,
+            "make_extractor",
+            lambda *a, **k: (ClaudeExtractor(client=client), {"model": MODEL, "prompt_version": PROMPT_VERSION}),
+        )
+        ev.main(
+            [
+                "--extractor",
+                "claude",
+                "--split",
+                "dev",
+                "--results-dir",
+                str(results_dir),
+                "--cache-dir",
+                str(cache_dir),
+                *extra,
+            ]
+        )
         return client
 
     yield run
     assert results_listing() == before
 
 
-def load_results(directory: Path) -> list[dict]:
+def load_results(directory: Path) -> list[JSONObject]:
     return [json.loads(p.read_text()) for p in sorted(directory.glob("*.json"))]
 
 
 # ---------- cache_key ----------
+
 
 def test_cache_key_formula_and_determinism() -> None:
     """cache_key is sha256(json.dumps([model, prompt_version, sha256(text)])) and is deterministic."""
@@ -87,8 +133,10 @@ def test_cache_key_formula_and_determinism() -> None:
 def test_cache_key_changes_with_each_part() -> None:
     """Changing model, prompt_version or text changes the key."""
     base = ev.cache_key("m", "v1", "text")
-    assert len({base, ev.cache_key("m2", "v1", "text"), ev.cache_key("m", "v2", "text"),
-                ev.cache_key("m", "v1", "text!")}) == 4
+    assert (
+        len({base, ev.cache_key("m2", "v1", "text"), ev.cache_key("m", "v2", "text"), ev.cache_key("m", "v1", "text!")})
+        == 4
+    )
 
 
 def test_cache_key_parts_cannot_collide_by_concatenation() -> None:
@@ -108,6 +156,7 @@ def test_model_name_never_becomes_a_path(tmp_path: Path, model: str) -> None:
 
 
 # ---------- RawCache get/put ----------
+
 
 def test_put_then_new_instance_hits(tmp_path: Path) -> None:
     """An entry written by one instance is served by a new instance on the same dir."""
@@ -161,10 +210,12 @@ def test_put_leaves_no_temp_files(tmp_path: Path) -> None:
     for t in ("a", "b"):
         c.put(t, entry(t))
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
-        f"{ev.cache_key(MODEL, PROMPT_VERSION, t)}.json" for t in ("a", "b"))
+        f"{ev.cache_key(MODEL, PROMPT_VERSION, t)}.json" for t in ("a", "b")
+    )
 
 
 # ---------- run_posts with a cache ----------
+
 
 def test_run_posts_miss_then_hit_on_new_instance(tmp_path: Path) -> None:
     """First run calls the API per post; a new instance on the same dir replays without calls."""
@@ -209,8 +260,9 @@ def test_extraction_errors_are_cached_and_replayed(tmp_path: Path) -> None:
 
 def test_api_exceptions_are_not_cached(tmp_path: Path) -> None:
     """A network/API exception propagates and leaves nothing in the cache."""
+
     class Boom(FakeClient):
-        def create(self, **kwargs: Any) -> NS:
+        def create(self, **kwargs: object) -> NS:
             raise ConnectionError("network down")
 
     with pytest.raises(ConnectionError):
@@ -219,6 +271,7 @@ def test_api_exceptions_are_not_cached(tmp_path: Path) -> None:
 
 
 # ---------- call dict and last_usage ----------
+
 
 def test_call_dict_on_fresh_and_cached_records(tmp_path: Path) -> None:
     """Fresh records carry tokens from usage and wall-clock latency; hits replay them with cached=True."""
@@ -244,7 +297,8 @@ def test_call_dict_without_usage_has_none_tokens() -> None:
 
 def test_regex_records_have_call_with_no_tokens() -> None:
     """The regex baseline gets a call dict with None tokens."""
-    from extractors.regex_baseline import RegexExtractor
+    from deal_board.extractors.regex_baseline import RegexExtractor
+
     records = ev.run_posts(RegexExtractor(), POSTS)
     assert all(r["call"]["input_tokens"] is None and r["call"]["cached"] is False for r in records.values())
 
@@ -276,7 +330,7 @@ def test_last_usage_reset_each_call() -> None:
 def test_last_usage_set_on_refusal() -> None:
     """Refused calls still bill, so last_usage is set even when extract_raw raises."""
     ext = ClaudeExtractor(client=FakeClient(refuse=True))
-    with pytest.raises(Exception):
+    with pytest.raises(ExtractionError, match="refused"):
         ext.extract_raw("post")
     assert ext.last_usage == Usage(input_tokens=IN_TOK, output_tokens=OUT_TOK)
 
@@ -284,11 +338,12 @@ def test_last_usage_set_on_refusal() -> None:
 def test_usage_is_frozen() -> None:
     """Usage is a frozen dataclass."""
     u = Usage(input_tokens=1, output_tokens=2)
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         u.input_tokens = 5  # type: ignore[misc]
 
 
 # ---------- cost and usage totals ----------
+
 
 def test_cost_usd_known_model() -> None:
     """Cost uses the per-million-token price table."""
@@ -347,7 +402,10 @@ def test_usage_totals_unknown_model_cost_is_none() -> None:
 
 # ---------- CLI: --repeats, --no-cache ----------
 
-def test_repeats_empty_cache_every_run_calls(claude_main, tmp_path: Path, capsys) -> None:
+
+def test_repeats_empty_cache_every_run_calls(
+    claude_main: RunMain, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """--repeats 3 on an empty cache writes _r1.._r3 files and calls the API 3x per post."""
     out_dir, cache_dir = tmp_path / "out", tmp_path / "cache"
     client = claude_main("--repeats", "3", results_dir=out_dir, cache_dir=cache_dir)
@@ -363,19 +421,18 @@ def test_repeats_empty_cache_every_run_calls(claude_main, tmp_path: Path, capsys
     assert "mean" in out and "min–max" in out
 
 
-def test_repeats_prewarmed_cache_run1_hits_rest_fresh(claude_main, tmp_path: Path) -> None:
+def test_repeats_prewarmed_cache_run1_hits_rest_fresh(claude_main: RunMain, tmp_path: Path) -> None:
     """On a warm cache, run 1 replays every post and runs 2 and 3 call the API for every post."""
     out_dir, cache_dir = tmp_path / "out", tmp_path / "cache"
     claude_main(results_dir=tmp_path / "warmup", cache_dir=cache_dir)
     client = claude_main("--repeats", "3", results_dir=out_dir, cache_dir=cache_dir)
     assert client.calls == 2 * N_DEV_POSTS
     usage = [r["usage"] for r in load_results(out_dir)]
-    assert [(u["api_calls"], u["cache_hits"]) for u in usage] == [
-        (0, N_DEV_POSTS), (N_DEV_POSTS, 0), (N_DEV_POSTS, 0)]
+    assert [(u["api_calls"], u["cache_hits"]) for u in usage] == [(0, N_DEV_POSTS), (N_DEV_POSTS, 0), (N_DEV_POSTS, 0)]
     assert usage[0]["cost_usd"] == 0.0 and usage[0]["input_tokens"] == 0
 
 
-def test_cached_run_records_are_marked(claude_main, tmp_path: Path) -> None:
+def test_cached_run_records_are_marked(claude_main: RunMain, tmp_path: Path) -> None:
     """A second invocation on a warm cache makes no calls and marks every record cached."""
     cache_dir = tmp_path / "cache"
     claude_main(results_dir=tmp_path / "a", cache_dir=cache_dir)
@@ -385,7 +442,7 @@ def test_cached_run_records_are_marked(claude_main, tmp_path: Path) -> None:
     assert all(r["call"]["cached"] for ds in result["datasets"].values() for r in ds["records"].values())
 
 
-def test_no_cache_flag_bypasses_cache(claude_main, tmp_path: Path) -> None:
+def test_no_cache_flag_bypasses_cache(claude_main: RunMain, tmp_path: Path) -> None:
     """--no-cache calls the API every time and writes no cache files."""
     cache_dir = tmp_path / "cache"
     first = claude_main("--no-cache", results_dir=tmp_path / "a", cache_dir=cache_dir)
@@ -396,7 +453,7 @@ def test_no_cache_flag_bypasses_cache(claude_main, tmp_path: Path) -> None:
     assert result["cache_enabled"] is False
 
 
-def test_claude_run_usage_and_cost(claude_main, tmp_path: Path) -> None:
+def test_claude_run_usage_and_cost(claude_main: RunMain, tmp_path: Path) -> None:
     """A fresh Claude run reports tokens and cost from the price table."""
     claude_main(results_dir=tmp_path / "out", cache_dir=tmp_path / "cache")
     (result,) = load_results(tmp_path / "out")
@@ -408,7 +465,7 @@ def test_claude_run_usage_and_cost(claude_main, tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("bad", ["0", "-1"])
-def test_repeats_must_be_positive(claude_main, tmp_path: Path, bad: str) -> None:
+def test_repeats_must_be_positive(claude_main: RunMain, tmp_path: Path, bad: str) -> None:
     """--repeats below 1 is rejected."""
     with pytest.raises(SystemExit):
         claude_main("--repeats", bad, results_dir=tmp_path / "out", cache_dir=tmp_path / "cache")
@@ -416,6 +473,7 @@ def test_repeats_must_be_positive(claude_main, tmp_path: Path, bad: str) -> None
 
 
 # ---------- CLI: regex run and save() ----------
+
 
 def test_regex_run_new_keys_and_no_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A regex run records zero usage, repeat 1 of 1, cache_enabled, and never creates a cache dir."""

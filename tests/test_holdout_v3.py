@@ -5,19 +5,25 @@ silently skew a score instead of failing loudly. These tests pin the shape and
 the labeling invariants that schema.py states, so a bad hand edit (by the owner
 overruling an adjudication, say) is caught before it reaches an eval.
 """
+
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from schema import ExtractedFields
+from deal_board.schema import ExtractedFields
 
 HOLDOUT_PATH = Path(__file__).resolve().parent.parent / "data" / "holdout_v3.jsonl"
 RECORD_KEYS = {"id", "source", "split", "tags", "text", "label", "label_note", "adjudication"}
 LABEL_KEYS = {
-    "is_deal_request", "state", "city", "property_type",
-    "transaction_type", "deal_value_usd", "timeline",
+    "is_deal_request",
+    "state",
+    "city",
+    "property_type",
+    "transaction_type",
+    "deal_value_usd",
+    "timeline",
 }
 EXPECTED_IDS = [f"v3-{i:02d}" for i in range(1, 26)]
 
@@ -69,9 +75,7 @@ def test_label_parses_through_schema(record: dict[str, Any]) -> None:
     assert parsed == label
 
 
-@pytest.mark.parametrize(
-    "record", [r for r in RECORDS if not r["label"]["is_deal_request"]], ids=lambda r: r["id"]
-)
+@pytest.mark.parametrize("record", [r for r in RECORDS if not r["label"]["is_deal_request"]], ids=lambda r: r["id"])
 def test_non_deal_posts_have_no_fields(record: dict[str, Any]) -> None:
     """A non-deal post has nothing to route or follow up on, so every field is null."""
     filled = {k: v for k, v in record["label"].items() if k != "is_deal_request" and v is not None}

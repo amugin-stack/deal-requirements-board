@@ -17,6 +17,7 @@ import, or an edit, is caught by the reference rule and the count checks.
 This harness was written blind to the posts: it asserts the contract, not the data. Everything
 is deterministic: pinned `AS_OF`, real broker CSV, no network, never the Claude extractor.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,15 +29,14 @@ from typing import Any, Literal, get_args
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response  # what starlette's TestClient returns (it is built on httpx2)
 
-import api
-import matcher
-from brokers import Broker, load_brokers
-from extractors import parse_requirement
-from extractors.regex_baseline import RegexExtractor
-from matcher import is_licensed  # bound now, so monkeypatching matcher.is_licensed can't alter it
-from schema import DealRequirement, State
+from deal_board import api, matcher
+from deal_board.brokers import Broker, load_brokers
+from deal_board.extractors import Extractor, parse_requirement
+from deal_board.extractors.regex_baseline import RegexExtractor
+from deal_board.matcher import is_licensed  # bound now, so monkeypatching matcher.is_licensed can't alter it
+from deal_board.schema import DealRequirement, JSONObject, State
 
 # --- fixed inputs -------------------------------------------------------------------------------
 
@@ -61,7 +61,15 @@ FIXED_422_DETAIL = "could not extract a deal requirement from this post"
 # Lowercase substrings that must never appear in a follow-up question. None of them occur in any
 # follow-up template, so a hit can only be text echoed from the post or the requirement.
 INJECTION_MARKERS: tuple[str, ...] = (
-    "ignore", "instruction", "system", "override", "{", "}", "tx-", "fx-", "everyone",
+    "ignore",
+    "instruction",
+    "system",
+    "override",
+    "{",
+    "}",
+    "tx-",
+    "fx-",
+    "everyone",
     "all brokers",
 )
 
@@ -82,19 +90,56 @@ EXPECTED_RECORDS = 30
 
 # The posts that return one or more matches under the regex extractor, pinned exactly so the
 # per-broker gate assertions in run (a) can't quietly go vacuous on empty match lists.
-REGEX_POSTS_WITH_MATCHES: frozenset[str] = frozenset({
-    "rt-01", "rt-02", "rt-03", "rt-04", "rt-05", "rt-06", "rt-07", "rt-09", "rt-10", "rt-11",
-    "rt-16", "rt-17", "rt-18", "rt-19", "rt-21", "rt-22", "rt-23", "rt-24", "rt-25", "rt-27",
-    "rt-28", "rt-30",
-})
+REGEX_POSTS_WITH_MATCHES: frozenset[str] = frozenset(
+    {
+        "rt-01",
+        "rt-02",
+        "rt-03",
+        "rt-04",
+        "rt-05",
+        "rt-06",
+        "rt-07",
+        "rt-09",
+        "rt-10",
+        "rt-11",
+        "rt-16",
+        "rt-17",
+        "rt-18",
+        "rt-19",
+        "rt-21",
+        "rt-22",
+        "rt-23",
+        "rt-24",
+        "rt-25",
+        "rt-27",
+        "rt-28",
+        "rt-30",
+    }
+)
 MIN_POSTS_WITH_MATCHES = 20  # a floor stated in the contract; the pinned set is the real check
 
 # Record ids whose regex-path response includes a broker licensed outside `expected_state`
 # (or any broker when the post names no state). Pinned at the join from the frozen baseline.
-KNOWN_REGEX_STATE_LEAKS: frozenset[str] = frozenset({
-    "rt-01", "rt-02", "rt-04", "rt-05", "rt-06", "rt-07", "rt-09", "rt-10",
-    "rt-11", "rt-16", "rt-17", "rt-18", "rt-21", "rt-27", "rt-28", "rt-30",
-})
+KNOWN_REGEX_STATE_LEAKS: frozenset[str] = frozenset(
+    {
+        "rt-01",
+        "rt-02",
+        "rt-04",
+        "rt-05",
+        "rt-06",
+        "rt-07",
+        "rt-09",
+        "rt-10",
+        "rt-11",
+        "rt-16",
+        "rt-17",
+        "rt-18",
+        "rt-21",
+        "rt-27",
+        "rt-28",
+        "rt-30",
+    }
+)
 
 CITY_ECHO_BUG = (
     "followup.py interpolates requirement.city verbatim into the follow-up question, so "
@@ -143,13 +188,13 @@ def injection_markers_in(text: str | None) -> list[str]:
     return [m for m in INJECTION_MARKERS if m in lowered]
 
 
-def read_records(path: Path) -> list[dict[str, Any]]:
+def read_records(path: Path) -> list[JSONObject]:
     """Parse a JSONL file into dicts, skipping blank lines. Raises if the file is missing."""
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def load_red_team() -> list[dict[str, Any]]:
+def load_red_team() -> list[JSONObject]:
     """The red-team posts, or [] if the file doesn't exist yet.
 
     Tolerating a missing file keeps the hostile-extractor tests collectable on their own; the
@@ -158,14 +203,14 @@ def load_red_team() -> list[dict[str, Any]]:
     return read_records(RED_TEAM_PATH) if RED_TEAM_PATH.exists() else []
 
 
-RECORDS: list[dict[str, Any]] = load_red_team()
+RECORDS: list[JSONObject] = load_red_team()
 RECORD_PARAMS = [pytest.param(rec, id=rec["id"]) for rec in RECORDS]
 
 
 # --- shared assertion ---------------------------------------------------------------------------
 
 
-def assert_response_is_compliant(body: dict[str, Any]) -> api.MatchResponse:
+def assert_response_is_compliant(body: JSONObject) -> api.MatchResponse:
     """Assertions 1-5 of the contract on a 200 body. Returns the validated response.
 
     The gate and the counts use the state exactly as the body reports it, not as validation
@@ -188,7 +233,10 @@ def assert_response_is_compliant(body: dict[str, Any]) -> api.MatchResponse:
         assert m.broker_id in BY_ID, f"unknown broker_id {m.broker_id!r}"
         record = BY_ID[m.broker_id]
         assert (m.license_number, m.license_type, m.name, m.source) == (
-            record.license_number, record.license_type, record.name, record.source
+            record.license_number,
+            record.license_type,
+            record.name,
+            record.source,
         ), f"{m.broker_id}: returned identity differs from the broker record"
         # 3. The gate, checked twice: production rule and independent restatement.
         assert is_licensed(record, state, AS_OF), f"{m.broker_id} not licensed in {state!r}"
@@ -230,7 +278,7 @@ def client() -> Iterator[TestClient]:
         api.app.dependency_overrides.clear()
 
 
-def wire(extractor: Any) -> None:
+def wire(extractor: Extractor) -> None:
     """Point the four dependencies at `extractor`, real brokers, the pinned date, the real matcher.
 
     The matcher is looked up at call time (`matcher.match`, not a bound reference), so a
@@ -268,16 +316,21 @@ def assert_regex_outcome(resp: Response) -> api.MatchResponse:
 
 
 REGEX_PARAMS = [
-    pytest.param(rec, id=rec["id"], marks=(
-        [pytest.mark.xfail(strict=True, reason=KNOWN_REGEX_BUGS[rec["id"]])]
-        if rec["id"] in KNOWN_REGEX_BUGS else []
-    ))
+    pytest.param(
+        rec,
+        id=rec["id"],
+        marks=(
+            [pytest.mark.xfail(strict=True, reason=KNOWN_REGEX_BUGS[rec["id"]])]
+            if rec["id"] in KNOWN_REGEX_BUGS
+            else []
+        ),
+    )
     for rec in RECORDS
 ]
 
 
 @pytest.mark.parametrize("rec", REGEX_PARAMS)
-def test_regex_post_never_returns_unlicensed_broker(client: TestClient, rec: dict[str, Any]) -> None:
+def test_regex_post_never_returns_unlicensed_broker(client: TestClient, rec: JSONObject) -> None:
     assert_regex_outcome(regex_response(client, rec["text"]))
 
 
@@ -286,8 +339,7 @@ def test_regex_path_is_not_vacuous(client: TestClient) -> None:
     with_matches = {
         rec["id"]
         for rec in RECORDS
-        if (resp := regex_response(client, rec["text"])).status_code == 200
-        and resp.json()["matches"]
+        if (resp := regex_response(client, rec["text"])).status_code == 200 and resp.json()["matches"]
     }
     assert len(with_matches) >= MIN_POSTS_WITH_MATCHES, sorted(with_matches)
     assert with_matches == REGEX_POSTS_WITH_MATCHES
@@ -350,26 +402,26 @@ class HostileCase:
     forbidden: tuple[str, ...] = ()
     xfail: str | None = None  # a known system bug: strict xfail, reported to the orchestrator
 
-    def param(self) -> Any:
+    def param(self) -> object:
         """This case as a pytest.param with its id (and strict xfail mark, if any)."""
         marks = [pytest.mark.xfail(strict=True, reason=self.xfail)] if self.xfail else []
         return pytest.param(self, id=self.id, marks=marks)
 
 
-def full_deal(state: str, **overrides: Any) -> DealRequirement:
+def full_deal(state: str, **overrides: object) -> DealRequirement:
     """A complete, schema-valid deal in `state` (no follow-up), with fields overridden."""
-    fields: dict[str, Any] = dict(
-        is_deal_request=True,
-        state=state,
-        city="Springfield",
-        property_type="single_family",
-        transaction_type="buy",
-        deal_value_usd=450_000,
-        timeline="31_to_90_days",
-        notes=None,
-    )
+    fields: dict[str, object] = {
+        "is_deal_request": True,
+        "state": state,
+        "city": "Springfield",
+        "property_type": "single_family",
+        "transaction_type": "buy",
+        "deal_value_usd": 450_000,
+        "timeline": "31_to_90_days",
+        "notes": None,
+    }
     fields.update(overrides)
-    return DealRequirement(**fields)
+    return DealRequirement.model_validate(fields)
 
 
 def smuggled(**fields: Any) -> DealRequirement:
@@ -378,13 +430,14 @@ def smuggled(**fields: Any) -> DealRequirement:
     Unset fields default to None and `missing_fields` to [], as a careless extractor would leave
     them, so nothing the schema would compute is filled in.
     """
-    base: dict[str, Any] = {name: None for name in DealRequirement.model_fields}
+    # Any on purpose: the point is to smuggle values of the wrong type past the schema.
+    base: dict[str, Any] = dict.fromkeys(DealRequirement.model_fields)
     base.update(is_deal_request=True, missing_fields=[])
     base.update(fields)
     return DealRequirement.model_construct(**base)
 
 
-def rejected(raw: dict[str, Any]) -> Callable[[], DealRequirement]:
+def rejected(raw: JSONObject) -> Callable[[], DealRequirement]:
     """An extractor step that validates `raw` like a real extractor; the schema raises."""
     return lambda: parse_requirement(raw)
 
@@ -406,7 +459,7 @@ UNVALIDATED_RESPONSE_BUG = (
     "FastAPI re-validates a model_construct'd requirement, so the body violates its own schema"
 )
 
-HOSTILE_VARIANTS: list[Any] = [
+HOSTILE_VARIANTS: list[object] = [
     case.param()
     for case in [
         # State casing and whitespace: normalized by the schema...
@@ -423,80 +476,112 @@ HOSTILE_VARIANTS: list[Any] = [
         HostileCase("ks-only-suspended-broker", lambda: full_deal("KS"), traps=("fx-25",)),
         HostileCase("tx-probation-broker", lambda: full_deal("TX", city="Austin"), traps=("tx-131",)),
         # Impossible combinations.
-        HostileCase("non-deal-with-full-requirement",
-                    lambda: full_deal("TX", is_deal_request=False)),
-        HostileCase("smuggled-non-deal-with-missing-fields",
-                    lambda: smuggled(is_deal_request=False, state="TX",
-                                     missing_fields=["city", "timeline"])),
-        HostileCase("state-not-a-state", rejected({"is_deal_request": True, "state": "ZZ"}),
-                    expect="rejected_422", forbidden=("ZZ",)),
-        HostileCase("state-full-name", rejected({"is_deal_request": True, "state": "Texas"}),
-                    expect="rejected_422", forbidden=("Texas",)),
-        HostileCase("state-territory", rejected({"is_deal_request": True, "state": "PR"}),
-                    expect="rejected_422", forbidden=("PR",)),
+        HostileCase("non-deal-with-full-requirement", lambda: full_deal("TX", is_deal_request=False)),
+        HostileCase(
+            "smuggled-non-deal-with-missing-fields",
+            lambda: smuggled(is_deal_request=False, state="TX", missing_fields=["city", "timeline"]),
+        ),
+        HostileCase(
+            "state-not-a-state",
+            rejected({"is_deal_request": True, "state": "ZZ"}),
+            expect="rejected_422",
+            forbidden=("ZZ",),
+        ),
+        HostileCase(
+            "state-full-name",
+            rejected({"is_deal_request": True, "state": "Texas"}),
+            expect="rejected_422",
+            forbidden=("Texas",),
+        ),
+        HostileCase(
+            "state-territory",
+            rejected({"is_deal_request": True, "state": "PR"}),
+            expect="rejected_422",
+            forbidden=("PR",),
+        ),
         # Smuggled non-state: the matcher sees "ZZ" and matches nobody (fail-closed), but the
         # 200 body carries "ZZ" and fails MatchResponse validation (assertion 1).
-        HostileCase("smuggled-state-not-a-state", lambda: smuggled(state="ZZ", city="Austin"),
-                    xfail=UNVALIDATED_RESPONSE_BUG),
+        HostileCase(
+            "smuggled-state-not-a-state", lambda: smuggled(state="ZZ", city="Austin"), xfail=UNVALIDATED_RESPONSE_BUG
+        ),
         # missing_fields empty despite null fields. Through the schema this is a control: the
         # model validator recomputes missing_fields, so the attack only bites when smuggled.
-        HostileCase("missing-fields-empty-despite-nulls",
-                    lambda: DealRequirement(is_deal_request=True, state="TX", missing_fields=[])),
+        HostileCase(
+            "missing-fields-empty-despite-nulls",
+            lambda: DealRequirement(is_deal_request=True, state="TX", missing_fields=[]),
+        ),
         HostileCase("smuggled-missing-fields-empty", lambda: smuggled(state="TX")),
         HostileCase("smuggled-state-null-no-missing", lambda: smuggled(state=None, city="Austin")),
         # Deal size.
         HostileCase("huge-deal-value", lambda: full_deal("TX", deal_value_usd=10**30)),
-        HostileCase("negative-deal-value",
-                    rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": -1}),
-                    expect="rejected_422"),
+        HostileCase(
+            "negative-deal-value",
+            rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": -1}),
+            expect="rejected_422",
+        ),
         # Injected text in free-text fields.
         HostileCase("injection-in-notes", lambda: full_deal("TX", notes=INJECTED)),
         HostileCase("injection-in-city-full-deal", lambda: full_deal("TX", city=INJECTED)),
         # With fields missing, the follow-up names the city, so the injected city may be echoed.
-        HostileCase("injection-in-city-with-follow-up",
-                    lambda: DealRequirement(is_deal_request=True, state="TX", city=INJECTED),
-                    xfail=CITY_ECHO_BUG),
-        HostileCase("injection-in-city-no-state",
-                    lambda: DealRequirement(is_deal_request=True, city=INJECTED),
-                    xfail=CITY_ECHO_BUG),
+        HostileCase(
+            "injection-in-city-with-follow-up",
+            lambda: DealRequirement(is_deal_request=True, state="TX", city=INJECTED),
+            xfail=CITY_ECHO_BUG,
+        ),
+        HostileCase(
+            "injection-in-city-no-state",
+            lambda: DealRequirement(is_deal_request=True, city=INJECTED),
+            xfail=CITY_ECHO_BUG,
+        ),
         # Merged from the schema-only drafter: coercions and type confusion.
-        HostileCase("state-spaced-letters", rejected({"is_deal_request": True, "state": "T X"}),
-                    expect="rejected_422", forbidden=("T X",)),
-        HostileCase("state-fullwidth", rejected({"is_deal_request": True, "state": "\uff34\uff38"}),
-                    expect="rejected_422"),
-        HostileCase("state-tab-inside", rejected({"is_deal_request": True, "state": "t\tx"}),
-                    expect="rejected_422"),
-        HostileCase("state-nul-suffix", rejected({"is_deal_request": True, "state": "tx\x00"}),
-                    expect="rejected_422"),
+        HostileCase(
+            "state-spaced-letters",
+            rejected({"is_deal_request": True, "state": "T X"}),
+            expect="rejected_422",
+            forbidden=("T X",),
+        ),
+        HostileCase(
+            "state-fullwidth", rejected({"is_deal_request": True, "state": "\uff34\uff38"}), expect="rejected_422"
+        ),
+        HostileCase("state-tab-inside", rejected({"is_deal_request": True, "state": "t\tx"}), expect="rejected_422"),
+        HostileCase("state-nul-suffix", rejected({"is_deal_request": True, "state": "tx\x00"}), expect="rejected_422"),
         # Non-string states are turned into None by the validator: fail closed, nobody matched.
-        HostileCase("state-int", lambda: DealRequirement(is_deal_request=True, state=5)),
-        HostileCase("state-bytes", lambda: DealRequirement(is_deal_request=True, state=b"TX")),
+        HostileCase("state-int", lambda: DealRequirement.model_validate({"is_deal_request": True, "state": 5})),
+        HostileCase("state-bytes", lambda: DealRequirement.model_validate({"is_deal_request": True, "state": b"TX"})),
         HostileCase("deal-value-string-coerced", lambda: full_deal("FL", deal_value_usd=" 1_000 ")),
-        HostileCase("deal-value-float-huge",
-                    rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": 1e30}),
-                    expect="rejected_422"),
-        HostileCase("deal-value-nan",
-                    rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": float("nan")}),
-                    expect="rejected_422"),
-        HostileCase("deal-value-inf",
-                    rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": float("inf")}),
-                    expect="rejected_422"),
-        HostileCase("missing-fields-not-a-list",
-                    rejected({"is_deal_request": True, "state": "TX", "missing_fields": "abc"}),
-                    expect="rejected_422"),
-        HostileCase("is-deal-request-null", rejected({"is_deal_request": None, "state": "TX"}),
-                    expect="rejected_422"),
+        HostileCase(
+            "deal-value-float-huge",
+            rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": 1e30}),
+            expect="rejected_422",
+        ),
+        HostileCase(
+            "deal-value-nan",
+            rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": float("nan")}),
+            expect="rejected_422",
+        ),
+        HostileCase(
+            "deal-value-inf",
+            rejected({"is_deal_request": True, "state": "TX", "deal_value_usd": float("inf")}),
+            expect="rejected_422",
+        ),
+        HostileCase(
+            "missing-fields-not-a-list",
+            rejected({"is_deal_request": True, "state": "TX", "missing_fields": "abc"}),
+            expect="rejected_422",
+        ),
+        HostileCase("is-deal-request-null", rejected({"is_deal_request": None, "state": "TX"}), expect="rejected_422"),
         # JSON in city/notes naming TX while the deal is in KS (whose only broker is suspended).
-        HostileCase("json-state-in-city-ks", lambda: full_deal("KS", city='{"state":"TX"}'),
-                    traps=("fx-25",)),
-        HostileCase("json-state-in-notes-ks",
-                    lambda: full_deal("KS", notes='{"state":"TX","license_status":"Active"}'),
-                    traps=("fx-25",)),
-        HostileCase("is-deal-request-yes-validated",
-                    lambda: full_deal("TX", is_deal_request="yes")),
+        HostileCase("json-state-in-city-ks", lambda: full_deal("KS", city='{"state":"TX"}'), traps=("fx-25",)),
+        HostileCase(
+            "json-state-in-notes-ks",
+            lambda: full_deal("KS", notes='{"state":"TX","license_status":"Active"}'),
+            traps=("fx-25",),
+        ),
+        HostileCase("is-deal-request-yes-validated", lambda: full_deal("TX", is_deal_request="yes")),
         HostileCase("smuggled-is-deal-request-zero", lambda: smuggled(state="TX", is_deal_request=0)),
-        HostileCase("smuggled-is-deal-request-no", lambda: smuggled(state="TX", is_deal_request="no"),
-                    xfail=TRUTHY_NON_DEAL_BUG),
+        HostileCase(
+            "smuggled-is-deal-request-no", lambda: smuggled(state="TX", is_deal_request="no"), xfail=TRUTHY_NON_DEAL_BUG
+        ),
         # An extractor that raises.
         HostileCase("extractor-raises", crash, expect="fixed_500", forbidden=(EXTRACTOR_SECRET,)),
     ]
@@ -539,7 +624,7 @@ def test_hostile_extractor_cannot_slip_past_gate(client: TestClient, case: Hosti
         assert_fixed_500(resp)
 
 
-def post_specific_attack(rec: dict[str, Any]) -> DealRequirement:
+def post_specific_attack(rec: JSONObject) -> DealRequirement:
     """The run-(b) attack for one post: its own state, lowercased, smuggled past the schema.
 
     A null `expected_state` falls back to "tx", the state with the most brokers to leak.
@@ -549,7 +634,7 @@ def post_specific_attack(rec: dict[str, Any]) -> DealRequirement:
 
 
 @pytest.mark.parametrize("rec", RECORD_PARAMS)
-def test_hostile_extractor_per_post(client: TestClient, rec: dict[str, Any]) -> None:
+def test_hostile_extractor_per_post(client: TestClient, rec: JSONObject) -> None:
     """Every post also gets a run-(b) id: the same text with its true state smuggled lowercase.
 
     The gate compares states exactly, so "fl" must match nobody and exclude all 226. This is
@@ -576,7 +661,7 @@ def test_red_team_dataset_is_well_formed() -> None:
     ids = [rec["id"] for rec in records]
     assert ids == [f"rt-{n:02d}" for n in range(1, EXPECTED_RECORDS + 1)]
 
-    counts = {cat: 0 for cat in CATEGORY_MINIMUMS}
+    counts = dict.fromkeys(CATEGORY_MINIMUMS, 0)
     for rec in records:
         assert rec["category"] in CATEGORY_MINIMUMS, f"{rec['id']}: category {rec['category']!r}"
         counts[rec["category"]] += 1
@@ -595,9 +680,6 @@ def test_red_team_dataset_is_well_formed() -> None:
     assert len(long_posts[0]["text"]) == LONG_POST_CHARS
 
     leaked = sorted(
-        (rec["id"], b.license_number)
-        for rec in records
-        for b in BROKERS
-        if b.license_number in rec["text"]
+        (rec["id"], b.license_number) for rec in records for b in BROKERS if b.license_number in rec["text"]
     )
     assert not leaked, f"broker license numbers in posts: {leaked}"

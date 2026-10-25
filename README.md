@@ -109,26 +109,26 @@ The raw TREC file stays in `data/raw/`, which is gitignored and never committed.
 ## Running it
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest -q                                    # 500 tests, offline, no API key needed
 ```
 
 Evaluation (Claude runs need a key in `.env`; see `.env.example`):
 
 ```bash
-.venv/bin/python scripts/eval.py --extractor regex     # baseline on both sets
-.venv/bin/python scripts/eval.py --extractor claude --split dev   # tuning posts only
-.venv/bin/python scripts/eval.py --rescore results/<file>.json   # re-score saved outputs, no API calls
+.venv/bin/deal-eval --extractor regex   # baseline on both sets
+.venv/bin/deal-eval --extractor claude --split dev   # tuning posts only
+.venv/bin/deal-eval --rescore results/<file>.json   # re-score saved outputs, no API calls
 ```
 
 API:
 
 ```bash
-DEAL_EXTRACTOR=regex .venv/bin/uvicorn api:app --reload        # omit DEAL_EXTRACTOR to use Claude when a key is set
+DEAL_EXTRACTOR=regex .venv/bin/uvicorn deal_board.api:app --reload        # omit DEAL_EXTRACTOR to use Claude when a key is set
 curl -s localhost:8000/match -H 'content-type: application/json' -d '{"text": "Need a listing agent in Columbus, Ohio for a 3bd ranch, about $275k"}'
 ```
 
-Rebuilding the broker sample from a fresh TREC download: `.venv/bin/python scripts/build_brokers.py data/raw/<file>.csv`. It uses a fixed seed, so the same input gives the same 200 rows.
+Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-brokers data/raw/<file>.csv`. It uses a fixed seed, so the same input gives the same 200 rows.
 
 ## Engineering notes
 

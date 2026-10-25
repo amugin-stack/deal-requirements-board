@@ -18,11 +18,13 @@ Rules:
 - Every rate carries a 95% Wilson interval (ci95), because at 15-24 posts one post moves accuracy
   by 4-7 points. post_correctness + paired_comparison compare two runs post by post (exact McNemar).
 """
+
 import json
 import math
 from pathlib import Path
+from typing import Any
 
-from schema import KEY_FIELDS
+from deal_board.schema import KEY_FIELDS, JSONObject
 
 DEAL_VALUE_TOLERANCE = 0.01  # deal_value_usd matches if within 1% of the label
 FIELD_OUTCOMES = ("correct", "wrong", "missed", "correct_missing", "hallucinated", "error")
@@ -67,15 +69,15 @@ def exact_mcnemar_p(b_only: int, a_only: int) -> float:
     if b_only < 0 or a_only < 0:
         raise ValueError(f"discordant counts must be >= 0, got b_only={b_only}, a_only={a_only}")
     n = b_only + a_only
-    tail = sum(math.comb(n, k) for k in range(min(b_only, a_only) + 1)) / 2**n
+    tail: float = sum(math.comb(n, k) for k in range(min(b_only, a_only) + 1)) / 2**n
     return min(1.0, 2 * tail)
 
 
-def load_posts(path: str | Path) -> list[dict]:
-    return [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
+def load_posts(path: str | Path) -> list[JSONObject]:
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def normalize(field: str, value):
+def normalize(field: str, value: Any) -> Any:
     if field == "state":
         return value.strip().upper()
     if field == "city":  # "St. Louis," == "st  louis"; no spelling tolerance
@@ -83,13 +85,13 @@ def normalize(field: str, value):
     return value
 
 
-def values_match(field: str, gold, pred) -> bool:
+def values_match(field: str, gold: Any, pred: Any) -> bool:
     if field == "deal_value_usd":
-        return abs(pred - gold) <= DEAL_VALUE_TOLERANCE * gold
-    return normalize(field, gold) == normalize(field, pred)
+        return bool(abs(pred - gold) <= DEAL_VALUE_TOLERANCE * gold)
+    return bool(normalize(field, gold) == normalize(field, pred))
 
 
-def field_outcome(field: str, gold, pred) -> str:
+def field_outcome(field: str, gold: Any, pred: Any) -> str:
     if gold is None:
         return "correct_missing" if pred is None else "hallucinated"
     if pred is None:
@@ -97,7 +99,7 @@ def field_outcome(field: str, gold, pred) -> str:
     return "correct" if values_match(field, gold, pred) else "wrong"
 
 
-def expected_missing(label: dict) -> set[str]:
+def expected_missing(label: JSONObject) -> set[str]:
     return {f for f in KEY_FIELDS if label[f] is None}
 
 
@@ -110,27 +112,30 @@ def _rate(successes: int, n: int) -> float | None:
     return successes / n if n else None
 
 
-def _with_accuracy(counts: dict, n: int) -> dict:
+def _with_accuracy(counts: dict[str, int], n: int) -> JSONObject:
     good = sum(counts.get(k, 0) for k in GOOD_OUTCOMES)
     return {**counts, "accuracy": _rate(good, n), "ci95": _ci95(good, n)}
 
 
-def _with_hallucination_rate(cell: dict, n_deal: int) -> dict:
+def _with_hallucination_rate(cell: JSONObject, n_deal: int) -> JSONObject:
     """A key field's hallucinations on deal posts, as a rate so runs of different size compare."""
-    return {**cell, "hallucination_rate": _rate(cell["hallucinated"], n_deal),
-            "hallucination_ci95": _ci95(cell["hallucinated"], n_deal)}
+    return {
+        **cell,
+        "hallucination_rate": _rate(cell["hallucinated"], n_deal),
+        "hallucination_ci95": _ci95(cell["hallucinated"], n_deal),
+    }
 
 
-def _post_correct(field: str, gold: dict, pred: dict) -> bool:
+def _post_correct(field: str, gold: JSONObject, pred: JSONObject) -> bool:
     """Whether one non-errored prediction is right on one field, by the same rules as score()."""
     if field == "is_deal_request":
-        return pred["is_deal_request"] == gold["is_deal_request"]
+        return bool(pred["is_deal_request"] == gold["is_deal_request"])
     if field == "missing_fields":
         return expected_missing(gold) == set(pred["missing_fields"])
     return field_outcome(field, gold[field], pred[field]) in GOOD_OUTCOMES
 
 
-def post_correctness(posts: list[dict], records: dict[str, dict]) -> dict[str, dict[str, bool]]:
+def post_correctness(posts: list[JSONObject], records: dict[str, JSONObject]) -> dict[str, dict[str, bool]]:
     """Per field, {post_id: correct} on exactly the posts score() scores that field on.
 
     This is what a paired comparison needs: score() only reports totals, and two runs with equal
@@ -147,7 +152,7 @@ def post_correctness(posts: list[dict], records: dict[str, dict]) -> dict[str, d
     return out
 
 
-def paired_comparison(a: dict[str, bool], b: dict[str, bool]) -> dict:
+def paired_comparison(a: dict[str, bool], b: dict[str, bool]) -> JSONObject:
     """Compare two {post_id: correct} maps on their common posts with the exact McNemar test.
 
     Only discordant posts carry information about which run is better; the ids are listed so a
@@ -166,18 +171,26 @@ def paired_comparison(a: dict[str, bool], b: dict[str, bool]) -> dict:
     }
 
 
-def score(posts: list[dict], records: dict[str, dict]) -> dict:
+def score(posts: list[JSONObject], records: dict[str, JSONObject]) -> JSONObject:
     """records maps post id -> {"prediction": dict | None, "error": str | None}."""
     is_deal = dict.fromkeys(BINARY_OUTCOMES, 0)
     fields = {f: dict.fromkeys(FIELD_OUTCOMES, 0) for f in KEY_FIELDS}
     missing = dict.fromkeys(BINARY_OUTCOMES, 0)
     non_deal_filled = dict.fromkeys(KEY_FIELDS, 0)
     non_deal_posts_with_any = 0
-    failures = []
+    failures: list[JSONObject] = []
 
-    def fail(post, field, outcome, expected=None, got=None):
-        failures.append({"id": post["id"], "field": field, "outcome": outcome,
-                         "expected": expected, "got": got, "text": post["text"]})
+    def fail(post: JSONObject, field: str, outcome: str, expected: Any = None, got: Any = None) -> None:
+        failures.append(
+            {
+                "id": post["id"],
+                "field": field,
+                "outcome": outcome,
+                "expected": expected,
+                "got": got,
+                "text": post["text"],
+            }
+        )
 
     for p in posts:
         gold, rec = p["label"], records[p["id"]]
@@ -221,8 +234,7 @@ def score(posts: list[dict], records: dict[str, dict]) -> dict:
         "n_deal_posts": n_deal,
         "n_non_deal_posts": n_non_deal,
         "is_deal_request": _with_accuracy(is_deal, len(posts)),
-        "fields": {f: _with_hallucination_rate(_with_accuracy(c, n_deal), n_deal)
-                   for f, c in fields.items()},
+        "fields": {f: _with_hallucination_rate(_with_accuracy(c, n_deal), n_deal) for f, c in fields.items()},
         "missing_fields": _with_accuracy(missing, n_deal),
         "non_deal_hallucinations": {
             "fields_filled": sum(non_deal_filled.values()),

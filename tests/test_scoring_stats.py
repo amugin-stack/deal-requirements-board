@@ -1,16 +1,17 @@
 """Statistics in scoring.py (P6 contract): Wilson intervals, exact McNemar, per-post correctness,
 paired comparison, and the additive ci95/rate keys in score(). Written blind to the implementation."""
+
 import json
 import math
 from pathlib import Path
 from types import SimpleNamespace as NS
-from typing import Any
 
 import pytest
 
-from extractors.claude import ClaudeExtractor
-from schema import KEY_FIELDS
-from scoring import (
+from deal_board.cli import eval as ev
+from deal_board.extractors.claude import ClaudeExtractor
+from deal_board.schema import KEY_FIELDS, JSONObject
+from deal_board.scoring import (
     SCORED_FIELDS,
     exact_mcnemar_p,
     load_posts,
@@ -19,36 +20,43 @@ from scoring import (
     score,
     wilson_interval,
 )
-from scripts import eval as ev
 
 ROOT = Path(__file__).parent.parent
 NULL_FIELDS = dict.fromkeys(KEY_FIELDS)
+type Synthetic = tuple[list[JSONObject], dict[str, JSONObject]]  # (posts, records), as score() takes them
 
 
 class FakeClient:
     """Returns one canned tool call per request, in order, with no usage attribute."""
 
-    def __init__(self, outputs: list[dict]) -> None:
+    def __init__(self, outputs: list[JSONObject]) -> None:
         self.outputs, self.calls, self.messages = list(outputs), 0, self
 
-    def create(self, **kwargs: Any) -> NS:
+    def create(self, **kwargs: object) -> NS:
         self.calls += 1
         return NS(stop_reason="tool_use", content=[NS(type="tool_use", input=self.outputs.pop(0))])
 
 
-def deal(pid: str, **label: Any) -> dict:
+def deal(pid: str, **label: object) -> JSONObject:
     """A labeled deal post with every key field set unless overridden."""
-    base = {"is_deal_request": True, "state": "TX", "city": "Austin", "property_type": "single_family",
-            "transaction_type": "buy", "deal_value_usd": 650000, "timeline": "31_to_90_days"}
+    base = {
+        "is_deal_request": True,
+        "state": "TX",
+        "city": "Austin",
+        "property_type": "single_family",
+        "transaction_type": "buy",
+        "deal_value_usd": 650000,
+        "timeline": "31_to_90_days",
+    }
     return {"id": pid, "text": f"post {pid}", "label": {**base, **label}}
 
 
-def non_deal(pid: str) -> dict:
+def non_deal(pid: str) -> JSONObject:
     """A labeled non-deal post."""
     return {"id": pid, "text": f"post {pid}", "label": {"is_deal_request": False, **NULL_FIELDS}}
 
 
-def records_for(posts: list[dict], outputs: list[dict]) -> dict[str, dict]:
+def records_for(posts: list[JSONObject], outputs: list[JSONObject]) -> dict[str, JSONObject]:
     """Run posts through ClaudeExtractor with canned outputs (no network)."""
     return ev.run_posts(ClaudeExtractor(client=FakeClient(outputs)), posts)
 
@@ -56,28 +64,32 @@ def records_for(posts: list[dict], outputs: list[dict]) -> dict[str, dict]:
 # Three deal posts (one correct, one partly wrong, one errored) and two non-deal posts.
 POSTS = [deal("d1"), deal("d2", timeline=None), deal("d3"), non_deal("n1"), non_deal("n2")]
 OUTPUTS = [
-    {**deal("d1")["label"]},                                        # all right
-    {**deal("d2")["label"], "state": "CA", "city": None},          # state wrong, city missed, timeline hallucinated
-    {"is_deal_request": True, "state": "Texas"},                   # invalid -> errored record
-    {"is_deal_request": False, **NULL_FIELDS},                     # right
-    {"is_deal_request": True, **NULL_FIELDS, "city": "Denver"},    # wrong is_deal_request + a hallucination
+    {**deal("d1")["label"]},  # all right
+    {**deal("d2")["label"], "state": "CA", "city": None},  # state wrong, city missed, timeline hallucinated
+    {"is_deal_request": True, "state": "Texas"},  # invalid -> errored record
+    {"is_deal_request": False, **NULL_FIELDS},  # right
+    {"is_deal_request": True, **NULL_FIELDS, "city": "Denver"},  # wrong is_deal_request + a hallucination
 ]
 
 
 @pytest.fixture(scope="module")
-def synthetic() -> tuple[list[dict], dict[str, dict]]:
+def synthetic() -> Synthetic:
     return POSTS, records_for(POSTS, OUTPUTS)
 
 
 # ---------- wilson_interval ----------
 
-@pytest.mark.parametrize("successes,n,expected", [
-    (0, 10, (0.0, 0.2775)),
-    (10, 10, (0.7225, 1.0)),
-    (5, 10, (0.2366, 0.7634)),
-    (14, 15, (0.7018, 0.9881)),
-    (1, 1, (0.2065, 1.0)),
-])
+
+@pytest.mark.parametrize(
+    "successes,n,expected",
+    [
+        (0, 10, (0.0, 0.2775)),
+        (10, 10, (0.7225, 1.0)),
+        (5, 10, (0.2366, 0.7634)),
+        (14, 15, (0.7018, 0.9881)),
+        (1, 1, (0.2065, 1.0)),
+    ],
+)
 def test_wilson_reference_values(successes: int, n: int, expected: tuple[float, float]) -> None:
     """Wilson bounds match the contract's reference values to 4 decimals."""
     lo, hi = wilson_interval(successes, n)
@@ -136,10 +148,20 @@ def test_wilson_wider_at_smaller_n(p: float) -> None:
 
 # ---------- exact_mcnemar_p ----------
 
-@pytest.mark.parametrize("b_only,a_only,expected", [
-    (5, 0, 0.0625), (0, 5, 0.0625), (3, 1, 0.625), (0, 0, 1.0), (1, 1, 1.0),
-    (10, 0, 0.001953125), (2, 1, 1.0), (7, 2, 0.1796875),
-])
+
+@pytest.mark.parametrize(
+    "b_only,a_only,expected",
+    [
+        (5, 0, 0.0625),
+        (0, 5, 0.0625),
+        (3, 1, 0.625),
+        (0, 0, 1.0),
+        (1, 1, 1.0),
+        (10, 0, 0.001953125),
+        (2, 1, 1.0),
+        (7, 2, 0.1796875),
+    ],
+)
 def test_mcnemar_reference_values(b_only: int, a_only: int, expected: float) -> None:
     """Exact two-sided McNemar matches hand-computed binomial sign-test values."""
     assert exact_mcnemar_p(b_only, a_only) == pytest.approx(expected, abs=1e-12)
@@ -173,12 +195,13 @@ def test_mcnemar_p_in_unit_interval() -> None:
 
 # ---------- post_correctness ----------
 
+
 def test_scored_fields_order() -> None:
     """SCORED_FIELDS is is_deal_request, the key fields, then missing_fields."""
-    assert SCORED_FIELDS == ("is_deal_request", *KEY_FIELDS, "missing_fields")
+    assert ("is_deal_request", *KEY_FIELDS, "missing_fields") == SCORED_FIELDS
 
 
-def test_post_correctness_covers_the_right_posts(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_post_correctness_covers_the_right_posts(synthetic: Synthetic) -> None:
     """is_deal_request covers every post; other fields only labeled deal posts."""
     posts, records = synthetic
     pc = post_correctness(posts, records)
@@ -188,7 +211,7 @@ def test_post_correctness_covers_the_right_posts(synthetic: tuple[list[dict], di
         assert set(pc[field]) == {"d1", "d2", "d3"}, field
 
 
-def test_post_correctness_values(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_post_correctness_values(synthetic: Synthetic) -> None:
     """Correct and correct_missing count as True; wrong, missed, hallucinated and errors as False."""
     posts, records = synthetic
     pc = post_correctness(posts, records)
@@ -207,7 +230,7 @@ def test_post_correctness_correct_missing_is_true() -> None:
     assert post_correctness(posts, records)["timeline"] == {"d1": True}
 
 
-def test_post_correctness_errored_record_wrong_everywhere(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_post_correctness_errored_record_wrong_everywhere(synthetic: Synthetic) -> None:
     """An errored record is incorrect on every field it is scored on."""
     posts, records = synthetic
     assert records["d3"]["error"]
@@ -215,15 +238,17 @@ def test_post_correctness_errored_record_wrong_everywhere(synthetic: tuple[list[
     assert all(pc[field]["d3"] is False for field in SCORED_FIELDS)
 
 
-def _accuracy_cell(s: dict, field: str) -> dict:
-    return s["fields"][field] if field in KEY_FIELDS else s[field]
+def _accuracy_cell(s: JSONObject, field: str) -> JSONObject:
+    cell: JSONObject = s["fields"][field] if field in KEY_FIELDS else s[field]
+    return cell
 
 
-def _denominator(s: dict, field: str) -> int:
-    return s["n_posts"] if field == "is_deal_request" else s["n_deal_posts"]
+def _denominator(s: JSONObject, field: str) -> int:
+    n: int = s["n_posts"] if field == "is_deal_request" else s["n_deal_posts"]
+    return n
 
 
-def _assert_numerators_match(posts: list[dict], records: dict[str, dict]) -> None:
+def _assert_numerators_match(posts: list[JSONObject], records: dict[str, JSONObject]) -> None:
     s, pc = score(posts, records), post_correctness(posts, records)
     for field in SCORED_FIELDS:
         acc, den = _accuracy_cell(s, field)["accuracy"], _denominator(s, field)
@@ -231,7 +256,7 @@ def _assert_numerators_match(posts: list[dict], records: dict[str, dict]) -> Non
         assert len(pc[field]) == den, field
 
 
-def test_post_correctness_matches_score_numerators(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_post_correctness_matches_score_numerators(synthetic: Synthetic) -> None:
     """True counts per field equal score()'s accuracy numerators (synthetic posts)."""
     _assert_numerators_match(*synthetic)
 
@@ -247,14 +272,18 @@ def test_post_correctness_matches_score_on_saved_regex_run(stem: str) -> None:
 
 # ---------- paired_comparison ----------
 
+
 def test_paired_comparison_on_common_ids_only() -> None:
     """Only ids in both maps count; b_only/a_only are sorted; p is exact McNemar."""
     a = {"p5": False, "p1": True, "p3": False, "p2": True, "p4": True, "only_a": False}
     b = {"p3": True, "p1": True, "p5": True, "p2": False, "p4": True, "only_b": True}
     out = paired_comparison(a, b)
     assert out == {
-        "n": 5, "a_correct": 3, "b_correct": 4,
-        "b_only": ["p3", "p5"], "a_only": ["p2"],
+        "n": 5,
+        "a_correct": 3,
+        "b_correct": 4,
+        "b_only": ["p3", "p5"],
+        "a_only": ["p2"],
         "p_value": exact_mcnemar_p(2, 1),
     }
 
@@ -274,11 +303,12 @@ def test_paired_comparison_no_common_ids() -> None:
 
 # ---------- score() additions ----------
 
+
 def _wilson_list(num: int, den: int) -> list[float]:
     return list(wilson_interval(num, den))
 
 
-def test_score_ci95_on_every_accuracy_cell(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_score_ci95_on_every_accuracy_cell(synthetic: Synthetic) -> None:
     """Every accuracy cell gains ci95 = Wilson(numerator, denominator)."""
     posts, records = synthetic
     s = score(posts, records)
@@ -288,7 +318,7 @@ def test_score_ci95_on_every_accuracy_cell(synthetic: tuple[list[dict], dict[str
         assert list(cell["ci95"]) == pytest.approx(_wilson_list(num, den)), field
 
 
-def test_score_hallucination_rate_and_ci(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_score_hallucination_rate_and_ci(synthetic: Synthetic) -> None:
     """fields[f] gains hallucination_rate = hallucinated / n_deal_posts and its Wilson interval."""
     posts, records = synthetic
     s = score(posts, records)
@@ -299,7 +329,7 @@ def test_score_hallucination_rate_and_ci(synthetic: tuple[list[dict], dict[str, 
         assert list(cell["hallucination_ci95"]) == pytest.approx(_wilson_list(cell["hallucinated"], 3))
 
 
-def test_score_non_deal_rate_and_ci(synthetic: tuple[list[dict], dict[str, dict]]) -> None:
+def test_score_non_deal_rate_and_ci(synthetic: Synthetic) -> None:
     """non_deal_hallucinations gains posts_with_any_rate and its Wilson interval."""
     posts, records = synthetic
     nd = score(posts, records)["non_deal_hallucinations"]
@@ -327,7 +357,7 @@ def test_score_no_non_deal_posts_gives_none() -> None:
     assert nd["posts_with_any_rate"] is None and nd["posts_with_any_ci95"] is None
 
 
-def _assert_subset(old: Any, new: Any, path: str = "") -> None:
+def _assert_subset(old: object, new: object, path: str = "") -> None:
     """Every key in old exists in new with the same value (dicts compared recursively)."""
     if isinstance(old, dict):
         assert isinstance(new, dict), path
