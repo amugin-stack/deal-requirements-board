@@ -13,8 +13,10 @@ from fastapi.testclient import TestClient
 from deal_board import api
 from deal_board.brokers import Broker
 from deal_board.cli import eval as ev
+from deal_board.extractors import ExtractionError, parse_requirement
 from deal_board.extractors.claude import PROMPT_VERSION
 from deal_board.matcher import is_licensed, match
+from deal_board.schema import DealRequirement
 
 ROOT = Path(__file__).resolve().parent.parent
 PRE_STRICT_RUN = ROOT / "results" / "claude_20261024T231514Z.json"  # prompt de789943: nulls could be omitted
@@ -131,3 +133,58 @@ def test_adv3_non_requirement_from_extractor_is_a_logged_500(value: object, capl
     assert resp.json() == {"detail": "matching failed unexpectedly"}
     assert any("post=" in r.getMessage() for r in caplog.records)
     assert not any("QUOKKA" in r.getMessage() for r in caplog.records)
+
+
+class _FixedExtractor:
+    """Returns one prebuilt requirement, bypassing validation like a buggy extractor could."""
+
+    name = "claude"
+
+    def __init__(self, requirement: DealRequirement) -> None:
+        self._requirement = requirement
+
+    def extract(self, text: str) -> DealRequirement:
+        return self._requirement
+
+
+def _post_with(requirement: DealRequirement, caplog: pytest.LogCaptureFixture) -> tuple[int, str, object]:
+    api.app.dependency_overrides[api.get_extractor] = lambda: _FixedExtractor(requirement)
+    api.app.dependency_overrides[api.get_as_of] = lambda: date(2026, 11, 30)
+    api.app.dependency_overrides[api.get_matcher] = lambda: match
+    try:
+        with caplog.at_level(logging.INFO):
+            resp = TestClient(api.app, raise_server_exceptions=False).post("/match", json={"text": "TX deal"})
+    finally:
+        api.app.dependency_overrides.clear()
+    return resp.status_code, resp.headers["content-type"], resp.json()
+
+
+@pytest.mark.parametrize("field", ["city", "notes"])
+def test_comp1_lone_surrogate_from_extractor_is_rejected_at_parse(field: str) -> None:
+    """COMP-1: Claude output carrying a lone surrogate is an ExtractionError (the route's 422), not a crash later."""
+    raw = {"is_deal_request": True, "state": "TX", **{field: "x\ud800"}}
+    with pytest.raises(ExtractionError):
+        parse_requirement(raw)
+
+
+def test_comp1_unserializable_response_is_the_fixed_json_500(caplog: pytest.LogCaptureFixture) -> None:
+    """COMP-1: a response that can't be serialized is the logged JSON 500, with no success log line."""
+    smuggled = DealRequirement.model_construct(
+        is_deal_request=True,
+        state="TX",
+        city="Austin",
+        property_type=None,
+        transaction_type=None,
+        deal_value_usd=None,
+        timeline=None,
+        notes="x\ud800",
+        missing_fields=[],
+    )
+    status, content_type, body = _post_with(smuggled, caplog)
+    assert status in (422, 500)
+    assert content_type.startswith("application/json")
+    assert body in (
+        {"detail": "matching failed unexpectedly"},
+        {"detail": "could not extract a deal requirement from this post"},
+    )
+    assert not any(r.getMessage().startswith("matched ") for r in caplog.records)

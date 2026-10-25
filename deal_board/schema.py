@@ -168,11 +168,20 @@ class ExtractedFields(BaseModel):
     @field_validator("city", "notes", mode="before")
     @classmethod
     def _blank_to_none(cls, v: object) -> str | None:
-        """Strip surrounding whitespace and turn a blank string into null; a non-string raises."""
+        """Strip surrounding whitespace and turn a blank string into null; a non-string raises.
+
+        A string that can't be encoded as UTF-8 (a lone surrogate from a JSON '\\ud800' escape)
+        raises too: it would validate here and then fail only when the API serializes its
+        response, past the route's error handling.
+        """
         if v is None:
             return None
         if not isinstance(v, str):
             raise ValueError(f"must be a string or null, got {type(v).__name__}")
+        try:
+            v.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("must be valid Unicode text (no lone surrogates)") from None
         return v.strip() or None
 
 

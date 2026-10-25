@@ -643,7 +643,10 @@ def _respond(
         excluded_for_licensing=result.excluded_for_licensing,
         follow_up_question=follow_up_question(requirement),
     )
-    # Logged once the response exists, so a failed request logs only the route's error line.
+    # Serialized once here, inside the route's error handling: FastAPI serializes the returned
+    # model after the route, where a failure would be Starlette's text/plain 500 after a success
+    # log line. Logged only once that worked, so a failed request logs only the error line.
+    response.model_dump_json()
     logger.info(
         "matched post=%s chars=%d extractor=%s matches=%d excluded=%d",
         post_id,
