@@ -528,8 +528,16 @@ def save(result: JSONObject, results_dir: Path | None = None) -> Path:
 
 def load_run(path: Path) -> JSONObject:
     """Load an eval-run results file, exiting with status 2 (no traceback) for anything else,
-    e.g. results/baseline-v1_comparison.json, which is a summary with no raw outputs to re-score."""
-    saved = json.loads(path.read_text())
+    e.g. results/baseline-v1_comparison.json, which is a summary with no raw outputs to re-score.
+
+    A missing, unreadable, empty or non-JSON path (say the run's .md twin) gets the same one-line
+    exit: --rescore and --compare are read-only, so a traceback would only bury the actual mistake.
+    """
+    try:
+        saved = json.loads(path.read_text())
+    except (OSError, ValueError) as e:  # ValueError covers JSONDecodeError and UnicodeDecodeError
+        print(f"error: can't load {path} as an eval run results file: {type(e).__name__}: {e}", file=sys.stderr)
+        raise SystemExit(2) from None
     if not isinstance(saved, dict) or "datasets" not in saved:
         print(f"error: {path} has no 'datasets' key, so it is not an eval run results file", file=sys.stderr)
         raise SystemExit(2)
