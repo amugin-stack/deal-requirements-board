@@ -48,7 +48,8 @@ line-length = 120
 target-version = "py314"
 # frozen/: byte-identical to tag baseline-v1 by owner rule, so it is neither linted nor formatted.
 # results/: eval output data, not code.
-extend-exclude = ["deal_board/extractors/frozen", "results"]
+# review/: read-only review artifacts, frozen evidence by their own success rule, not package code.
+extend-exclude = ["deal_board/extractors/frozen", "results", "review"]
 
 [tool.ruff.lint]
 # Sensible, not maximal: correctness (E, W, F, B), import order (I), modern syntax (UP),
