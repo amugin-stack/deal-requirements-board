@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
@@ -54,12 +55,13 @@ BASELINE = "deal_board/extractors/frozen/regex_baseline.py"
 DRAFT = "loop/DRAFT.md"  # only its "(FIXED)" sections are protected; the agent edits the rest
 
 # The guard is an allow-list over every change since loop-start (committed, uncommitted and
-# untracked): the loop may edit these paths ...
-ALLOWED_CHANGES = frozenset({"deal_board/extractors/claude.py", DRAFT, "loop/LESSONS.md", "loop/state.json"})
-# ... delete the extractor's pre-P10 path (P10 moved it; a move is a delete plus an add, and
-# moved files other than the extractor still count as changes, which is fine: the loop is done) ...
-ALLOWED_DELETIONS = frozenset({"extractors/claude.py"})
-# ... and add new files only here: (directory, name patterns). Exact parent directory, so
+# untracked) and over every commit since then: the loop may change these paths. That includes
+# the extractor's pre-P10 path, which the loop's own commits edited and P10's move deleted.
+# Other P10 moves still count as changes, which is fine: the loop is done.
+ALLOWED_CHANGES = frozenset(
+    {"deal_board/extractors/claude.py", "extractors/claude.py", DRAFT, "loop/LESSONS.md", "loop/state.json"}
+)
+# Beyond those it may only add new files here: (directory, name patterns). Exact parent directory, so
 # tests/test_x/conftest.py does not slip through as "tests/test_*".
 ALLOWED_ADDITIONS = (("results", ("claude_*.json", "claude_*.md")), ("tests", ("test_*.py",)))
 MAX_LISTED = 25  # offenders shown in a check's detail; the rest are counted
@@ -161,8 +163,49 @@ def fresh_check(runs: list[JSONObject]) -> Check:
     return Check("fresh runs", not stale, f"runs with cached records: {run_files(stale)}")
 
 
-def dev_checks(runs: list[JSONObject]) -> list[Check]:
-    """runs: every clean dev-split result for the current request identity, newest first."""
+Rescorer = Callable[[JSONObject], JSONObject]  # a saved result -> its datasets re-scored against current labels
+
+
+def gated_metrics(scores: JSONObject) -> dict[str, float]:
+    """Every stored number the dev gate reads, by name."""
+    metrics: dict[str, float] = {
+        "is_deal_request.accuracy": scores["is_deal_request"]["accuracy"],
+        "is_deal_request.error": scores["is_deal_request"]["error"],
+        "non_deal_hallucinations.fields_filled": scores["non_deal_hallucinations"]["fields_filled"],
+    }
+    metrics.update({f"fields.{f}.accuracy": scores["fields"][f]["accuracy"] for f in KEY_FIELDS})
+    return metrics
+
+
+def rescore_mismatch(run: JSONObject, rescore: Rescorer) -> str | None:
+    """None if re-scoring the run's raw outputs against the current labels reproduces every gated
+    metric it stores; otherwise what differs.
+
+    Stored scores are only as good as the labels and scoring code they were computed with: a
+    label edited, run against and reverted, or a hand-edited scores block, would otherwise pass.
+    A run that can't be re-scored at all fails closed.
+    """
+    try:
+        stored = gated_metrics(run["datasets"]["posts_dev"]["scores"])
+        fresh = gated_metrics(rescore(run)["posts_dev"]["scores"])
+    except Exception as exc:  # any failure to reproduce the scores is a failure of the run
+        return f"cannot rescore ({type(exc).__name__}: {exc})"
+    differ = [k for k in stored if not math.isclose(stored[k], fresh[k], rel_tol=0.0, abs_tol=1e-9)]
+    return ", ".join(f"{k} stored {stored[k]} rescored {fresh[k]}" for k in differ) or None
+
+
+def rescore_check(runs: list[JSONObject], rescore: Rescorer) -> Check:
+    bad = [(r, why) for r in runs if (why := rescore_mismatch(r, rescore)) is not None]
+    detail = "; ".join(f"{r.get('_file', '?')}: {why}" for r, why in bad) or f"{len(runs)} runs reproduce"
+    return Check("stored scores match rescore", not bad, detail)
+
+
+def dev_checks(runs: list[JSONObject], rescore: Rescorer | None = None) -> list[Check]:
+    """runs: every clean dev-split result for the current request identity, newest first.
+
+    rescore defaults to deal_board.cli.eval.rescore (it reads the current label files); tests
+    pass their own.
+    """
     if len(runs) < REPEATS:
         return [repeats_check(runs)]
     scores = [r["datasets"]["posts_dev"]["scores"] for r in runs[:REPEATS]]
@@ -172,6 +215,7 @@ def dev_checks(runs: list[JSONObject]) -> list[Check]:
     return [
         repeats_check(runs),
         fresh_check(runs[:REPEATS]),
+        rescore_check(runs[:REPEATS], rescore_saved if rescore is None else rescore),
         Check(
             "schema errors", all(n_errors(s) == 0 for s in scores), f"errors per run: {[n_errors(s) for s in scores]}"
         ),
@@ -226,7 +270,7 @@ def final_checks(finals: list[JSONObject], dev_passed: RunIdentity | None) -> li
 
 def change_allowed(status: str, path: str) -> bool:
     """status: a `git diff --name-status --no-renames` letter (A, M, D, T, ...); untracked is A."""
-    if path in ALLOWED_CHANGES or (status == "D" and path in ALLOWED_DELETIONS):
+    if path in ALLOWED_CHANGES:
         return True
     p = PurePosixPath(path)
     return status == "A" and any(
@@ -257,6 +301,21 @@ def allow_list_check(changes: list[tuple[str, str]]) -> Check:
     offenders = disallowed_changes(changes)
     detail = f"changed outside the allow-list: {listing(offenders)}" if offenders else "only allowed paths changed"
     return Check("protected files unchanged", not offenders, f"vs tag {LOOP_START_TAG}: {detail}")
+
+
+def history_check(commits: list[tuple[str, list[tuple[str, str]]]]) -> Check:
+    """commits: (sha, changes) for each commit since loop-start. The net diff misses a protected
+    edit that was committed, used for runs, and reverted, so every commit must stay within the
+    allow-list too."""
+    bad = [(sha, offenders) for sha, changes in commits if (offenders := disallowed_changes(changes))]
+    detail = (
+        listing(
+            [f"{sha[:7]} ({listing(offenders[:3])}{', ...' if len(offenders) > 3 else ''})" for sha, offenders in bad]
+        )
+        if bad
+        else f"{len(commits)} commits within the allow-list"
+    )
+    return Check("protected files untouched in history", not bad, f"since tag {LOOP_START_TAG}: {detail}")
 
 
 def tests_check(returncode: int, output: str) -> Check:
@@ -316,12 +375,36 @@ def changes_since(tag: str) -> list[tuple[str, str]] | None:
     return parse_name_status(diff.stdout) + [("A", p) for p in untracked.stdout.split("\0") if p]
 
 
+def commits_since(tag: str) -> list[tuple[str, list[tuple[str, str]]]] | None:
+    """(sha, changes) for every commit in tag..HEAD, oldest first; None if git fails.
+
+    Merge commits list no changes of their own (diff-tree shows none without -m); the commits
+    they bring in are in the range themselves.
+    """
+    revs = git("rev-list", "--reverse", f"{tag}..HEAD")
+    if revs.returncode != 0:
+        return None
+    out: list[tuple[str, list[tuple[str, str]]]] = []
+    for sha in revs.stdout.split():
+        tree = git("diff-tree", "--no-commit-id", "--name-status", "--no-renames", "-r", "-z", sha)
+        if tree.returncode != 0:
+            return None
+        out.append((sha, parse_name_status(tree.stdout)))
+    return out
+
+
 def guard_checks() -> list[Check]:
     changes = changes_since(LOOP_START_TAG)
     protected = (
         Check("protected files unchanged", False, f"git diff against tag {LOOP_START_TAG} failed")
         if changes is None
         else allow_list_check(changes)
+    )
+    commits = commits_since(LOOP_START_TAG)
+    history = (
+        Check("protected files untouched in history", False, f"git log since tag {LOOP_START_TAG} failed")
+        if commits is None
+        else history_check(commits)
     )
     original = git("show", f"{LOOP_START_TAG}:{DRAFT}").stdout
     draft_fixed = bool(original) and fixed_sections(original) == fixed_sections((ROOT / DRAFT).read_text())
@@ -331,10 +414,18 @@ def guard_checks() -> list[Check]:
     )
     return [
         protected,
+        history,
         Check("draft FIXED sections unchanged", draft_fixed, f"{DRAFT} vs tag {LOOP_START_TAG}"),
         Check("baseline frozen", baseline, f"regex_baseline.py vs {BASELINE_TAG}"),
         tests_check(tests.returncode, tests.stdout),
     ]
+
+
+def rescore_saved(saved: JSONObject) -> JSONObject:
+    """deal_board.cli.eval.rescore, imported at call time so the pure checks above load without it."""
+    from deal_board.cli.eval import rescore
+
+    return rescore(saved)
 
 
 def loop_runs(split: str) -> list[JSONObject]:

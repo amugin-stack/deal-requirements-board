@@ -70,16 +70,22 @@ def failed(checks: Iterable[cs.Check]) -> set[str]:
     return {c.name for c in checks if not c.passed}
 
 
+def stored(run: JSONObject) -> JSONObject:
+    """A rescore that reproduces the stored scores: these fixtures have no raw outputs to re-score."""
+    datasets: JSONObject = run["datasets"]
+    return datasets
+
+
 def test_dev_passes_only_with_three_clean_runs() -> None:
-    assert failed(cs.dev_checks([dev_run()] * 3)) == set()
-    assert failed(cs.dev_checks([dev_run()] * 2)) == {"repeats"}
+    assert failed(cs.dev_checks([dev_run()] * 3, stored)) == set()
+    assert failed(cs.dev_checks([dev_run()] * 2, stored)) == {"repeats"}
 
 
 def test_dev_fails_on_any_error_hallucination_or_weak_field() -> None:
-    assert "schema errors" in failed(cs.dev_checks([dev_run(), dev_run(errors=1), dev_run()]))
-    assert "non-deal hallucinations" in failed(cs.dev_checks([dev_run(non_deal_filled=1)] + [dev_run()] * 2))
-    assert "weakest field" in failed(cs.dev_checks([dev_run(acc=0.8)] * 3))
-    assert "is_deal_request" in failed(cs.dev_checks([dev_run(is_deal=0.96)] * 3))
+    assert "schema errors" in failed(cs.dev_checks([dev_run(), dev_run(errors=1), dev_run()], stored))
+    assert "non-deal hallucinations" in failed(cs.dev_checks([dev_run(non_deal_filled=1)] + [dev_run()] * 2, stored))
+    assert "weakest field" in failed(cs.dev_checks([dev_run(acc=0.8)] * 3, stored))
+    assert "is_deal_request" in failed(cs.dev_checks([dev_run(is_deal=0.96)] * 3, stored))
 
 
 def test_fixed_sections_ignore_editable_ones() -> None:
