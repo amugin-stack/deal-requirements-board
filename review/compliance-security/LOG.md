@@ -40,3 +40,18 @@ marking it confirmed or rejected. No network, no key, no repo edits.
   git history never held .env, data/raw/ or real names (only the redacted key-prefix test
   placeholder); /docs and /openapi.json expose only the schema; 404/405/413 bodies fixed;
   SDK logger pin holds after import; shared broker list never mutated; no cross-request state.
+
+## Round 3
+
+- candidates: 3 (compliance 2: C-12, C-13; security_data 1: S-10)
+- confirmed: 3 — C-12, C-13, S-10 (S-10 narrowed: DRAFT.md already names the Claude pre-loop
+  holdout file; holdout_v3 was added after the loop finished, so no past leak)
+- rejected: 0
+- new_confirmed: 3
+- Surfaces checked and clean: every non-null gold state in posts/holdout/holdout_v3 is named in
+  the post text; scoring.py never rewards a guessed state; Claude prompt has no city→state
+  examples; non-deal labels all-null; follow-ups none for non-deals; no broker has min > max;
+  a bad CSV row fails the whole load (closed); no compliance test is vacuous except C-13's;
+  lone surrogate → 422 before `_post_id`; NUL byte fine; Unicode spaces stripped consistently;
+  Cyrillic/fullwidth state lookalikes fail closed; responses not amplified; `extractor`/`source`
+  expose nothing internal; tests write nothing outside tmp_path (suite run in a scratch copy).
