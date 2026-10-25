@@ -234,7 +234,7 @@ class BodySizeLimit:
             return
 
         declared = dict(scope.get("headers") or []).get(b"content-length")
-        if declared is not None and (not declared.isdigit() or int(declared) > self.max_bytes):
+        if declared is not None and not _declared_length_ok(declared, self.max_bytes):
             await self._reject(send)
             return
 
@@ -265,6 +265,17 @@ class BodySizeLimit:
         )
         await send({"type": "http.response.start", "status": response.status_code, "headers": response.raw_headers})
         await send({"type": "http.response.body", "body": response.body})
+
+
+def _declared_length_ok(declared: bytes, max_bytes: int) -> bool:
+    """True if a `Content-Length` value is ASCII digits for at most `max_bytes`.
+
+    The digit count is checked before `int()`: past Python's int max-str-digits limit (4300),
+    `int()` raises ValueError, which would escape the middleware as a 500 instead of the 413.
+    Any value with more digits than `max_bytes` is over the cap (or zero-padded, which no
+    client needs), so it can be rejected without parsing.
+    """
+    return declared.isdigit() and len(declared) <= len(str(max_bytes)) and int(declared) <= max_bytes
 
 
 def _replay(messages: list[Message], then: Receive | None = None) -> Receive:
