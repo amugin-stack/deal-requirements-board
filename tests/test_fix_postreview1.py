@@ -161,6 +161,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
         shutil.copyfile(ev.ROOT / ev.DATASETS[name], dest)
     head = init_repo(root, {"README.md": "tmp\n"})
     monkeypatch.setattr(cs, "ROOT", root)
+    # The guard compares against pinned commits; point the pins at this tmp repo's tags.
+    monkeypatch.setattr(cs, "LOOP_START_REV", git(root, "rev-parse", "loop-start^{commit}"))
+    monkeypatch.setattr(cs, "BASELINE_REV", git(root, "rev-parse", "baseline-v1^{commit}"))
     monkeypatch.setattr(cs, "guard_checks", list)
     monkeypatch.setattr(cs, "current_identity", lambda: cs.RunIdentity(*IDENTITY))
     monkeypatch.setattr(cs, "current_prompt_version", lambda: IDENTITY[0])
@@ -360,6 +363,9 @@ def guard_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "guarded"
     init_repo(root, guard_files())
     monkeypatch.setattr(cs, "ROOT", root)
+    # The guard compares against pinned commits; point the pins at this tmp repo's tags.
+    monkeypatch.setattr(cs, "LOOP_START_REV", git(root, "rev-parse", "loop-start^{commit}"))
+    monkeypatch.setattr(cs, "BASELINE_REV", git(root, "rev-parse", "baseline-v1^{commit}"))
     return root
 
 

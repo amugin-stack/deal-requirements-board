@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -28,6 +29,12 @@ ROOT = Path(__file__).resolve().parent.parent
 
 LOOP_START_TAG = "loop-start"
 BASELINE_TAG = "baseline-v1"
+# The commits those tags named when the loop was set up, pinned. Every comparison uses these, not
+# the tag names: `git tag -f loop-start HEAD` would otherwise move the reference point and hide
+# every committed edit and earlier final look. The tags are still checked ('tags unmoved'), and
+# editing these pins is itself a change to this protected file, diffed against the pinned commit.
+LOOP_START_REV = "88b7045c9462ef71ce7709ab414b52fc7200ed36"
+BASELINE_REV = "0501de7cb727ed91917d673ae729440179a8e931"
 # The paths the guard used to diff. The allow-list below supersedes them: every one is outside
 # it, and so is everything else the loop could use to game the numbers (a conftest.py, a
 # pytest.ini, a scoring/ package shadowing scoring.py, ...). Kept as the named high-value set.
@@ -376,8 +383,12 @@ def tests_check(returncode: int, output: str) -> Check:
 # ---- repository I/O below; the checks above are pure and unit-tested ----
 
 
+# `git replace` can make a pinned commit read as any other object; the guard ignores replacements.
+_GIT_ENV = {**os.environ, "GIT_NO_REPLACE_OBJECTS": "1"}
+
+
 def git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, env=_GIT_ENV)
 
 
 def unchanged_since(tag: str, path: str) -> bool:
@@ -432,6 +443,22 @@ def commits_since(tag: str) -> list[tuple[str, list[tuple[str, str]]]] | None:
     return out
 
 
+def tags_check(resolved: dict[str, str | None], pinned: dict[str, str], replacements: list[str]) -> Check:
+    """The tags still name the pinned commits, and no `git replace` object is installed.
+
+    The comparisons already use the pins, so a moved tag can't hide anything by itself; this makes
+    the attempt visible. A replacement is reported even though git() ignores it, since its only
+    use here would be to make a pinned commit look like another.
+    """
+    moved = [
+        f"{tag} -> {(resolved.get(tag) or 'missing')[:12]} (pinned {sha[:12]})"
+        for tag, sha in pinned.items()
+        if resolved.get(tag) != sha
+    ]
+    problems = moved + [f"replace ref {r}" for r in replacements]
+    return Check("tags unmoved", not problems, "; ".join(problems) or f"{', '.join(pinned)} at their pinned commits")
+
+
 def reachability_check(unreachable: list[str]) -> Check:
     """Every loop run must sit on HEAD's history.
 
@@ -448,21 +475,21 @@ def reachability_check(unreachable: list[str]) -> Check:
 
 
 def guard_checks() -> list[Check]:
-    changes = changes_since(LOOP_START_TAG)
+    changes = changes_since(LOOP_START_REV)
     protected = (
         Check("protected files unchanged", False, f"git diff against tag {LOOP_START_TAG} failed")
         if changes is None
         else allow_list_check(changes)
     )
-    commits = commits_since(LOOP_START_TAG)
+    commits = commits_since(LOOP_START_REV)
     history = (
         Check("protected files untouched in history", False, f"git log since tag {LOOP_START_TAG} failed")
         if commits is None
         else history_check(commits)
     )
-    original = git("show", f"{LOOP_START_TAG}:{DRAFT}").stdout
+    original = git("show", f"{LOOP_START_REV}:{DRAFT}").stdout
     draft_fixed = bool(original) and fixed_sections(original) == fixed_sections((ROOT / DRAFT).read_text())
-    baseline = unchanged_since(BASELINE_TAG, BASELINE)
+    baseline = unchanged_since(BASELINE_REV, BASELINE)
     tests = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=ROOT, capture_output=True, text=True
     )
@@ -473,7 +500,21 @@ def guard_checks() -> list[Check]:
         Check("baseline frozen", baseline, f"regex_baseline.py vs {BASELINE_TAG}"),
         tests_check(tests.returncode, tests.stdout),
         reachability_check(unreachable_runs()),
+        tags_check(resolved_tags(), {LOOP_START_TAG: LOOP_START_REV, BASELINE_TAG: BASELINE_REV}, replace_refs()),
     ]
+
+
+def resolved_tags() -> dict[str, str | None]:
+    """The commit each tag names now, or None if it doesn't resolve."""
+    out: dict[str, str | None] = {}
+    for tag in (LOOP_START_TAG, BASELINE_TAG):
+        found = git("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}")
+        out[tag] = found.stdout.strip() if found.returncode == 0 else None
+    return out
+
+
+def replace_refs() -> list[str]:
+    return git("for-each-ref", "--format=%(refname)", "refs/replace/").stdout.split()
 
 
 def rescore_saved(saved: JSONObject) -> JSONObject:
@@ -496,7 +537,7 @@ def made_runs() -> list[JSONObject]:
 
 
 def after_loop_start(run: JSONObject) -> bool:
-    return git("merge-base", "--is-ancestor", LOOP_START_TAG, run["git"]["commit"]).returncode == 0
+    return git("merge-base", "--is-ancestor", LOOP_START_REV, run["git"]["commit"]).returncode == 0
 
 
 def loop_runs(split: str) -> list[JSONObject]:
@@ -504,31 +545,42 @@ def loop_runs(split: str) -> list[JSONObject]:
     return [r for r in made_runs() if r.get("split", "all") == split and not r["git"]["dirty"] and after_loop_start(r)]
 
 
+def in_loop_start(run: JSONObject) -> bool:
+    """True for a results file already in the loop-start tree: pre-loop history, not a loop run."""
+    return git("cat-file", "-e", f"{LOOP_START_REV}:results/{run['_file']}").returncode == 0
+
+
 def final_looks() -> list[JSONObject]:
-    """Every final (--split all) run at or after loop-start, newest first, dirty or not.
+    """Every final (--split all) run added since loop-start, newest first, dirty or not, made at
+    any commit.
 
     Not loop_runs("all"): a dirty final still looked at the holdout, so dropping it would let a
-    second, clean final pass as the only look. final_checks fails the dirty one instead.
+    second, clean final pass as the only look; final_checks fails the dirty one instead. And not
+    filtered on the run's commit descending from loop-start: a look made off the loop's history
+    (e.g. on a branch from loop-start^ with the same tree) is still a look at the holdout.
     """
-    return [r for r in made_runs() if r.get("split", "all") == "all" and after_loop_start(r)]
+    return [r for r in made_runs() if r.get("split", "all") == "all" and not in_loop_start(r)]
 
 
 def unreachable_runs() -> list[str]:
-    """Runs added since loop-start whose commit is not on HEAD's history, or whose commit git
-    can't resolve at all (e.g. garbage-collected after a reset): either way the guard can't see
-    what tree the run was made on.
+    """Runs added since loop-start whose commit is not between loop-start and HEAD on HEAD's
+    history (reset away, or made on a side branch off an older commit), or whose commit git can't
+    resolve at all (e.g. garbage-collected after a reset): either way the guard can't see what
+    tree the run was made on.
 
     Results files already in the tag are pre-loop history; the allow-list already fails any edit
     to them, so only files added since are checked here.
     """
     bad: list[str] = []
     for r in made_runs():
-        if git("cat-file", "-e", f"{LOOP_START_TAG}:results/{r['_file']}").returncode == 0:
+        if in_loop_start(r):
             continue
         commit = str(r.get("git", {}).get("commit", ""))
         if git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
             bad.append(f"{r['_file']} (unknown commit {commit[:12] or '?'})")
-        elif after_loop_start(r) and git("merge-base", "--is-ancestor", commit, "HEAD").returncode != 0:
+        elif not after_loop_start(r):
+            bad.append(f"{r['_file']} ({commit[:7]}, made outside the loop's history)")
+        elif git("merge-base", "--is-ancestor", commit, "HEAD").returncode != 0:
             bad.append(f"{r['_file']} ({commit[:7]})")
     return bad
 
