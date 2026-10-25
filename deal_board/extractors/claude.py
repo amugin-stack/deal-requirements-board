@@ -202,10 +202,13 @@ def _default_client(api_key: str | None) -> anthropic.Anthropic:
 
     Raising here, instead of passing api_key=None, stops the SDK from falling back to its own
     environment lookup (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN) behind config's back.
+
+    open_telemetry=False for the same reason: left unset, the SDK reads ANTHROPIC_OPEN_TELEMETRY_*
+    env vars, and one of them (TRACES_CONTENT_MODE=content) puts the full post text into spans.
     """
     if api_key is None:
         raise RuntimeError("ANTHROPIC_API_KEY is not set; pass a client or set the key to use ClaudeExtractor")
-    return anthropic.Anthropic(api_key=api_key)
+    return anthropic.Anthropic(api_key=api_key, open_telemetry=False)
 
 
 class ClaudeExtractor:
