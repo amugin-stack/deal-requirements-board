@@ -4,6 +4,7 @@ Licensing is a hard gate, not a score: a broker who can't be verified as license
 in the deal's state is never returned, however good the fit. Ranking only orders
 the brokers who pass the gate, and every point comes with a plain-English reason.
 """
+
 from datetime import date
 
 from pydantic import BaseModel

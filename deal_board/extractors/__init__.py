@@ -1,7 +1,8 @@
 """One interface for every extractor, so eval.py and the API can swap them freely."""
+
 from typing import Protocol
 
-from deal_board.schema import DealRequirement
+from deal_board.schema import DealRequirement, JSONObject
 
 
 class ExtractionError(Exception):
@@ -14,7 +15,7 @@ class Extractor(Protocol):
     def extract(self, text: str) -> DealRequirement: ...
 
 
-def parse_requirement(raw: dict) -> DealRequirement:
+def parse_requirement(raw: JSONObject) -> DealRequirement:
     """Validate a raw extractor output. Raises ExtractionError instead of repairing bad values."""
     try:
         return DealRequirement.model_validate(raw)

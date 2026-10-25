@@ -5,6 +5,7 @@ data/posts.jsonl and data/holdout.jsonl. It was generated once and must NEVER be
 regenerated. If this test fails, the baseline changed: revert that change to
 extractors/regex_baseline.py - do not update the golden file.
 """
+
 import json
 from pathlib import Path
 from typing import Any

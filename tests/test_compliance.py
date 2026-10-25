@@ -7,6 +7,7 @@ expiration, wrong state) and checks each returned broker with an oracle written 
 independently of matcher.is_licensed. One parametrized case per post, so a failure
 names the post that leaked.
 """
+
 import csv
 import json
 from datetime import date, timedelta
@@ -25,6 +26,7 @@ POST_FILES = [DATA / "posts.jsonl", DATA / "holdout.jsonl"]
 
 # ---------- the oracle: the licensing rule, restated ----------
 
+
 def oracle_licensed(b: Broker, state: str | None, as_of: date) -> bool:
     if state is None:
         return False
@@ -38,6 +40,7 @@ def oracle_licensed(b: Broker, state: str | None, as_of: date) -> bool:
 
 
 # ---------- data ----------
+
 
 def load_posts() -> list[tuple[str, DealRequirement]]:
     posts = []
@@ -66,18 +69,30 @@ def make_variants(b: Broker) -> list[Broker]:
         b.model_copy(update={"broker_id": f"{b.broker_id}~status-{i}", "license_status": s})
         for i, s in enumerate(STATUSES)
     ]
-    variants.append(b.model_copy(update={
-        "broker_id": f"{b.broker_id}~expired-yesterday",
-        "license_expiration": AS_OF - timedelta(days=1),
-    }))
-    variants.append(b.model_copy(update={
-        "broker_id": f"{b.broker_id}~expiration-unknown",
-        "license_expiration": None,
-    }))
-    variants.append(b.model_copy(update={
-        "broker_id": f"{b.broker_id}~wrong-state",
-        "license_state": other_state(b.license_state),
-    }))
+    variants.append(
+        b.model_copy(
+            update={
+                "broker_id": f"{b.broker_id}~expired-yesterday",
+                "license_expiration": AS_OF - timedelta(days=1),
+            }
+        )
+    )
+    variants.append(
+        b.model_copy(
+            update={
+                "broker_id": f"{b.broker_id}~expiration-unknown",
+                "license_expiration": None,
+            }
+        )
+    )
+    variants.append(
+        b.model_copy(
+            update={
+                "broker_id": f"{b.broker_id}~wrong-state",
+                "license_state": other_state(b.license_state),
+            }
+        )
+    )
     return variants
 
 
@@ -89,7 +104,7 @@ VARIANT_IDS = {v.broker_id for v in VARIANTS}
 POOL = BASE + VARIANTS
 
 
-def test_fixture_sanity():
+def test_fixture_sanity() -> None:
     assert len(POSTS) == 50
     assert len({pid for pid, _ in POSTS}) == len(POSTS)
     assert len({b.broker_id for b in POOL}) == len(POOL)
@@ -98,17 +113,16 @@ def test_fixture_sanity():
     # Every variant is unlicensed in its original broker's state, and no post names the
     # state the wrong-state variants were moved to, so no variant may ever be returned.
     original_state = {b.broker_id: b.license_state for b in BASE}
-    assert not any(
-        oracle_licensed(v, original_state[v.broker_id.split("~")[0]], AS_OF) for v in VARIANTS
-    )
+    assert not any(oracle_licensed(v, original_state[v.broker_id.split("~")[0]], AS_OF) for v in VARIANTS)
     moved_to = {v.license_state for v in VARIANTS if v.broker_id.endswith("~wrong-state")}
     assert not moved_to & {r.state for _, r in POSTS}
 
 
 # ---------- the gate, per post ----------
 
+
 @pytest.mark.parametrize("req", [r for _, r in POSTS], ids=[pid for pid, _ in POSTS])
-def test_post_returns_only_licensed_brokers(req: DealRequirement):
+def test_post_returns_only_licensed_brokers(req: DealRequirement) -> None:
     pool_before = [b.model_dump() for b in POOL]
     result = match(req, POOL, AS_OF, limit=len(POOL) + 10)
 
@@ -131,7 +145,7 @@ def test_post_returns_only_licensed_brokers(req: DealRequirement):
     assert [b.model_dump() for b in POOL] == pool_before
 
 
-def test_duplicate_broker_id_returns_only_the_licensed_record():
+def test_duplicate_broker_id_returns_only_the_licensed_record() -> None:
     # Regression: the gate must judge each record, never look brokers up by id. If an
     # unlicensed record shares an id with a licensed one, only the licensed object comes back.
     licensed = next(b for b in BASE if b.broker_id == "fx-01")
@@ -145,56 +159,57 @@ def test_duplicate_broker_id_returns_only_the_licensed_record():
 
 # ---------- is_licensed against the oracle ----------
 
+
 def _base() -> Broker:
     return next(b for b in BASE if b.broker_id == "fx-01")  # FL, Active, expires 2028
 
 
 @pytest.mark.parametrize("b", POOL[:: max(1, len(POOL) // 60)], ids=lambda b: b.broker_id)
 @pytest.mark.parametrize("state", ["TX", "FL", "OK", None])
-def test_is_licensed_agrees_with_oracle(b: Broker, state: str | None):
+def test_is_licensed_agrees_with_oracle(b: Broker, state: str | None) -> None:
     assert is_licensed(b, state, AS_OF) == oracle_licensed(b, state, AS_OF)
 
 
 @pytest.mark.parametrize(
     "expiration,expected",
     [
-        (AS_OF, True),                       # expiring today is still licensed
-        (AS_OF + timedelta(days=1), True),   # tomorrow
+        (AS_OF, True),  # expiring today is still licensed
+        (AS_OF + timedelta(days=1), True),  # tomorrow
         (AS_OF - timedelta(days=1), False),  # yesterday
-        (None, False),                       # unknown
+        (None, False),  # unknown
     ],
     ids=["today", "tomorrow", "yesterday", "unknown"],
 )
-def test_expiration_boundary(expiration: date | None, expected: bool):
+def test_expiration_boundary(expiration: date | None, expected: bool) -> None:
     b = _base().model_copy(update={"license_expiration": expiration})
     assert is_licensed(b, "FL", AS_OF) is expected
     returned = match(DealRequirement(is_deal_request=True, state="FL"), [b], AS_OF).matches
     assert bool(returned) is expected
 
 
-def test_as_of_is_respected_not_the_clock():
+def test_as_of_is_respected_not_the_clock() -> None:
     b = _base().model_copy(update={"license_expiration": date(2020, 1, 1)})
     assert is_licensed(b, "FL", date(2019, 12, 31)) is True
     assert is_licensed(b, "FL", date(2020, 1, 2)) is False
 
 
-def test_state_none_is_not_licensed():
+def test_state_none_is_not_licensed() -> None:
     assert is_licensed(_base(), None, AS_OF) is False
 
 
-def test_state_must_match_exactly():
+def test_state_must_match_exactly() -> None:
     assert is_licensed(_base(), "FL", AS_OF) is True
     assert is_licensed(_base(), "GA", AS_OF) is False
     assert is_licensed(_base(), "fl", AS_OF) is False  # a different string, so not a match
 
 
 @pytest.mark.parametrize("status", STATUSES)
-def test_every_non_active_status_is_not_licensed(status: str):
+def test_every_non_active_status_is_not_licensed(status: str) -> None:
     b = _base().model_copy(update={"license_status": status})
     assert is_licensed(b, "FL", AS_OF) is False
 
 
 @pytest.mark.parametrize("status", ["active", "ACTIVE", " Active", "Active "])
-def test_status_must_be_exactly_active(status: str):
+def test_status_must_be_exactly_active(status: str) -> None:
     b = _base().model_copy(update={"license_status": status})
     assert is_licensed(b, "FL", AS_OF) is False

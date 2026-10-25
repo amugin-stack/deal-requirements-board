@@ -6,16 +6,68 @@ Two models:
 - DealRequirement: ExtractedFields plus `missing_fields`, which code computes.
   The model never reports its own gaps; we derive them from what came back empty.
 """
+
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+# A parsed `json.loads` object (posts, labels, raw extractor output, results files). Values are
+# arbitrary JSON, so they stay `Any`; code that needs guarantees validates into a model instead.
+type JSONObject = dict[str, Any]
+
 State = Literal[
-    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID",
-    "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO",
-    "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA",
-    "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "DC",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
 ]
 
 
@@ -87,12 +139,12 @@ class ExtractedFields(BaseModel):
 
     @field_validator("state", mode="before")
     @classmethod
-    def _upper_state(cls, v):
+    def _upper_state(cls, v: object) -> str | None:
         return v.strip().upper() if isinstance(v, str) and v.strip() else None
 
     @field_validator("city", "notes", mode="before")
     @classmethod
-    def _blank_to_none(cls, v):
+    def _blank_to_none(cls, v: object) -> str | None:
         return v.strip() if isinstance(v, str) and v.strip() else None
 
 
@@ -100,9 +152,7 @@ class DealRequirement(ExtractedFields):
     missing_fields: list[str] = []
 
     @model_validator(mode="after")
-    def _compute_missing(self):
+    def _compute_missing(self) -> Self:
         # A non-deal post has nothing to follow up on.
-        self.missing_fields = (
-            [f for f in KEY_FIELDS if getattr(self, f) is None] if self.is_deal_request else []
-        )
+        self.missing_fields = [f for f in KEY_FIELDS if getattr(self, f) is None] if self.is_deal_request else []
         return self

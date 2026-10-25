@@ -5,6 +5,7 @@ always yields the same string, so it can be tested exactly, cached, and shown to
 a poster without review. We ask about one field at a time because a single short
 question gets answered; a list of six gets ignored.
 """
+
 from collections.abc import Callable
 
 from deal_board.schema import KEY_FIELDS, DealRequirement, PropertyType
@@ -63,10 +64,7 @@ def _ask_state(req: DealRequirement) -> str:
 
 
 def _ask_transaction_type(req: DealRequirement) -> str:
-    return (
-        f"Is the client buying, selling, leasing, or doing a 1031 exchange "
-        f"for the {_property(req)}{_where(req)}?"
-    )
+    return f"Is the client buying, selling, leasing, or doing a 1031 exchange for the {_property(req)}{_where(req)}?"
 
 
 def _ask_property_type(req: DealRequirement) -> str:

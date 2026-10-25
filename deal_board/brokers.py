@@ -2,6 +2,7 @@
 
 This module only loads data. The compliance filter and scoring live in matcher.py.
 """
+
 import csv
 from datetime import date
 from pathlib import Path
@@ -46,12 +47,12 @@ class Broker(BaseModel):
 
     @field_validator("*", mode="before")
     @classmethod
-    def _blank_to_none(cls, v):
+    def _blank_to_none(cls, v: object) -> object:
         return None if v == "" else v
 
     @field_validator("markets", "property_types", "transaction_types", mode="before")
     @classmethod
-    def _split_list(cls, v):
+    def _split_list(cls, v: object) -> object:
         return [x.strip() for x in v.split(";") if x.strip()] if isinstance(v, str) else (v or [])
 
     @property
