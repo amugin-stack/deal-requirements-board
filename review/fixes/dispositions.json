@@ -842,5 +842,27 @@
     "note": "Fixed: fresh results record raw_check; a recorded strict run stays strict after a prompt change (the record only adds strictness). All 21 saved runs still rescore identically to main apart from EM-61 keys.",
     "regression_test": "tests/test_fix_postreview1.py::test_eval6_recorded_strict_survives_a_prompt_version_change",
     "commit": "e7b7deb06f29"
+  },
+  {
+    "review": "postreview-2",
+    "id": "R2-EVAL-1",
+    "severity": "medium",
+    "title": "A final look made off the loop's history (branch from loop-start^) was never counted",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: every results file added since loop-start counts as a look whatever its commit's ancestry; 'runs reachable from HEAD' fails one made outside loop-start..HEAD. Real repo results unchanged (verified).",
+    "regression_test": "tests/test_fix_postreview2.py::test_r2_eval1_off_branch_peek_counts_as_a_look",
+    "commit": "2dcf5561b82b"
+  },
+  {
+    "review": "postreview-2",
+    "id": "R2-EVAL-2",
+    "severity": "medium",
+    "title": "The guard trusted movable tags (git tag -f loop-start HEAD erased its comparisons)",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: comparisons use pinned commits LOOP_START_REV/BASELINE_REV; git runs with --no-replace-objects (161490e); new 'tags unmoved' check reports a moved tag or any refs/replace entry.",
+    "regression_test": "tests/test_fix_postreview2.py::test_r2_eval2_moving_loop_start_does_not_hide_a_protected_commit",
+    "commit": "2dcf5561b82b"
   }
 ]

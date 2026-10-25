@@ -37,3 +37,30 @@ Rejected or low-only observations from round 1 (not fixed, recorded for the owne
   doesn't bound xfails; `split` isn't part of the post hashes; the shipped loop can no longer pass its
   own (stricter) guard, which is expected: legacy runs carry no `request_sha` or cache flags.
 - README Gate row doesn't mention the 90-day snapshot rule or the New York date (docs builder).
+
+## Round 2
+
+new_medium_or_high: 2
+
+Reviewed at `830605e` (fresh reviewers; a first attempt was cut off when the session process exited and
+was relaunched). Compliance: no medium/high. Eval-method: 2 candidates, both confirmed medium by their
+verifiers.
+
+| id | reviewer | claimed | verified | finding | fix |
+|---|---|---|---|---|---|
+| R2-EVAL-1 | eval | medium | medium | `final_looks` counted only runs whose commit descends from loop-start, so a final look made on a branch from `loop-start^` (same tree) was invisible to 'one look only' and the reachability check | `2dcf556` |
+| R2-EVAL-2 | eval | medium | medium | the guard resolved the `loop-start`/`baseline-v1` tag names at run time, so `git tag -f loop-start HEAD` hid committed protected edits and earlier final looks; the verifier added that `git replace` could fake a pinned commit | `2dcf556`, `161490e` |
+
+Regression tests: `tests/test_fix_postreview2.py` (11, written blind, 9 red on `830605e`, all green on
+the fix). After the fixes: 1329 passed, 1 skipped; ruff, format, mypy clean (the env-access test caught
+a first version that read `os.environ`; fixed with git's `--no-replace-objects` flag).
+
+Low observations from round 2 (not fixed, recorded for the owner):
+- `build_brokers` stamps TREC rows with a hand-set `AS_OF` date, not the raw file's download date; bumping
+  it without a new download would make stale statuses look fresh (operator error).
+- FastAPI's built-in telemetry and httpx2's proxy variables read the environment outside `config.py`
+  (library behaviour; nothing exported without an OpenTelemetry provider).
+- A strict-recorded run is re-checked against today's `ExtractedFields` keys, so a future schema change
+  would turn its records into errors on rescore (schema.py is protected inside the loop).
+- A final look written outside `results/` (`--results-dir`) or deleted can't be counted by any
+  file-based guard; a protected look ledger would be needed.
