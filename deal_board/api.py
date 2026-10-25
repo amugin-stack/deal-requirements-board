@@ -24,7 +24,7 @@ import secrets
 from collections.abc import Callable, Sequence
 from datetime import date
 from functools import lru_cache
-from typing import Annotated, Literal, Protocol, cast
+from typing import Annotated, Any, Literal, Protocol, cast
 
 import anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -244,7 +244,35 @@ def get_matcher() -> MatchFn:
 
 # --- App ----------------------------------------------------------------------------------------
 
-app = FastAPI(
+_REF = "#/components/schemas/"
+
+
+def _document_both_422_bodies(schema: dict[str, Any]) -> None:
+    """Make `POST /match`'s documented 422 accept both bodies the route can return.
+
+    FastAPI documents 422 as `HTTPValidationError` (detail: a list of errors), but an extraction
+    failure returns `ErrorDetail` (detail: a fixed string), which a generated client would then
+    fail to parse. The 422 is patched after generation rather than declared in `responses=`:
+    declaring 422 there makes FastAPI drop its own entry and with it the HTTPValidationError
+    component the first body needs. Mutates `schema` in place.
+    """
+    response = schema["paths"]["/match"]["post"]["responses"]["422"]
+    response["description"] = "Invalid request body, or no deal requirement could be extracted from the post"
+    response["content"]["application/json"]["schema"] = {
+        "anyOf": [{"$ref": _REF + "HTTPValidationError"}, {"$ref": _REF + "ErrorDetail"}]
+    }
+
+
+class _DealBoardApp(FastAPI):
+    """FastAPI whose generated OpenAPI document gets `_document_both_422_bodies` applied once."""
+
+    def openapi(self) -> dict[str, Any]:
+        if self.openapi_schema is None:
+            _document_both_422_bodies(super().openapi())  # super() caches into openapi_schema
+        return super().openapi()
+
+
+app = _DealBoardApp(
     title="Deal Requirements Board",
     summary="Turn a broker's deal post into licensed, ranked broker matches.",
     version="0.1.0",
