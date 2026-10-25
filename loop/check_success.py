@@ -71,6 +71,37 @@ class Check:
     detail: str
 
 
+@dataclass(frozen=True)
+class RunIdentity:
+    """What makes two runs samples of the same request.
+
+    PROMPT_VERSION hashes only SYSTEM_PROMPT and TOOL, so on its own it would pool runs made
+    with another model, max_tokens, tool_choice or message template. request_sha covers those
+    and the model; the model is kept as well so a mismatch reads plainly in the gate output.
+    """
+
+    prompt_version: str
+    model: str
+    request_sha: str
+
+    def __str__(self) -> str:
+        return f"{self.prompt_version}/{self.model}/{self.request_sha}"
+
+
+def run_identity(run: JSONObject) -> RunIdentity | None:
+    """The run's identity, or None if any part is missing (runs saved before request_sha existed)."""
+    parts = (run.get("prompt_version"), run.get("model"), run.get("request_sha"))
+    if not all(isinstance(p, str) and p for p in parts):
+        return None
+    version, model, sha = (str(p) for p in parts)
+    return RunIdentity(version, model, sha)
+
+
+def same_request(run: JSONObject, identity: RunIdentity | None) -> bool:
+    """Fail closed: an unidentified run, or an unknown current identity, matches nothing."""
+    return identity is not None and run_identity(run) == identity
+
+
 def run_mean(scores: JSONObject) -> float:
     """Mean of is_deal_request plus the six key fields. missing_fields is reported, not gated."""
     accs: list[float] = [scores["is_deal_request"]["accuracy"]] + [scores["fields"][f]["accuracy"] for f in KEY_FIELDS]
@@ -113,7 +144,9 @@ def dev_checks(runs: list[JSONObject]) -> list[Check]:
     ]
 
 
-def final_checks(finals: list[JSONObject], dev_passed_version: str | None) -> list[Check]:
+def final_checks(finals: list[JSONObject], dev_passed: RunIdentity | None) -> list[Check]:
+    """finals: every final run since loop-start, newest first. dev_passed: the identity the dev
+    gate passed for, or None if it did not pass."""
     if not finals:
         return [Check("final run", False, "no final (--split all) run since loop-start")]
     run = finals[-1]  # oldest: the first look is the one that counts
@@ -122,8 +155,8 @@ def final_checks(finals: list[JSONObject], dev_passed_version: str | None) -> li
         Check("one look only", len(finals) <= MAX_FINAL_RUNS, f"{len(finals)} final runs since loop-start"),
         Check(
             "prompt passed dev first",
-            run["prompt_version"] == dev_passed_version,
-            f"final ran {run['prompt_version']}, dev passed {dev_passed_version}",
+            same_request(run, dev_passed),
+            f"final ran {run_identity(run) or 'an unidentified request'}, dev passed {dev_passed}",
         ),
         Check(
             "schema errors",
@@ -201,14 +234,40 @@ def loop_runs(split: str) -> list[JSONObject]:
     return runs
 
 
-def dev_runs_for(version: str) -> list[JSONObject]:
-    return [r for r in loop_runs("dev") if r["prompt_version"] == version]
+def dev_runs_for(identity: RunIdentity | None) -> list[JSONObject]:
+    return [r for r in loop_runs("dev") if same_request(r, identity)]
 
 
 def current_prompt_version() -> str:
     from deal_board.extractors.claude import PROMPT_VERSION
 
     return PROMPT_VERSION
+
+
+def current_request_sha(model: str) -> str | None:
+    """deal_board.extractors.claude.request_sha(model), or None if the extractor has none.
+
+    Looked up with getattr so this file typechecks and runs against an extractor that predates
+    request_sha; None then makes every run fail to match, so the gate fails closed.
+    """
+    from deal_board.extractors import claude
+
+    fn = getattr(claude, "request_sha", None)
+    if not callable(fn):
+        return None
+    sha = fn(model)
+    return sha if isinstance(sha, str) and sha else None
+
+
+def current_identity() -> RunIdentity | None:
+    """The identity a run made now would carry. The model comes from the same setting eval uses
+    (DEAL_MODEL, read at call time); only the process environment is consulted, so a model set
+    only in .env must be exported, or nothing matches."""
+    from deal_board.config import load_settings
+
+    model = load_settings().deal_model
+    sha = current_request_sha(model)
+    return None if sha is None else RunIdentity(current_prompt_version(), model, sha)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -218,23 +277,30 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     version = current_prompt_version()
-    dev = dev_checks(dev_runs_for(version))
+    identity = current_identity()
+    dev = dev_checks(dev_runs_for(identity))
     if args.stage == "dev":
         checks = guard_checks() + dev
     else:
         dev_ok = all(c.passed for c in dev)
-        checks = guard_checks() + final_checks(loop_runs("all"), version if dev_ok else None)
+        checks = guard_checks() + final_checks(loop_runs("all"), identity if dev_ok else None)
 
     ok = all(c.passed for c in checks)
     if args.json:
         print(
             json.dumps(
-                {"stage": args.stage, "prompt_version": version, "passed": ok, "checks": [c.__dict__ for c in checks]},
+                {
+                    "stage": args.stage,
+                    "prompt_version": version,
+                    "identity": None if identity is None else identity.__dict__,
+                    "passed": ok,
+                    "checks": [c.__dict__ for c in checks],
+                },
                 indent=2,
             )
         )
     else:
-        print(f"stage={args.stage} prompt={version}")
+        print(f"stage={args.stage} prompt={version} identity={identity or 'unknown (no request_sha): no run matches'}")
         for c in checks:
             print(f"  [{'PASS' if c.passed else 'FAIL'}] {c.name}: {c.detail}")
         print("SUCCESS" if ok else "NOT YET")

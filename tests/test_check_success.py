@@ -54,8 +54,16 @@ def dev_run(**kw: Unpack[ScoreKw]) -> JSONObject:
     return {"prompt_version": "v1", "datasets": {"posts_dev": {"scores": scores(**kw)}}}
 
 
+V1 = cs.RunIdentity("v1", "m", "0123456789ab")
+
+
 def final_run(version: str = "v1", **kw: Unpack[ScoreKw]) -> JSONObject:
-    return {"prompt_version": version, "datasets": {"holdout": {"scores": scores(**kw)}, "posts": {"scores": scores()}}}
+    return {
+        "prompt_version": version,
+        "model": V1.model,
+        "request_sha": V1.request_sha,
+        "datasets": {"holdout": {"scores": scores(**kw)}, "posts": {"scores": scores()}},
+    }
 
 
 def failed(checks: Iterable[cs.Check]) -> set[str]:
@@ -82,7 +90,7 @@ def test_fixed_sections_ignore_editable_ones() -> None:
 
 
 def test_final_allows_one_look_at_a_dev_passed_prompt() -> None:
-    assert failed(cs.final_checks([final_run()], "v1")) == set()
-    assert "one look only" in failed(cs.final_checks([final_run(), final_run()], "v1"))
+    assert failed(cs.final_checks([final_run()], V1)) == set()
+    assert "one look only" in failed(cs.final_checks([final_run(), final_run()], V1))
     assert "prompt passed dev first" in failed(cs.final_checks([final_run()], None))
-    assert "holdout mean accuracy" in failed(cs.final_checks([final_run(acc=0.7)], "v1"))
+    assert "holdout mean accuracy" in failed(cs.final_checks([final_run(acc=0.7)], V1))
