@@ -145,7 +145,7 @@ class ErrorDetail(BaseModel):
 STATE_CODES: Final = frozenset(get_args(State))
 
 
-def revalidate_requirement(extracted: DealRequirement) -> DealRequirement:
+def revalidate_requirement(extracted: object) -> DealRequirement:
     """A freshly validated copy of an extractor's output, failing closed on the gate's inputs.
 
     The `Extractor` protocol promises a validated `DealRequirement`, but nothing enforces it: a
@@ -162,8 +162,14 @@ def revalidate_requirement(extracted: DealRequirement) -> DealRequirement:
     - every other field goes through `DealRequirement.model_validate`, which also recomputes
       `missing_fields`; an invalid value raises `pydantic.ValidationError` (the route's 422).
 
+    Anything that isn't a requirement at all (None, a dict, a string) raises TypeError, so the
+    route answers with its logged fixed 500: reading every field as missing would turn an
+    extractor bug into a plausible 200 "not a deal".
+
     Pure. A real extractor's output comes back equal to what went in.
     """
+    if not isinstance(extracted, ExtractedFields):
+        raise TypeError(f"extractor returned {type(extracted).__name__}, not a DealRequirement")
     fields: dict[str, Any] = {name: getattr(extracted, name, None) for name in ExtractedFields.model_fields}
     state = fields["state"]
     fields["state"] = state if isinstance(state, str) and state in STATE_CODES else None

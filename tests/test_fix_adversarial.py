@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from deal_board import api
 from deal_board.brokers import Broker
 from deal_board.cli import eval as ev
 from deal_board.extractors.claude import PROMPT_VERSION
-from deal_board.matcher import is_licensed
+from deal_board.matcher import is_licensed, match
 
 ROOT = Path(__file__).resolve().parent.parent
 PRE_STRICT_RUN = ROOT / "results" / "claude_20261024T231514Z.json"  # prompt de789943: nulls could be omitted
@@ -96,3 +99,35 @@ def test_adv2_unreadable_or_future_snapshot_fails_closed(source: str) -> None:
 def test_adv2_controls_still_pass(source: str) -> None:
     """ADV-2 control: fictional rows and fresh, well-formed snapshots (age 0 to 90 days) still pass."""
     assert is_licensed(_broker(source), "TX", ADV2_AS_OF) is True
+
+
+class _WrongTypeExtractor:
+    """An extractor bug: returns something that isn't a DealRequirement at all."""
+
+    name = "regex"
+
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def extract(self, text: str) -> object:
+        return self._value
+
+
+@pytest.mark.parametrize(
+    "value", [None, {"is_deal_request": True, "state": "TX"}, "TX deal", object()], ids=["none", "dict", "str", "obj"]
+)
+def test_adv3_non_requirement_from_extractor_is_a_logged_500(value: object, caplog: pytest.LogCaptureFixture) -> None:
+    """ADV-3: a wrong-typed extractor result is the fixed 500 with a post= log line, never a 200 'not a deal'."""
+    api.app.dependency_overrides[api.get_extractor] = lambda: _WrongTypeExtractor(value)
+    api.app.dependency_overrides[api.get_brokers] = lambda: []
+    api.app.dependency_overrides[api.get_as_of] = lambda: date(2026, 11, 30)
+    api.app.dependency_overrides[api.get_matcher] = lambda: match
+    try:
+        with caplog.at_level(logging.INFO):
+            resp = TestClient(api.app, raise_server_exceptions=False).post("/match", json={"text": "TX deal QUOKKA"})
+    finally:
+        api.app.dependency_overrides.clear()
+    assert resp.status_code == 500
+    assert resp.json() == {"detail": "matching failed unexpectedly"}
+    assert any("post=" in r.getMessage() for r in caplog.records)
+    assert not any("QUOKKA" in r.getMessage() for r in caplog.records)
