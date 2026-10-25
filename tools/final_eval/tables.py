@@ -152,8 +152,11 @@ def _commit(saved: JSONObject) -> str:
     git = saved.get("git") or {}
     commit = git.get("commit")
     out = f"commit `{commit[:7] if isinstance(commit, str) and commit else 'unknown'}`"
-    if git.get("dirty") is True:
+    dirty = git.get("dirty")
+    if dirty is True:
         out += " (uncommitted changes)"
+    elif dirty is not False:  # "true", 0, missing: not provably clean, so say so
+        out += f" (dirty flag {dirty!r}, not provably clean)"
     final = saved.get("final_eval")
     if isinstance(final, dict) and final.get("complete") is False:
         out += " (INCOMPLETE)"
@@ -192,6 +195,33 @@ def _look_note(name: str, regex: RunFile, claude: RunFile) -> str:
     )
 
 
+def _incomplete(saved: JSONObject) -> bool:
+    final = saved.get("final_eval")
+    return isinstance(final, dict) and final.get("complete") is not True
+
+
+def _label_warnings(runs: tuple[RunFile, ...], path: str) -> list[str]:
+    """A loud line for each v3 run whose recorded label sha256 differs from the label file now.
+
+    Rescoring always uses the current labels, so an edit after the look would otherwise change the
+    published number with nothing in the table to show it.
+    """
+    try:
+        current = ev.file_sha256(ev.ROOT / path)
+    except OSError as e:
+        raise TableError(f"cannot hash label file {path}: {e}") from e
+    out = []
+    for source, saved in runs:
+        final = saved.get("final_eval")
+        recorded = final.get("data_sha256") if isinstance(final, dict) else None
+        if recorded != current:
+            out.append(
+                f"**WARNING: labels changed since this run.** `{source}` recorded label sha256 "
+                f"`{str(recorded)[:12]}`, the label file is now `{current[:12]}`; the numbers above use the current labels."
+            )
+    return out
+
+
 def _section(regex: RunFile, claude: RunFile, name: str) -> str:
     """Heading, table, usage line, provenance and look note for one dataset."""
     r_ds, c_ds = _rescore(regex, name), _rescore(claude, name)
@@ -200,6 +230,11 @@ def _section(regex: RunFile, claude: RunFile, name: str) -> str:
         raise TableError(f"'{name}' points at different label files: regex {path}, claude {c_ds['path']}")
     rs, cs = r_ds["scores"], c_ds["scores"]
     paired = _compare(regex, claude, name, path)
+    # Δ between runs over different post sets would compare unlike things; McNemar already pairs.
+    partial = rs["n_posts"] != cs["n_posts"] or _incomplete(regex[1]) or _incomplete(claude[1])
+
+    def delta(a: float | None, b: float | None) -> str:
+        return "n/a" if partial else _delta(a, b)
 
     title = "Final holdout v3" if name == V3 else "Earlier holdout v2"
     heading = (
@@ -219,12 +254,12 @@ def _section(regex: RunFile, claude: RunFile, name: str) -> str:
         halluc = DASH if field in NO_HALLUCINATION_COLUMN else f"{rc['hallucinated']} / {cc['hallucinated']}"
         lines.append(
             f"| {field} | {ev.with_ci(rc['accuracy'], rc.get('ci95'))} | {ev.with_ci(cc['accuracy'], cc.get('ci95'))} "
-            f"| {_delta(rc['accuracy'], cc['accuracy'])} | {halluc} | {paired[field]['p_value']:.3g} |"
+            f"| {delta(rc['accuracy'], cc['accuracy'])} | {halluc} | {paired[field]['p_value']:.3g} |"
         )
     r_mean, c_mean = _mean(rs), _mean(cs)
     lines += [
         f"| **Mean of the {len(MEAN_FIELDS)} fields** | {_fmt_mean(r_mean)} | {_fmt_mean(c_mean)} "
-        f"| {_delta(r_mean, c_mean)} | | |",
+        f"| {delta(r_mean, c_mean)} | | |",
         f"| Fields guessed on deal posts | {_guessed_on_deal(rs)} | {_guessed_on_deal(cs)} | | | |",
         f"| Fields filled on non-deal posts | {rs['non_deal_hallucinations']['fields_filled']} "
         f"| {cs['non_deal_hallucinations']['fields_filled']} | | | |",
@@ -233,6 +268,10 @@ def _section(regex: RunFile, claude: RunFile, name: str) -> str:
     ]
     usage = claude[1].get("usage")
     lines += [ev.usage_line(usage) if isinstance(usage, dict) else NO_USAGE, ""]
+    if partial:
+        lines += ["Δ is n/a: at least one run is incomplete, so the two accuracies cover different posts.", ""]
+    if name == V3:
+        lines += [w for warning in _label_warnings((regex, claude), path) for w in (warning, "")]
     lines += [_provenance(regex, claude), "", _look_note(name, regex, claude)]
     return "\n".join(lines)
 
@@ -246,6 +285,14 @@ def build_tables(regex: RunFile, claude: RunFile, holdout_v2: tuple[RunFile, Run
     _check_extractor(regex, "regex", "REGEX_JSON (first positional)")
     _check_extractor(claude, "claude", "CLAUDE_JSON (second positional)")
     name = _positional_dataset(regex, claude)
+    runs = [regex, claude, *(holdout_v2 or ())]
+    for source, saved in runs:
+        if "rescored_from" in saved:  # a rescore is not a look; the table must cite the original run
+            raise TableError(f"{source} is a rescore (rescored_from={saved['rescored_from']!r}); pass the original run")
+    if name == V3:
+        for source, saved in (regex, claude):
+            if not isinstance(saved.get("final_eval"), dict):
+                raise TableError(f"{source} has no final_eval block, so it was not made by run.py; not a final look")
     if holdout_v2 is not None:
         old_claude, old_regex = holdout_v2
         _check_extractor(old_claude, "claude", "OLD_CLAUDE_JSON (first --holdout-v2 file)")
