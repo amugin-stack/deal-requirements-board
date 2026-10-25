@@ -173,11 +173,28 @@ def test_cli_compare_real_files_prints_and_writes_nothing(tmp_path: Path, capsys
     assert not (tmp_path / "results").exists() or not any((tmp_path / "results").iterdir())
 
 
-def test_cli_compare_dev_run_with_full_run(capsys: pytest.CaptureFixture[str]) -> None:
-    """A posts_dev run compares with a full run's posts dataset."""
-    dev_run = next(p for p in EVAL_RUNS if list(json.loads(p.read_text())["datasets"]) == ["posts_dev"])
-    ev.main(["--compare", str(dev_run), str(CLAUDE_RUN)])
-    assert "McNemar" in capsys.readouterr().out
+DEV_RUN = next(p for p in EVAL_RUNS if list(json.loads(p.read_text())["datasets"]) == ["posts_dev"])
+
+
+@pytest.mark.parametrize("order", ["dev_first", "full_first"])
+def test_cli_compare_dev_run_with_full_run(order: str, capsys: pytest.CaptureFixture[str]) -> None:
+    """eval-quality/CQ-42: a posts_dev run compares with a full run's posts dataset in either order."""
+    pair = [DEV_RUN, CLAUDE_RUN] if order == "dev_first" else [CLAUDE_RUN, DEV_RUN]
+    ev.main(["--compare", *map(str, pair)])
+    out = capsys.readouterr().out
+    assert "No dataset path in common" not in out
+    assert f"## `{POSTS_PATH}`: " in out and " common posts" in out
+    assert f"## `{HOLDOUT_PATH}`" not in out  # the dev run has no holdout to pair with
+
+
+def test_compare_full_run_first_skips_unmatched_holdout() -> None:
+    """eval-quality/CQ-42: an unmatched holdout listed before posts doesn't stop the posts comparison."""
+    full = saved({"holdout": (HOLDOUT_PATH, {}), "posts": (POSTS_PATH, B["datasets"]["posts"]["records"])})
+    dev = saved({"posts_dev": (POSTS_PATH, A["datasets"]["posts_dev"]["records"])})
+    for a, b in ((full, dev), (dev, full)):
+        cmp = ev.compare_results(a, b)
+        assert list(cmp) == [POSTS_PATH]
+        assert cmp[POSTS_PATH]["n_common_posts"] == 4
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,656 @@
+{
+  "data/holdout.jsonl": [
+    {
+      "id": "h01",
+      "text": "Need a buyer agent in Boise, ID. Relo clients, SFR 4bd, pre-approved up to $550k. Want to close within 90 days. Referral fee 25%.",
+      "label": {
+        "is_deal_request": true,
+        "state": "ID",
+        "city": "Boise",
+        "property_type": "single_family",
+        "transaction_type": "buy",
+        "deal_value_usd": 550000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "h02",
+      "text": "Tenant rep needed in Columbus, Ohio. Client is a 3PL looking for 8-12k sf flex/warehouse w/ at least 2 dock doors, 24' clear. Budget is around $9.50/sf NNN. Current lease is up in 4 months so they need to be in before then.",
+      "label": {
+        "is_deal_request": true,
+        "state": "OH",
+        "city": "Columbus",
+        "property_type": "industrial",
+        "transaction_type": "lease",
+        "deal_value_usd": null,
+        "timeline": "over_90_days"
+      }
+    },
+    {
+      "id": "h03",
+      "text": "anyone in tampa fl?? have a seller w/ a 3/2 condo near bayshore, thinking list around 385k. wants it on mls asap, she's already moved out",
+      "label": {
+        "is_deal_request": true,
+        "state": "FL",
+        "city": "Tampa",
+        "property_type": "condo_townhome",
+        "transaction_type": "sell",
+        "deal_value_usd": 385000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "h04",
+      "text": "Investor client (cash) looking for 2-4 unit properties in Providence, RI. Budget $700K-$900K. Prefers turnkey, open to light value-add. Can close in 45 days. DM me if you have something or know a good local agent.",
+      "label": {
+        "is_deal_request": true,
+        "state": "RI",
+        "city": "Providence",
+        "property_type": "multifamily",
+        "transaction_type": "buy",
+        "deal_value_usd": 900000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "h05",
+      "text": "Ok so this one is a little out of my wheelhouse lol. Long time client of mine from Chicago wants to buy acreage in Bozeman, Montana - 20+ acres, wants to eventualy build a home + barn for horses, needs well/septic feasibility. budget is about 1.2 million. He says there's no rush, he's willing to wait for the right parcel. Anyone know a good land agent out there??",
+      "label": {
+        "is_deal_request": true,
+        "state": "MT",
+        "city": "Bozeman",
+        "property_type": "land",
+        "transaction_type": "buy",
+        "deal_value_usd": 1200000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "h06",
+      "text": "QSR client seeking 2,000-2,500 SF endcap w/ drive-thru, Charlotte NC. Pylon signage a must, 30k+ VPD. Looking to open within 6 mos. Tenant rep only, LL reps pls don't DM",
+      "label": {
+        "is_deal_request": true,
+        "state": "NC",
+        "city": "Charlotte",
+        "property_type": "retail",
+        "transaction_type": "lease",
+        "deal_value_usd": null,
+        "timeline": "over_90_days"
+      }
+    },
+    {
+      "id": "h07",
+      "text": "🚨 Need a VA agent ASAP 🚨 my buyers are moving to Arlington, VA for a new job, want a 3bd townhome, max $875k 🏡 they're flying in next weekend and need to be under contract in 2 weeks 🙏",
+      "label": {
+        "is_deal_request": true,
+        "state": "VA",
+        "city": "Arlington",
+        "property_type": "condo_townhome",
+        "transaction_type": "buy",
+        "deal_value_usd": 875000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "h08",
+      "text": "1031 buyer here - client just closed the sale of a mixed-use bldg in Seattle, WA. Needs replacement property: looking for NNN investments in Phoenix, AZ, $4M+, long-term credit tenant preferred. 45-day ID clock started last week. Looking for AZ brokers with off-market stuff.",
+      "label": {
+        "is_deal_request": true,
+        "state": "AZ",
+        "city": "Phoenix",
+        "property_type": null,
+        "transaction_type": "1031_exchange",
+        "deal_value_usd": 4000000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "h09",
+      "text": "Need a good agent in Portland for a duplex buyer. ~$600k, owner occupant, FHA. Wants to be closed in 30 days if possible, rate lock expires.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Portland",
+        "property_type": "multifamily",
+        "transaction_type": "buy",
+        "deal_value_usd": 600000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "h10",
+      "text": "Relo family coming from NJ, want a SFH in Frisco or McKinney TX, good schools, 5bd. Between 800 and 950. Husband starts work in Q1 so want to be settled by then.",
+      "label": {
+        "is_deal_request": true,
+        "state": "TX",
+        "city": null,
+        "property_type": "single_family",
+        "transaction_type": "buy",
+        "deal_value_usd": 950000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "h11",
+      "text": "We're hiring! Our team in Nashville, TN is looking for a full-time buyer's agent. Must be licensed in TN, 2+ yrs exp. Avg team closings 40+/yr, $500k avg price point. Send resume to the team inbox.",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "h12",
+      "text": "anyone have a hard money lender they trust for a fix & flip in Cleveland OH? $250k purchase, need to close in 10 days, my client's conventional lender fell thru",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "h13",
+      "text": "🎉 Just closed a $2.1M 12-unit in Milwaukee, WI in 21 days!! Huge shoutout to the broker on this board who sent me the referral. This group is the best 🙌",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "h14",
+      "text": "Have a seller of a 42k sf neighborhood strip center in Knoxville, TN. NOI is $310k, in-place 6.5 cap. BOV came in at $4.8M but seller wants $5.2M. Looking to co-list with a local retail broker who knows the investor pool. Wants it listed by year end.",
+      "label": {
+        "is_deal_request": true,
+        "state": "TN",
+        "city": "Knoxville",
+        "property_type": "retail",
+        "transaction_type": "sell",
+        "deal_value_usd": 5200000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "h15",
+      "text": "Owner client has a 40,000 sf class B office building in Denver, CO and is fed up with his current PM. Looking for a referral to a solid commercial property management firm. Not selling, not refinancing, just needs management.",
+      "label": {
+        "is_deal_request": true,
+        "state": "CO",
+        "city": "Denver",
+        "property_type": "office",
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    }
+  ],
+  "data/posts.jsonl": [
+    {
+      "id": "s01",
+      "text": "Need a referral partner in Austin, TX. Relocating client (tech, pre-approved) looking for SFR, 3/2 min, budget up to $650k. Wants to close within 60 days.",
+      "label": {
+        "is_deal_request": true,
+        "state": "TX",
+        "city": "Austin",
+        "property_type": "single_family",
+        "transaction_type": "buy",
+        "deal_value_usd": 650000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s02",
+      "text": "Anyone have a solid buyer's agent in Portland? Clients want a condo near the Pearl, ~$500k, flexible on timing.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Portland",
+        "property_type": "condo_townhome",
+        "transaction_type": "buy",
+        "deal_value_usd": 500000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s03",
+      "text": "Portland, ME - seller wants to list a 4-unit near the Old Port. Thinking $1.2M. Not in a rush, spring listing.",
+      "label": {
+        "is_deal_request": true,
+        "state": "ME",
+        "city": "Portland",
+        "property_type": "multifamily",
+        "transaction_type": "sell",
+        "deal_value_usd": 1200000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s04",
+      "text": "1031 buyer needs NNN retail in Florida, prefer Tampa or Orlando. Up to $3.5M, 5.5%+ cap. 45-day ID clock started last week.",
+      "label": {
+        "is_deal_request": true,
+        "state": "FL",
+        "city": null,
+        "property_type": "retail",
+        "transaction_type": "1031_exchange",
+        "deal_value_usd": 3500000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s05",
+      "text": "Reminder: TREC CE hours due end of month. Anyone know a good online provider?",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s06",
+      "text": "Just closed a $2.1M office deal in Denver! Thanks to everyone in this group for the referral 🙏",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s07",
+      "text": "Off-market SFR in Phoenix AZ, seller wants $425k, needs to close in 2 weeks, cash buyers only. BOM so seller is motivated.",
+      "label": {
+        "is_deal_request": true,
+        "state": "AZ",
+        "city": "Phoenix",
+        "property_type": "single_family",
+        "transaction_type": "sell",
+        "deal_value_usd": 425000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "s08",
+      "text": "Need a commercial broker licensed in Georgia for a client selling a 40k sf warehouse outside Savannah. Asking around $6M. NOI is $380k. Looking to list Q3.",
+      "label": {
+        "is_deal_request": true,
+        "state": "GA",
+        "city": "Savannah",
+        "property_type": "industrial",
+        "transaction_type": "sell",
+        "deal_value_usd": 6000000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s09",
+      "text": "Looking for agent in Charlotte NC for tenant rep - small medical office, 3,000 sf, budget $28/sf NNN, move in within 90 days.",
+      "label": {
+        "is_deal_request": true,
+        "state": "NC",
+        "city": "Charlotte",
+        "property_type": "office",
+        "transaction_type": "lease",
+        "deal_value_usd": null,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s10",
+      "text": "Kansas City buyer, looking for duplex or fourplex, $300-400k, needs to close in 30 days.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Kansas City",
+        "property_type": "multifamily",
+        "transaction_type": "buy",
+        "deal_value_usd": 400000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "s11",
+      "text": "Need a referral partner in Chicago for a seller - 2-flat in Logan Square, priced around $850k. Listing in 2-3 months.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Chicago",
+        "property_type": "multifamily",
+        "transaction_type": "sell",
+        "deal_value_usd": 850000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s12",
+      "text": "Who covers Scottsdale? Have a luxury buyer, $4M+, wants something on the golf course. No rush.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Scottsdale",
+        "property_type": null,
+        "transaction_type": "buy",
+        "deal_value_usd": 4000000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s13",
+      "text": "Investor client looking to sell a mixed-use (retail ground floor, 6 apts above) in Philadelphia, PA. BOV came in at $2.4M, he wants $2.7M. Wants to list ASAP.",
+      "label": {
+        "is_deal_request": true,
+        "state": "PA",
+        "city": "Philadelphia",
+        "property_type": "mixed_use",
+        "transaction_type": "sell",
+        "deal_value_usd": 2700000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "s14",
+      "text": "Anyone licensed in both NY and NJ? Client deciding between Jersey City and Hoboken condos, ~$900k.",
+      "label": {
+        "is_deal_request": true,
+        "state": "NJ",
+        "city": null,
+        "property_type": "condo_townhome",
+        "transaction_type": "buy",
+        "deal_value_usd": 900000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s15",
+      "text": "Land deal: 120 acres zoned ag near Boise, Idaho. Owner will carry. $1.8M. Seller wants out by year end.",
+      "label": {
+        "is_deal_request": true,
+        "state": "ID",
+        "city": "Boise",
+        "property_type": "land",
+        "transaction_type": "sell",
+        "deal_value_usd": 1800000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s16",
+      "text": "Hiring! Our brokerage in Miami is looking for licensed agents. Great splits, DM me.",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s17",
+      "text": "Need a listing agent in Columbus, Ohio - estate sale, 3bd ranch, probably $250-275k, heirs want it sold within 6 months.",
+      "label": {
+        "is_deal_request": true,
+        "state": "OH",
+        "city": "Columbus",
+        "property_type": "single_family",
+        "transaction_type": "sell",
+        "deal_value_usd": 275000,
+        "timeline": "over_90_days"
+      }
+    },
+    {
+      "id": "s18",
+      "text": "Client doing a 1031 out of California, wants to buy small multifamily in Texas, DFW area, $1-1.5M.",
+      "label": {
+        "is_deal_request": true,
+        "state": "TX",
+        "city": null,
+        "property_type": "multifamily",
+        "transaction_type": "1031_exchange",
+        "deal_value_usd": 1500000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s19",
+      "text": "Retail strip center in Las Vegas NV, 92% occupied, 6.8 cap, asking $5.25M. Looking for buyers' agents w/ 1031 clients.",
+      "label": {
+        "is_deal_request": true,
+        "state": "NV",
+        "city": "Las Vegas",
+        "property_type": "retail",
+        "transaction_type": "sell",
+        "deal_value_usd": 5250000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s20",
+      "text": "anyone got a good lender in tx",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s21",
+      "text": "Need help: buyer wants a townhome in Raleigh NC under $400k, closing in 45 days.",
+      "label": {
+        "is_deal_request": true,
+        "state": "NC",
+        "city": "Raleigh",
+        "property_type": "condo_townhome",
+        "transaction_type": "buy",
+        "deal_value_usd": 400000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s22",
+      "text": "Springfield - looking for a property manager referral for 12 rental homes.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Springfield",
+        "property_type": "single_family",
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s23",
+      "text": "Office building in downtown Seattle WA, 85k sf, lender-owned, $14M asking, needs to close quickly.",
+      "label": {
+        "is_deal_request": true,
+        "state": "WA",
+        "city": "Seattle",
+        "property_type": "office",
+        "transaction_type": "sell",
+        "deal_value_usd": 14000000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s24",
+      "text": "Buyer looking in Nashville, TN for a SFR to house hack, budget $550k, earnest money ready ($15k), wants under contract in 30 days.",
+      "label": {
+        "is_deal_request": true,
+        "state": "TN",
+        "city": "Nashville",
+        "property_type": "single_family",
+        "transaction_type": "buy",
+        "deal_value_usd": 550000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "s25",
+      "text": "Looking to lease 20,000 sf of warehouse space in the Inland Empire, CA. Need occupancy in 4 months.",
+      "label": {
+        "is_deal_request": true,
+        "state": "CA",
+        "city": null,
+        "property_type": "industrial",
+        "transaction_type": "lease",
+        "deal_value_usd": null,
+        "timeline": "over_90_days"
+      }
+    },
+    {
+      "id": "s26",
+      "text": "Got a pocket listing - 1960s ranch in Denver, CO, $715k, seller is relocating and needs to be out in 3 weeks. Looking for a co-op agent with a buyer.",
+      "label": {
+        "is_deal_request": true,
+        "state": "CO",
+        "city": "Denver",
+        "property_type": "single_family",
+        "transaction_type": "sell",
+        "deal_value_usd": 715000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "s27",
+      "text": "Need someone in Atlanta GA for a lease-option on a small retail space. Details TBD.",
+      "label": {
+        "is_deal_request": true,
+        "state": "GA",
+        "city": "Atlanta",
+        "property_type": "retail",
+        "transaction_type": "lease",
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s28",
+      "text": "Market update: cap rates in Dallas multifamily compressed to 5.1% this quarter. Thoughts?",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s29",
+      "text": "Arlington buyer needs a condo under $600k, 30-day close, VA loan.",
+      "label": {
+        "is_deal_request": true,
+        "state": null,
+        "city": "Arlington",
+        "property_type": "condo_townhome",
+        "transaction_type": "buy",
+        "deal_value_usd": 600000,
+        "timeline": "within_30_days"
+      }
+    },
+    {
+      "id": "s30",
+      "text": "Wilmington NC - need a listing agent for a beach duplex, owner wants $1.1M, listing in 6 weeks.",
+      "label": {
+        "is_deal_request": true,
+        "state": "NC",
+        "city": "Wilmington",
+        "property_type": "multifamily",
+        "transaction_type": "sell",
+        "deal_value_usd": 1100000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s31",
+      "text": "Need a TX broker for an industrial flex deal in San Antonio, 15k sf, buyer budget $2.2M-$2.6M, cap rate north of 7. Must close in 75 days for a 1031.",
+      "label": {
+        "is_deal_request": true,
+        "state": "TX",
+        "city": "San Antonio",
+        "property_type": "industrial",
+        "transaction_type": "1031_exchange",
+        "deal_value_usd": 2600000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s32",
+      "text": "Who's good with land in Florida? Client has 40 acres to sell, no price yet.",
+      "label": {
+        "is_deal_request": true,
+        "state": "FL",
+        "city": null,
+        "property_type": "land",
+        "transaction_type": "sell",
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s33",
+      "text": "Seller in Tucson, AZ has a 3-unit and a SFR on the same lot, wants $780k for both, quick close preferred.",
+      "label": {
+        "is_deal_request": true,
+        "state": "AZ",
+        "city": "Tucson",
+        "property_type": "multifamily",
+        "transaction_type": "sell",
+        "deal_value_usd": 780000,
+        "timeline": null
+      }
+    },
+    {
+      "id": "s34",
+      "text": "Looking for a buyer's agent in Boston MA: client relocating for work, wants a 2-bed condo $800k-$1M, starts job in 3 months.",
+      "label": {
+        "is_deal_request": true,
+        "state": "MA",
+        "city": "Boston",
+        "property_type": "condo_townhome",
+        "transaction_type": "buy",
+        "deal_value_usd": 1000000,
+        "timeline": "31_to_90_days"
+      }
+    },
+    {
+      "id": "s35",
+      "text": "Does anyone have a good referral agreement template for out-of-state referrals? Our compliance team wants one.",
+      "label": {
+        "is_deal_request": false,
+        "state": null,
+        "city": null,
+        "property_type": null,
+        "transaction_type": null,
+        "deal_value_usd": null,
+        "timeline": null
+      }
+    }
+  ]
+}

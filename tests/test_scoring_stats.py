@@ -61,8 +61,12 @@ def non_deal(pid: str) -> JSONObject:
 
 
 def records_for(posts: list[JSONObject], outputs: list[JSONObject]) -> dict[str, JSONObject]:
-    """Run posts through ClaudeExtractor with canned outputs (no network)."""
-    return ev.run_posts(ClaudeExtractor(client=FakeClient(outputs)), posts)
+    """Run posts through ClaudeExtractor with canned outputs (no network).
+
+    Each output gets notes=None unless it sets notes, so a well-formed output carries every key the
+    strict tool schema requires (compliance-security/C-10) and scores on its values alone.
+    """
+    return ev.run_posts(ClaudeExtractor(client=FakeClient([{"notes": None, **o} for o in outputs])), posts)
 
 
 # Three deal posts (one correct, one partly wrong, one errored) and two non-deal posts.
@@ -323,12 +327,15 @@ def test_score_ci95_on_every_accuracy_cell(synthetic: Synthetic) -> None:
 
 
 def test_score_hallucination_rate_and_ci(synthetic: Synthetic) -> None:
-    """fields[f] gains hallucination_rate = hallucinated / n_null (non-errored deal posts whose label
-    for f is empty) and its Wilson interval; None when n_null is 0 (eval-quality/EM-61)."""
+    """eval-quality/EM-61, EM-24: hallucination_rate = hallucinated / n_null (non-errored deal posts
+    labeled null), with its Wilson interval; None when the field had no chance to be guessed."""
     posts, records = synthetic
     s = score(posts, records)
-    assert s["fields"]["timeline"]["hallucinated"] == 1
-    for field in KEY_FIELDS:
+    timeline = s["fields"]["timeline"]
+    assert timeline["hallucinated"] == 1 and timeline["n_null"] == 1  # d2 only; d3 errored
+    assert timeline["hallucination_rate"] == 1.0
+    assert list(timeline["hallucination_ci95"]) == pytest.approx(_wilson_list(1, 1))
+    for field in (f for f in KEY_FIELDS if f != "timeline"):
         cell = s["fields"][field]
         n_null = sum(
             1
@@ -382,10 +389,33 @@ def _assert_subset(old: object, new: object, path: str = "") -> None:
         assert new == old, path
 
 
+def _assert_keys_kept(old: object, new: object, path: str = "") -> None:
+    """Every dict key in old exists in new (recursively); values are not compared."""
+    if isinstance(old, dict):
+        assert isinstance(new, dict), path
+        for k, v in old.items():
+            assert k in new, f"{path}.{k} removed"
+            _assert_keys_kept(v, new[k], f"{path}.{k}")
+
+
+FROZEN_REGEX_RUN = ROOT / "results" / "regex_20261024T224817Z.json"
+# The labels (and texts, which failure rows quote) the frozen run was scored against, copied from
+# data/posts.jsonl and data/holdout.jsonl when this test was written. Values are checked against
+# this snapshot, so a later label fix in data/ moves current scores without breaking the test.
+LABEL_SNAPSHOT: dict[str, list[JSONObject]] = json.loads(
+    (Path(__file__).parent / "golden" / "labels_regex_20261024T224817Z.json").read_text()
+)
+
+
 @pytest.mark.parametrize("stem", ["posts", "holdout"])
 def test_score_preexisting_keys_unchanged(stem: str) -> None:
-    """Re-scoring a pre-P6 run keeps every old key and value; keys are only added."""
-    saved = json.loads((ROOT / "results" / "regex_20261024T224817Z.json").read_text())
+    """eval-quality/CQ-23: score() keeps every key of a pre-P6 run (against current labels) and
+    reproduces every old value under the committed label snapshot; keys are only added."""
+    saved = json.loads(FROZEN_REGEX_RUN.read_text())
     ds = saved["datasets"][stem]
     records = {pid: ev.to_record(r["raw"], r["error"]) for pid, r in ds["records"].items()}
-    _assert_subset(ds["scores"], score(load_posts(ROOT / ds["path"]), records))
+    current = [p for p in load_posts(ROOT / ds["path"]) if p["id"] in records]
+    _assert_keys_kept(ds["scores"], score(current, records))
+    snapshot = LABEL_SNAPSHOT[ds["path"]]
+    assert {p["id"] for p in snapshot} == set(records)
+    _assert_subset(ds["scores"], score(snapshot, records))
