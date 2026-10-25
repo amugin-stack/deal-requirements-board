@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import re
 import subprocess
 import sys
@@ -383,12 +382,10 @@ def tests_check(returncode: int, output: str) -> Check:
 # ---- repository I/O below; the checks above are pure and unit-tested ----
 
 
-# `git replace` can make a pinned commit read as any other object; the guard ignores replacements.
-_GIT_ENV = {**os.environ, "GIT_NO_REPLACE_OBJECTS": "1"}
-
-
 def git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, env=_GIT_ENV)
+    """Run git in ROOT, ignoring `git replace` objects, which could make a pinned commit read as any
+    other (the flag, not GIT_NO_REPLACE_OBJECTS, so the guard reads no environment)."""
+    return subprocess.run(["git", "--no-replace-objects", *args], cwd=ROOT, capture_output=True, text=True)
 
 
 def unchanged_since(tag: str, path: str) -> bool:
@@ -400,7 +397,7 @@ def unchanged_since(tag: str, path: str) -> bool:
     old = PATH_AT_TAG.get(path)
     if old is None:
         return git("diff", "--quiet", tag, "--", path).returncode == 0
-    at_tag = subprocess.run(["git", "show", f"{tag}:{old}"], cwd=ROOT, capture_output=True)
+    at_tag = subprocess.run(["git", "--no-replace-objects", "show", f"{tag}:{old}"], cwd=ROOT, capture_output=True)
     current = ROOT / path
     return at_tag.returncode == 0 and current.is_file() and current.read_bytes() == at_tag.stdout
 
