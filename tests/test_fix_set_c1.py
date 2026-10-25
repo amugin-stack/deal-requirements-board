@@ -537,13 +537,16 @@ def test_rescore_and_compare_report_drift(
     ev.main(["--rescore", str(run_path), "--results-dir", str(tmp_path / "rescored")])
     (rescored,) = load_results(tmp_path / "rescored")
     ds = rescored["datasets"]["posts"]
-    assert ds["drift"]["changed"] == ["p1", "p3"]
+    # postreview-1/EVAL-1: an edited text is excluded; a relabel is re-scored on the current label.
+    assert ds["drift"]["changed"] == ["p1"]
+    assert ds["drift"]["relabeled"] == ["p3"]
     assert ds["drift"]["missing"] == ["p2"]
     assert ds["drift"]["new"] == ["p5"]
-    assert ds["scores"]["n_posts"] == 1  # only p4 is unchanged and still present
+    assert ds["scores"]["n_posts"] == 2  # p3 (re-scored) and p4; p1 excluded, p2 gone
+    assert "p3" in ds["records"] and "p1" not in ds["records"]
     holdout_drift = rescored["datasets"]["holdout"]["drift"]
-    assert (holdout_drift["changed"], holdout_drift["missing"], holdout_drift["new"]) == ([], [], [])
+    assert all(holdout_drift[k] == [] for k in ("changed", "relabeled", "missing", "new"))
 
     cmp = ev.compare_results(run, run)
-    assert cmp["data/posts.jsonl"]["n_common_posts"] == 1
+    assert cmp["data/posts.jsonl"]["n_common_posts"] == 2
     assert cmp["data/holdout.jsonl"]["n_common_posts"] == 1

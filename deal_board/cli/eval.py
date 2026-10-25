@@ -232,9 +232,21 @@ def is_current_prompt(prompt_version: str | None) -> bool:
     return prompt_version == PROMPT_VERSION
 
 
+def run_raw_check(run: JSONObject) -> RawCheck | None:
+    """The shape check a saved run's raw outputs get on rescore or compare.
+
+    Strict if the run says it was checked strictly when it ran (its recorded 'raw_check'), or if it
+    is a run of the current prompt. The record can only add strictness, never remove it: a run
+    whose strict-check errors were recorded must keep them after the prompt changes, or a later
+    --compare would credit the old prompt with answers it got wrong at the time.
+    """
+    strict_at_run_time = run.get("extractor") == "claude" and run.get("raw_check") == "strict"
+    return raw_check(run.get("extractor"), None if strict_at_run_time else run.get("prompt_version", ""))
+
+
 def raw_check_name(run: JSONObject) -> str:
     """'strict' or 'legacy': which shape check a rescore of `run` applies, recorded in its result."""
-    return "strict" if raw_check(run.get("extractor"), run.get("prompt_version", "")) else "legacy"
+    return "strict" if run_raw_check(run) else "legacy"
 
 
 def to_record(raw: JSONObject | None, error: str | None = None, check: RawCheck | None = None) -> JSONObject:
@@ -371,31 +383,42 @@ def has_hashes(records: dict[str, JSONObject]) -> bool:
     return all("text_sha256" in r and "label_sha256" in r for r in records.values())
 
 
+DRIFT_KEYS = ("changed", "relabeled", "missing", "new")
+
+
+def _hash_differs(record: JSONObject, current: JSONObject, key: str) -> bool:
+    return key in record and record[key] != current[key]
+
+
 def post_drift(
     records: dict[str, JSONObject], all_posts: list[JSONObject], split_posts: list[JSONObject]
 ) -> JSONObject:
-    """How the dataset moved since a run: ids whose text or label hash changed, ids the run scored
-    that the file no longer has, and ids of the run's split that the run never saw.
+    """How the dataset moved since a run: ids whose text changed ('changed'), ids whose text is the
+    same but whose label changed ('relabeled'), ids the run scored that the file no longer has, and
+    ids of the run's split that the run never saw.
 
-    Why: rescore and compare join old outputs to current labels by id, so an edited post would
-    score an old answer against a new question. A record without hashes can't be checked and is
-    never listed as changed (has_hashes reports that once per file instead).
+    Why the split: an edited text means the old output answered a different question, so those
+    posts are excluded. A relabel is what rescoring is for (score old outputs against the current,
+    corrected labels), so relabeled posts are re-scored, and listed so a reader (or the loop
+    guard) can see the labels moved. A record without hashes can't be checked and is never
+    listed (has_hashes reports that once per file instead).
     """
     current = {p["id"]: post_hashes(p) for p in all_posts}
-    changed = [
-        pid
-        for pid, r in records.items()
-        if pid in current and any(k in r and r[k] != current[pid][k] for k in ("text_sha256", "label_sha256"))
-    ]
+    present = {pid: r for pid, r in records.items() if pid in current}
+    changed = {pid for pid, r in present.items() if _hash_differs(r, current[pid], "text_sha256")}
+    relabeled = {
+        pid for pid, r in present.items() if pid not in changed and _hash_differs(r, current[pid], "label_sha256")
+    }
     return {
         "changed": sorted(changed),
+        "relabeled": sorted(relabeled),
         "missing": sorted(pid for pid in records if pid not in current),
         "new": sorted(p["id"] for p in split_posts if p["id"] not in records),
     }
 
 
 def drift_is_empty(drift: JSONObject) -> bool:
-    return not any(drift[k] for k in ("changed", "missing", "new"))
+    return not any(drift.get(k) for k in DRIFT_KEYS)
 
 
 def warn_legacy(name: str) -> None:
@@ -411,7 +434,8 @@ def warn_drift(name: str, drifts: dict[str, JSONObject]) -> None:
     moved = {ds: d for ds, d in drifts.items() if not drift_is_empty(d)}
     if moved:
         parts = "; ".join(
-            f"{ds}: {len(d['changed'])} changed (excluded), {len(d['missing'])} missing, {len(d['new'])} new"
+            f"{ds}: {len(d['changed'])} changed (excluded), {len(d['relabeled'])} relabeled (re-scored), "
+            f"{len(d['missing'])} missing, {len(d['new'])} new"
             for ds, d in moved.items()
         )
         print(f"warning: {name}: posts changed since the run: {parts}", file=sys.stderr)
@@ -420,8 +444,9 @@ def warn_drift(name: str, drifts: dict[str, JSONObject]) -> None:
 def rescore(saved: JSONObject, name: str = "saved run") -> JSONObject:
     """Re-score a saved run against the current labels, from its raw outputs. No API calls.
 
-    Posts whose text or label changed since the run are excluded and listed under each dataset's
-    'drift' with the missing and new ids; name labels the stderr warnings.
+    Posts whose text changed since the run are excluded; relabeled posts are re-scored against the
+    current label. Both are listed under each dataset's 'drift' with the missing and new ids; name
+    labels the stderr warnings.
     """
     out = {}
     split = saved.get("split", "all")
@@ -435,7 +460,7 @@ def rescore(saved: JSONObject, name: str = "saved run") -> JSONObject:
         changed = set(drift["changed"])
         kept = {pid: r for pid, r in ds["records"].items() if pid not in changed}
         posts = [p for p in all_posts if p["id"] in kept]
-        records = rescore_records(kept, raw_check(saved.get("extractor"), saved.get("prompt_version", "")))
+        records = rescore_records(kept, run_raw_check(saved))
         out[ds_name] = {"path": ds["path"], "records": records, "scores": score(posts, records), "drift": drift}
     warn_drift(name, drifts)
     return out
@@ -490,13 +515,13 @@ def compare_results(a: JSONObject, b: JSONObject, a_name: str = "A", b_name: str
     dev-split `posts_dev` run compares with a full run's `posts`) and only posts present in both
     runs are compared, because a paired test is only valid on the same posts.
 
-    Posts whose text or label changed since either run are excluded too; each path's 'drift' is the
-    union of both runs' changed, missing and new ids. a_name/b_name label the stderr warnings.
+    Posts whose text changed since either run are excluded too (relabeled ones are compared on the
+    current label); each path's 'drift' is the union of both runs' drift lists. a_name/b_name
+    label the stderr warnings.
     """
     a_by_path = {ds["path"]: ds["records"] for ds in a["datasets"].values()}
     b_by_path = {ds["path"]: ds["records"] for ds in b["datasets"].values()}
-    a_check = raw_check(a.get("extractor"), a.get("prompt_version", ""))
-    b_check = raw_check(b.get("extractor"), b.get("prompt_version", ""))
+    a_check, b_check = run_raw_check(a), run_raw_check(b)
     for run, name in ((a, a_name), (b, b_name)):
         if not all(has_hashes(ds["records"]) for ds in run["datasets"].values()):
             warn_legacy(name)
@@ -509,7 +534,7 @@ def compare_results(a: JSONObject, b: JSONObject, a_name: str = "A", b_name: str
         all_posts = load_posts(ROOT / path)
         a_drift = post_drift(a_records, all_posts, load_split(path, a.get("split", "all")))
         b_drift = post_drift(b_records, all_posts, load_split(path, b.get("split", "all")))
-        drift = {k: sorted(set(a_drift[k]) | set(b_drift[k])) for k in ("changed", "missing", "new")}
+        drift = {k: sorted(set(a_drift[k]) | set(b_drift[k])) for k in DRIFT_KEYS}
         drifts[path] = drift
         excluded = set(drift["changed"])
         posts = [p for p in all_posts if p["id"] in a_records and p["id"] in b_records and p["id"] not in excluded]
@@ -534,6 +559,7 @@ def drift_lines(drift: JSONObject | None) -> list[str]:
         return []
     return [
         f"**Posts changed since the run:** changed (excluded) {ids(drift['changed'])}; "
+        f"relabeled (re-scored) {ids(drift.get('relabeled', []))}; "
         f"missing {ids(drift['missing'])}; new {ids(drift['new'])}.",
         "",
     ]
@@ -810,6 +836,9 @@ def run_once(
         "git": git_info() if git is None else git,
         "scoring": SCORING_NOTE,
         "scoring_version": SCORING_VERSION,
+        # Which output check this run applied (raw_check below), kept so a rescore after the next
+        # prompt change still applies it (run_raw_check).
+        "raw_check": "strict" if raw_check(name) else "legacy",
         "repeat": {"index": index, "of": of},
         "cache_enabled": cache is not None,
     }
