@@ -11,7 +11,8 @@ Every 200 response goes through one shared check (`assert_response_is_compliant`
 `reference_licensed`, a restatement of the licensing rule written here rather than imported, so
 the suite goes red if the gate is weakened in `matcher.py`, whether by an edit or by a
 monkeypatch of `matcher.is_licensed`. The production `is_licensed` is also bound at import time,
-so a later monkeypatch can't change the copy this module checks against.
+so a monkeypatch applied after this module loads can't change that copy; a patch applied before
+import, or an edit, is caught by the reference rule and the count checks.
 
 This harness was written blind to the posts: it asserts the contract, not the data. Everything
 is deterministic: pinned `AS_OF`, real broker CSV, no network, never the Claude extractor.
@@ -39,7 +40,10 @@ from schema import DealRequirement, State
 
 # --- fixed inputs -------------------------------------------------------------------------------
 
-AS_OF = date(2026, 10, 20)
+# Chosen against the data, not the calendar: five Active TX brokers expire exactly on this day
+# (so `>` instead of `>=` goes red) and four expire on 2026-10-31, between the day this was
+# written and AS_OF (so a gate that reads the clock instead of `as_of` goes red).
+AS_OF = date(2026, 11, 30)
 BROKERS: list[Broker] = load_brokers()
 BY_ID: dict[str, Broker] = {b.broker_id: b for b in BROKERS}
 VALID_STATES: frozenset[str] = frozenset(get_args(State))
@@ -76,9 +80,14 @@ CATEGORY_MINIMUMS: dict[str, int] = {
 }
 EXPECTED_RECORDS = 30
 
-# At least this many posts must return one or more matches under the regex extractor, so the
-# per-broker gate assertions in run (a) can't pass vacuously on empty match lists.
-MIN_POSTS_WITH_MATCHES = 15  # 17 of 30 produce matches at the join
+# The posts that return one or more matches under the regex extractor, pinned exactly so the
+# per-broker gate assertions in run (a) can't quietly go vacuous on empty match lists.
+REGEX_POSTS_WITH_MATCHES: frozenset[str] = frozenset({
+    "rt-01", "rt-02", "rt-03", "rt-04", "rt-05", "rt-06", "rt-07", "rt-09", "rt-10", "rt-11",
+    "rt-16", "rt-17", "rt-18", "rt-19", "rt-21", "rt-22", "rt-23", "rt-24", "rt-25", "rt-27",
+    "rt-28", "rt-30",
+})
+MIN_POSTS_WITH_MATCHES = 20  # a floor stated in the contract; the pinned set is the real check
 
 # Record ids whose regex-path response includes a broker licensed outside `expected_state`
 # (or any broker when the post names no state). Pinned at the join from the frozen baseline.
@@ -245,13 +254,14 @@ def regex_response(client: TestClient, text: str) -> Response:
     return post(client, text)
 
 
-def assert_regex_outcome(resp: Response) -> api.MatchResponse | None:
-    """A regex-path response is compliant 200 or the fixed 500. Anything else fails."""
-    if resp.status_code == 200:
-        return assert_response_is_compliant(resp.json())
-    assert resp.status_code == 500, f"unexpected status {resp.status_code}: {resp.text[:200]}"
-    assert_fixed_500(resp)
-    return None
+def assert_regex_outcome(resp: Response) -> api.MatchResponse:
+    """A regex-path response must be a compliant 200.
+
+    No red-team post crashes the frozen baseline, so a 500 here is a new failure, not a pass:
+    accepting the fixed 500 would let a post skip every gate assertion.
+    """
+    assert resp.status_code == 200, f"unexpected status {resp.status_code}: {resp.text[:200]}"
+    return assert_response_is_compliant(resp.json())
 
 
 # --- run (a): every post through the regex extractor --------------------------------------------
@@ -272,14 +282,15 @@ def test_regex_post_never_returns_unlicensed_broker(client: TestClient, rec: dic
 
 
 def test_regex_path_is_not_vacuous(client: TestClient) -> None:
-    """Enough posts must produce matches that the per-broker gate checks actually run."""
-    with_matches = [
+    """Exactly the pinned posts produce matches, so the per-broker gate checks actually run."""
+    with_matches = {
         rec["id"]
         for rec in RECORDS
         if (resp := regex_response(client, rec["text"])).status_code == 200
         and resp.json()["matches"]
-    ]
-    assert len(with_matches) >= MIN_POSTS_WITH_MATCHES, with_matches
+    }
+    assert len(with_matches) >= MIN_POSTS_WITH_MATCHES, sorted(with_matches)
+    assert with_matches == REGEX_POSTS_WITH_MATCHES
 
 
 def test_known_regex_state_leaks_are_pinned(client: TestClient) -> None:
@@ -305,7 +316,7 @@ def test_known_regex_state_leaks_are_pinned(client: TestClient) -> None:
 BENIGN_POST = "Buyer needs a broker for a property deal."
 EXTRACTOR_SECRET = "extractor-secret-QUOKKA-5521"
 
-Outcome = Literal["compliant", "rejected_422", "fixed_500", "fail_closed_500"]
+Outcome = Literal["compliant", "rejected_422", "fixed_500"]
 
 
 class HostileExtractor:
@@ -427,7 +438,8 @@ HOSTILE_VARIANTS: list[Any] = [
         # 200 body carries "ZZ" and fails MatchResponse validation (assertion 1).
         HostileCase("smuggled-state-not-a-state", lambda: smuggled(state="ZZ", city="Austin"),
                     xfail=UNVALIDATED_RESPONSE_BUG),
-        # missing_fields empty despite null fields.
+        # missing_fields empty despite null fields. Through the schema this is a control: the
+        # model validator recomputes missing_fields, so the attack only bites when smuggled.
         HostileCase("missing-fields-empty-despite-nulls",
                     lambda: DealRequirement(is_deal_request=True, state="TX", missing_fields=[])),
         HostileCase("smuggled-missing-fields-empty", lambda: smuggled(state="TX")),
@@ -504,11 +516,7 @@ def assert_trap_is_hostile(broker_id: str) -> None:
 
 @pytest.mark.parametrize("case", HOSTILE_VARIANTS)
 def test_hostile_extractor_cannot_slip_past_gate(client: TestClient, case: HostileCase) -> None:
-    """Each hostile requirement yields a compliant 200, a 422, or a fail-closed 500.
-
-    "fail_closed_500" is the server's generic 500 for a response that fails its own model (the
-    smuggled value can't be serialized as a DealRequirement): no brokers leave the server.
-    """
+    """Each hostile requirement yields a compliant 200, the fixed 422, or the fixed 500."""
     for trap in case.traps:
         assert_trap_is_hostile(trap)
 
@@ -527,11 +535,8 @@ def test_hostile_extractor_cannot_slip_past_gate(client: TestClient, case: Hosti
     if case.expect == "rejected_422":
         assert resp.status_code == 422
         assert resp.json() == {"detail": FIXED_422_DETAIL}
-    elif case.expect == "fixed_500":
+    else:
         assert_fixed_500(resp)
-    else:  # fail_closed_500
-        assert resp.status_code == 500
-        assert "broker_id" not in resp.text and "license_number" not in resp.text
 
 
 def post_specific_attack(rec: dict[str, Any]) -> DealRequirement:
@@ -545,15 +550,17 @@ def post_specific_attack(rec: dict[str, Any]) -> DealRequirement:
 
 @pytest.mark.parametrize("rec", RECORD_PARAMS)
 def test_hostile_extractor_per_post(client: TestClient, rec: dict[str, Any]) -> None:
-    """Every post also gets a run-(b) id: the same text with a smuggled lowercase state."""
+    """Every post also gets a run-(b) id: the same text with its true state smuggled lowercase.
+
+    The gate compares states exactly, so "fl" must match nobody and exclude all 226. This is
+    what catches a matcher that "helpfully" normalizes case and then trusts the result.
+    """
     attack = post_specific_attack(rec)
     wire(HostileExtractor(lambda: attack))
     resp = post(client, rec["text"])
-    if resp.status_code == 200:
-        assert_response_is_compliant(resp.json())
-    else:
-        assert resp.status_code == 500, f"unexpected status {resp.status_code}"
-        assert "broker_id" not in resp.text
+    assert resp.status_code == 200, f"unexpected status {resp.status_code}"
+    body = assert_response_is_compliant(resp.json())
+    assert body.matches == []
 
 
 # --- the dataset --------------------------------------------------------------------------------

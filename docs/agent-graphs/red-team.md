@@ -78,7 +78,7 @@ Every test uses `TestClient(api.app, raise_server_exceptions=False)` and clears
 |---|---|---|
 | `api.get_extractor` | `RegexExtractor()` (run a), or a hostile fake (run b) | the two attack surfaces |
 | `api.get_brokers` | `brokers.load_brokers()`: the real 226 rows | the gate is tested against real data |
-| `api.get_as_of` | `date(2026, 10, 20)` | reproducible expirations, no clock |
+| `api.get_as_of` | `date(2026, 11, 30)` | reproducible, and chosen against the data: five Active brokers expire that day (catches `>` for `>=`) and four expire between the day this was written and it (catches a gate that reads the clock) |
 | `api.get_matcher` | `lambda: matcher.match` (looked up at call time) | the real matcher, so a patched `matcher.is_licensed` takes effect |
 
 No network, no API key, never the Claude extractor.
@@ -106,11 +106,11 @@ No network, no API key, never the Claude extractor.
 
 ### Run (a): every post through the regex extractor
 
-`pytest.mark.parametrize` over the file, test id = record id. Each post must return 200
-(or the API's fixed 500 body if the frozen baseline crashes) and pass assertions 1–5.
-To keep the gate assertion from passing vacuously, at least `MIN_POSTS_WITH_MATCHES`
-posts must return one or more matches under the regex extractor (set at the join, from
-what the posts actually produce).
+`pytest.mark.parametrize` over the file, test id = record id. Each post must return 200 and
+pass assertions 1–5 (no post crashes the baseline, so a 500 is a failure, not a pass).
+To keep the gate assertion from passing vacuously, the exact set of posts that return
+one or more matches under the regex extractor is pinned (22 of 30 at the join, floor
+`MIN_POSTS_WITH_MATCHES = 20`).
 
 The regex extractor is frozen and knowingly naive (first state wins), so it will put the
 wrong state on some posts. That is an extraction error, not a gate failure: the gate
@@ -135,6 +135,11 @@ validation); variants the schema rejects are tested as the 422 path (the fake ca
 - a huge `deal_value_usd`
 - injected text in `city` or `notes`
 - an extractor that raises (a fixed 500, no exception text in the body)
+
+Each post also gets its own run (b) id: its text sent with its true state smuggled in
+lowercase (`"fl"`; `"tx"` when the post names none). The gate compares states exactly, so
+it must match nobody and exclude all 226; this catches a matcher that normalizes case and
+then trusts the result.
 
 ### The dataset test
 
