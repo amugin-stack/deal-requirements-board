@@ -183,10 +183,17 @@ def guard_checks() -> list[Check]:
 
 
 def loop_runs(split: str) -> list[JSONObject]:
-    """Claude runs from a clean tree at or after loop-start, newest first."""
+    """Claude runs from a clean tree at or after loop-start, newest first.
+
+    Rescores (they carry "rescored_from") are skipped: a rescore makes no API calls, so it is
+    the same sample as its source run, not a new one. Counted, it could fill the dev gate from
+    one run, and a rescore of the final run would count as a second look.
+    """
     runs: list[JSONObject] = []
     for path in sorted((ROOT / "results").glob("claude_*.json"), reverse=True):
         r = json.loads(path.read_text())
+        if "rescored_from" in r:
+            continue
         commit = r["git"]["commit"]
         after_start = git("merge-base", "--is-ancestor", LOOP_START_TAG, commit).returncode == 0
         if r.get("split", "all") == split and not r["git"]["dirty"] and after_start:
