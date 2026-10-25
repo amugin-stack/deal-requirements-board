@@ -18,13 +18,16 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from deal_board.schema import KEY_FIELDS, JSONObject
 
@@ -388,10 +391,24 @@ def tests_check(returncode: int, output: str) -> Check:
 # ---- repository I/O below; the checks above are pure and unit-tested ----
 
 
+# Git is resolved once, then run with a fixed environment the guard builds itself (it reads none):
+# GIT_GRAFT_FILE pointing nowhere switches off .git/info/grafts, which, like `git replace`, could
+# rewrite history so a reverted protected commit drops out of loop-start..HEAD. Grafts have no
+# command-line switch; replace objects do (--no-replace-objects).
+_GIT = shutil.which("git") or "git"
+_GIT_CHILD_ENV = {"GIT_GRAFT_FILE": os.devnull}
+
+
+def _run_git(args: list[str], text: bool) -> subprocess.CompletedProcess[Any]:
+    return subprocess.run(
+        [_GIT, "--no-replace-objects", *args], cwd=ROOT, capture_output=True, text=text, env=_GIT_CHILD_ENV
+    )
+
+
 def git(*args: str) -> subprocess.CompletedProcess[str]:
-    """Run git in ROOT, ignoring `git replace` objects, which could make a pinned commit read as any
-    other (the flag, not GIT_NO_REPLACE_OBJECTS, so the guard reads no environment)."""
-    return subprocess.run(["git", "--no-replace-objects", *args], cwd=ROOT, capture_output=True, text=True)
+    """Run git in ROOT with grafts and replace objects ignored, so pinned history reads as it is."""
+    result: subprocess.CompletedProcess[str] = _run_git(list(args), text=True)
+    return result
 
 
 def unchanged_since(tag: str, path: str) -> bool:
@@ -403,7 +420,7 @@ def unchanged_since(tag: str, path: str) -> bool:
     old = PATH_AT_TAG.get(path)
     if old is None:
         return git("diff", "--quiet", tag, "--", path).returncode == 0
-    at_tag = subprocess.run(["git", "--no-replace-objects", "show", f"{tag}:{old}"], cwd=ROOT, capture_output=True)
+    at_tag = _run_git(["show", f"{tag}:{old}"], text=False)
     current = ROOT / path
     return at_tag.returncode == 0 and current.is_file() and current.read_bytes() == at_tag.stdout
 
@@ -467,6 +484,18 @@ def tags_check(resolved: dict[str, str | None], pinned: dict[str, str], replacem
     return Check("tags unmoved", not problems, "; ".join(problems) or f"{', '.join(pinned)} at their pinned commits")
 
 
+def rewrites_check(grafts_file: bool, shallow: bool) -> Check:
+    """No history-rewriting state in the repository.
+
+    git() already ignores a grafts file, so it can't hide a commit from the checks; failing here
+    makes the attempt visible. A shallow clone can't show the history the guard must walk.
+    """
+    problems = (["a .git/info/grafts file exists"] if grafts_file else []) + (
+        ["the repository is shallow"] if shallow else []
+    )
+    return Check("history not rewritten", not problems, "; ".join(problems) or "no grafts file, not shallow")
+
+
 def reachability_check(unreachable: list[str]) -> Check:
     """Every loop run must sit on HEAD's history.
 
@@ -509,6 +538,7 @@ def guard_checks() -> list[Check]:
         tests_check(tests.returncode, tests.stdout),
         reachability_check(unreachable_runs()),
         tags_check(resolved_tags(), {LOOP_START_TAG: LOOP_START_REV, BASELINE_TAG: BASELINE_REV}, replace_refs()),
+        rewrites_check(grafts_file_exists(), is_shallow()),
     ]
 
 
@@ -519,6 +549,17 @@ def resolved_tags() -> dict[str, str | None]:
         found = git("rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}")
         out[tag] = found.stdout.strip() if found.returncode == 0 else None
     return out
+
+
+def grafts_file_exists() -> bool:
+    """Whether the repository has an info/grafts file (looked up directly: under _GIT_CHILD_ENV,
+    `git rev-parse --git-path info/grafts` would answer with os.devnull)."""
+    common = git("rev-parse", "--git-common-dir").stdout.strip()
+    return bool(common) and ((ROOT / common) / "info" / "grafts").exists()
+
+
+def is_shallow() -> bool:
+    return git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
 
 
 def replace_refs() -> list[str]:
