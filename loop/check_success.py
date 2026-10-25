@@ -14,11 +14,13 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
-from deal_board.paths import REPO_ROOT
 from deal_board.schema import KEY_FIELDS, JSONObject
 
-ROOT = REPO_ROOT
+# Worked out from this file, not from deal_board.paths: the guard must not trust a module it
+# doesn't protect to tell it where the repository is.
+ROOT = Path(__file__).resolve().parent.parent
 
 LOOP_START_TAG = "loop-start"
 BASELINE_TAG = "baseline-v1"
@@ -34,9 +36,12 @@ PROTECTED = [  # anything the loop could edit to make the numbers look better wi
     "tests/test_brokers.py",
     "tests/test_check_success.py",
     ".claude/agents/extractor-improver.md",
+    "deal_board/paths.py",  # P10: where eval reads data from
+    "pyproject.toml",  # P10: pytest config (addopts could deselect the tests the guard runs)
 ]
-# P10 moved files into the deal_board package. The guard compares each file's current content
-# with its content at the tag under the path it had then, so a move alone is not a change.
+# P10 moved files into the deal_board package. The guard compares each moved file's current
+# content with its content at the tag under the path it had then, so a rename by itself is not
+# counted as an edit. (P10 also reformatted most of them, so they do differ from loop-start.)
 PATH_AT_TAG = {
     "deal_board/scoring.py": "scoring.py",
     "deal_board/schema.py": "schema.py",
