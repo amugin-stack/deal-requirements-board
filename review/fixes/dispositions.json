@@ -765,5 +765,82 @@
     "note": "Fixed: revalidate_requirement raises TypeError for anything that isn't ExtractedFields, so the route returns the logged fixed JSON 500 (correctness-api/A-2).",
     "regression_test": "tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500",
     "commit": "e643c2888012"
+  },
+  {
+    "review": "postreview-1",
+    "id": "COMP-1",
+    "severity": "low",
+    "title": "Lone surrogate in extractor output bypassed the fixed JSON 500",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: schema rejects text not encodable as UTF-8 (ExtractionError -> 422); _respond serializes before logging so any serialization failure is the fixed JSON 500 with only the error line. Verifier rated it low (no leak, no wrong referral).",
+    "regression_test": "tests/test_fix_adversarial.py::test_comp1_unserializable_response_is_the_fixed_json_500",
+    "commit": "52e0e55eb0d0"
+  },
+  {
+    "review": "postreview-1",
+    "id": "EVAL-1",
+    "severity": "medium",
+    "title": "EM-6's exclusion of relabeled posts disabled the CQ-7 rescore check",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed in e7b7deb (eval: relabeled posts re-scored, listed under drift.relabeled; only text edits excluded) and 5e08d30 (guard fails on any drift).",
+    "regression_test": "tests/test_fix_postreview1.py::test_eval1_guard_fails_a_hashed_run_made_against_a_doctored_label",
+    "commit": "e7b7deb06f29"
+  },
+  {
+    "review": "postreview-1",
+    "id": "EVAL-2",
+    "severity": "medium",
+    "title": "Rescore-match check ignored coverage (dropped records)",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: the check fails on drift new/missing and on stored n_posts/n_deal_posts differing from the rescore.",
+    "regression_test": "tests/test_fix_postreview1.py::test_eval2_guard_fails_a_run_with_a_dropped_record",
+    "commit": "5e08d3079d3e"
+  },
+  {
+    "review": "postreview-1",
+    "id": "EVAL-3",
+    "severity": "medium",
+    "title": "Final gate trusted stored scores and accepted cache replays",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: the counted final gets 'fresh runs' and 'stored scores match rescore' over holdout and posts. Note: the shipped final run (pre-cache, records without call.cached) now also fails 'fresh runs'; the finished loop already fails its guard (identity, protected paths), so this is fail-closed history.",
+    "regression_test": "tests/test_fix_postreview1.py::test_eval3_final_with_hand_edited_perfect_scores_fails_rescore",
+    "commit": "5e08d3079d3e"
+  },
+  {
+    "review": "postreview-1",
+    "id": "EVAL-4",
+    "severity": "medium",
+    "title": "Runs at commits reset away from HEAD still counted, hiding the protected commit",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: new guard check 'runs reachable from HEAD' for results added since loop-start; unresolvable commits fail too.",
+    "regression_test": "tests/test_fix_postreview1.py::test_eval4_run_on_a_reset_away_commit_fails_reachable",
+    "commit": "5e08d3079d3e"
+  },
+  {
+    "review": "postreview-1",
+    "id": "EVAL-5",
+    "severity": "medium",
+    "title": "Dirty final looks were never counted by 'one look only'",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: final_looks() counts finals dirty or not; a dirty look fails the new 'final run clean' check.",
+    "regression_test": "tests/test_fix_postreview1.py::test_eval5_older_dirty_final_counts_as_a_look",
+    "commit": "5e08d3079d3e"
+  },
+  {
+    "review": "postreview-1",
+    "id": "EVAL-6",
+    "severity": "medium",
+    "title": "Rescore check followed the prompt version, not the check used at run time",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: fresh results record raw_check; a recorded strict run stays strict after a prompt change (the record only adds strictness). All 21 saved runs still rescore identically to main apart from EM-61 keys.",
+    "regression_test": "tests/test_fix_postreview1.py::test_eval6_recorded_strict_survives_a_prompt_version_change",
+    "commit": "e7b7deb06f29"
   }
 ]
