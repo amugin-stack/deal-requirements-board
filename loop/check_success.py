@@ -23,10 +23,20 @@ ROOT = REPO_ROOT
 LOOP_START_TAG = "loop-start"
 BASELINE_TAG = "baseline-v1"
 PROTECTED = [  # anything the loop could edit to make the numbers look better without improving the extractor
-    "loop/check_success.py", "scoring.py", "schema.py", "scripts/eval.py", "data/",
-    "extractors/__init__.py", "tests/test_data.py", "tests/test_eval.py", "tests/test_brokers.py",
+    "loop/check_success.py", "deal_board/scoring.py", "deal_board/schema.py", "deal_board/cli/eval.py", "data/",
+    "deal_board/extractors/__init__.py", "tests/test_data.py", "tests/test_eval.py", "tests/test_brokers.py",
     "tests/test_check_success.py", ".claude/agents/extractor-improver.md",
 ]
+# P10 moved files into the deal_board package. The guard compares each file's current content
+# with its content at the tag under the path it had then, so a move alone is not a change.
+PATH_AT_TAG = {
+    "deal_board/scoring.py": "scoring.py",
+    "deal_board/schema.py": "schema.py",
+    "deal_board/cli/eval.py": "scripts/eval.py",
+    "deal_board/extractors/__init__.py": "extractors/__init__.py",
+    "deal_board/extractors/frozen/regex_baseline.py": "extractors/regex_baseline.py",
+}
+BASELINE = "deal_board/extractors/frozen/regex_baseline.py"
 DRAFT = "loop/DRAFT.md"  # only its "(FIXED)" sections are protected; the agent edits the rest
 
 # Dev gate (posts.jsonl, split == "dev", 24 posts). Averaged over the last REPEATS runs of one prompt.
@@ -103,6 +113,20 @@ def git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
 
 
+def unchanged_since(tag: str, path: str) -> bool:
+    """True if `path` in the working tree matches `tag`, following a P10 move if there was one.
+
+    Unmoved paths (directories included) use `git diff --quiet`, as before. A moved file must
+    equal, byte for byte, the blob at its old path in the tag; a missing file or blob is a change.
+    """
+    old = PATH_AT_TAG.get(path)
+    if old is None:
+        return git("diff", "--quiet", tag, "--", path).returncode == 0
+    at_tag = subprocess.run(["git", "show", f"{tag}:{old}"], cwd=ROOT, capture_output=True)
+    current = ROOT / path
+    return at_tag.returncode == 0 and current.is_file() and current.read_bytes() == at_tag.stdout
+
+
 def fixed_sections(markdown: str) -> list[str]:
     """The '## ... (FIXED)' sections of a markdown file, heading included."""
     sections = ["## " + s for s in markdown.split("\n## ")[1:]]
@@ -110,10 +134,10 @@ def fixed_sections(markdown: str) -> list[str]:
 
 
 def guard_checks() -> list[Check]:
-    protected = git("diff", "--quiet", LOOP_START_TAG, "--", *PROTECTED).returncode == 0
+    protected = all(unchanged_since(LOOP_START_TAG, path) for path in PROTECTED)
     original = git("show", f"{LOOP_START_TAG}:{DRAFT}").stdout
     draft_fixed = bool(original) and fixed_sections(original) == fixed_sections((ROOT / DRAFT).read_text())
-    baseline = git("diff", "--quiet", BASELINE_TAG, "--", "extractors/regex_baseline.py").returncode == 0
+    baseline = unchanged_since(BASELINE_TAG, BASELINE)
     tests = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=ROOT, capture_output=True, text=True)
     return [
         Check("protected files unchanged", protected, f"vs tag {LOOP_START_TAG}: {', '.join(PROTECTED)}"),
