@@ -22,7 +22,7 @@ from deal_board import scoring
 from deal_board.cli import eval as ev
 from deal_board.extractors import ExtractionError
 from deal_board.extractors import claude as claude_mod
-from deal_board.extractors.claude import ClaudeExtractor, Usage
+from deal_board.extractors.claude import PROMPT_VERSION, ClaudeExtractor, Usage
 from deal_board.schema import KEY_FIELDS, DealRequirement, JSONObject
 from deal_board.scoring import score, wilson_interval
 
@@ -176,10 +176,14 @@ def test_fully_populated_strict_output_parses(raw: JSONObject) -> None:
 
 
 def test_rescore_applies_the_strict_check_to_claude_raws() -> None:
-    """compliance-security/C-10: --rescore of a Claude run turns a saved loose raw into an error."""
+    """compliance-security/C-10: --rescore of a current-prompt Claude run turns a saved loose raw into an error.
+
+    (Runs of older prompts are re-scored under their own contract: see test_fix_adversarial ADV-1.)
+    """
     loose = {k: v for k, v in FULL.items() if k != "city"}
     saved = {
         "extractor": "claude",
+        "prompt_version": PROMPT_VERSION,
         "datasets": {
             "posts": {
                 "path": "data/posts.jsonl",

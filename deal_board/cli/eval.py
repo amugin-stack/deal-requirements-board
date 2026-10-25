@@ -206,18 +206,35 @@ class RawCache:
 RawCheck = Callable[[JSONObject], None]
 
 
-def raw_check(extractor_name: str | None) -> RawCheck | None:
+def raw_check(extractor_name: str | None, prompt_version: str | None = None) -> RawCheck | None:
     """The shape check an extractor's raw outputs must pass before validation, or None.
 
     Claude's raw is the model's tool input, so it gets claude.check_claude_raw (exact keys, strict
-    JSON types): the same gate ClaudeExtractor.extract applies, here on fresh runs and on rescores
-    of saved Claude runs alike. The regex baseline's raw is already a validated model dump.
+    JSON types): the same gate ClaudeExtractor.extract applies. It holds outputs to the current
+    tool schema, so it applies to fresh runs (prompt_version None) and to saved runs of the current
+    prompt. Older prompts had a different contract (e.g. de789943 let null fields be omitted), so
+    their saved outputs are re-scored exactly as when they ran; holding them to today's schema
+    would rewrite the historical record. The regex baseline's raw is already a validated dump.
     """
-    if extractor_name != "claude":
+    if extractor_name != "claude" or not is_current_prompt(prompt_version):
         return None
     from deal_board.extractors.claude import check_claude_raw
 
     return check_claude_raw
+
+
+def is_current_prompt(prompt_version: str | None) -> bool:
+    """True for a fresh run (None) or a saved run made with today's prompt and tool schema."""
+    if prompt_version is None:
+        return True
+    from deal_board.extractors.claude import PROMPT_VERSION
+
+    return prompt_version == PROMPT_VERSION
+
+
+def raw_check_name(run: JSONObject) -> str:
+    """'strict' or 'legacy': which shape check a rescore of `run` applies, recorded in its result."""
+    return "strict" if raw_check(run.get("extractor"), run.get("prompt_version", "")) else "legacy"
 
 
 def to_record(raw: JSONObject | None, error: str | None = None, check: RawCheck | None = None) -> JSONObject:
@@ -418,7 +435,7 @@ def rescore(saved: JSONObject, name: str = "saved run") -> JSONObject:
         changed = set(drift["changed"])
         kept = {pid: r for pid, r in ds["records"].items() if pid not in changed}
         posts = [p for p in all_posts if p["id"] in kept]
-        records = rescore_records(kept, raw_check(saved.get("extractor")))
+        records = rescore_records(kept, raw_check(saved.get("extractor"), saved.get("prompt_version", "")))
         out[ds_name] = {"path": ds["path"], "records": records, "scores": score(posts, records), "drift": drift}
     warn_drift(name, drifts)
     return out
@@ -460,6 +477,7 @@ def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject
         "source_scoring": saved.get("scoring"),
         "scoring_version": SCORING_VERSION,
         "rescored_from": source_label(source),
+        "raw_check": raw_check_name(saved),
         "datasets": rescore(saved, source_label(source)),
     }
 
@@ -477,7 +495,8 @@ def compare_results(a: JSONObject, b: JSONObject, a_name: str = "A", b_name: str
     """
     a_by_path = {ds["path"]: ds["records"] for ds in a["datasets"].values()}
     b_by_path = {ds["path"]: ds["records"] for ds in b["datasets"].values()}
-    a_check, b_check = raw_check(a.get("extractor")), raw_check(b.get("extractor"))
+    a_check = raw_check(a.get("extractor"), a.get("prompt_version", ""))
+    b_check = raw_check(b.get("extractor"), b.get("prompt_version", ""))
     for run, name in ((a, a_name), (b, b_name)):
         if not all(has_hashes(ds["records"]) for ds in run["datasets"].values()):
             warn_legacy(name)

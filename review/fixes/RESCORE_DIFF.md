@@ -34,3 +34,32 @@ Rescore of `results/claude_20261024T234359Z.json` (the final Claude run) into sc
   fields.transaction_type.n_null: <absent> -> 1
 top-level keys added: ['request_sha', 'scoring_version', 'source_scoring'] removed: []
 ```
+
+## Every saved run (after the ADV-1 fix)
+
+All 21 saved `claude_*`/`regex_*` runs (none touches holdout_v3), re-scored with `main`'s code and with this branch, compared leaf by leaf over every `scores` block, ignoring only the EM-61/EM-24 keys (`hallucination_rate`, `hallucination_ci95`, `n_null`, `posts_with_any_*`). `raw_check` is which output check the branch applied: `strict` for runs of the current prompt `ac1a145b`, `legacy` (main's behaviour) for older prompts.
+
+```text
+claude_20261024T231514Z (prompt de789943, raw_check legacy): IDENTICAL
+claude_20261024T232452Z (prompt de789943, raw_check legacy): IDENTICAL
+claude_20261024T232525Z (prompt de789943, raw_check legacy): IDENTICAL
+claude_20261024T232557Z (prompt de789943, raw_check legacy): IDENTICAL
+claude_20261024T232649Z (prompt de789943, raw_check legacy): IDENTICAL
+claude_20261024T232722Z (prompt de789943, raw_check legacy): IDENTICAL
+claude_20261024T232921Z (prompt a86a1ad8, raw_check legacy): IDENTICAL
+claude_20261024T233007Z (prompt a86a1ad8, raw_check legacy): IDENTICAL
+claude_20261024T233059Z (prompt a86a1ad8, raw_check legacy): IDENTICAL
+claude_20261024T233307Z (prompt b0950301, raw_check legacy): IDENTICAL
+claude_20261024T233351Z (prompt b0950301, raw_check legacy): IDENTICAL
+claude_20261024T233433Z (prompt b0950301, raw_check legacy): IDENTICAL
+claude_20261024T233711Z (prompt b4f9c9ab, raw_check legacy): IDENTICAL
+claude_20261024T233757Z (prompt b4f9c9ab, raw_check legacy): IDENTICAL
+claude_20261024T233842Z (prompt b4f9c9ab, raw_check legacy): IDENTICAL
+claude_20261024T234059Z (prompt ac1a145b, raw_check strict): IDENTICAL
+claude_20261024T234146Z (prompt ac1a145b, raw_check strict): IDENTICAL
+claude_20261024T234229Z (prompt ac1a145b, raw_check strict): IDENTICAL
+claude_20261024T234359Z (prompt ac1a145b, raw_check strict): IDENTICAL
+regex_20261024T224548Z (prompt None, raw_check legacy): IDENTICAL
+regex_20261024T224817Z (prompt None, raw_check legacy): IDENTICAL
+runs with unintended differences: 0
+```
