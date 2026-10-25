@@ -1,6 +1,11 @@
 .venv/
 __pycache__/
+# Secrets: any env file (.env.local, .env.production, ...) and key material; only the template is tracked.
 .env
+.env.*
+!.env.example
+*.pem
+*.key
 data/raw/
 .DS_Store
 .cache/
