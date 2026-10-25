@@ -1,0 +1,623 @@
+[
+  {
+    "review": "correctness-api",
+    "id": "C-1",
+    "severity": "low",
+    "title": "extract_raw returns a tool call truncated at max_tokens as a valid extraction",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Same fix as compliance-security/C-10 and eval-quality/CQ-21: extract_raw raises ExtractionError unless stop_reason == 'tool_use' (last_usage still recorded)."
+  },
+  {
+    "review": "correctness-api",
+    "id": "C-4",
+    "severity": "low",
+    "title": "missing_fields goes stale after model_copy(update=...) or attribute assignment",
+    "set": "A",
+    "disposition": "planned",
+    "note": "missing_fields can't go stale: DealRequirement re-validates on model_copy(update=...) and on attribute assignment, and follow_up_question derives gaps from the current field values rather than the stored list."
+  },
+  {
+    "review": "correctness-api",
+    "id": "C-5",
+    "severity": "low",
+    "title": "Property-management deal requests are always asked the buy/sell/lease/1031 question",
+    "set": "A",
+    "disposition": "deferred",
+    "note": "changes PROMPT_VERSION: telling 'not a transaction' (property management) from 'not stated' needs a new tool-schema value or flag that the extractor fills."
+  },
+  {
+    "review": "correctness-api",
+    "id": "C-6",
+    "severity": "low",
+    "title": "Market matching only strips and lowercases the city, so 'Austin, TX', 'Ft. Lauderdale' or a NBSP lose the +2",
+    "set": "A",
+    "disposition": "planned",
+    "note": "New deal_board/cities.py: market_key(city, state) canonicalises (NFKC, casefold, drop '.' and ',', collapse whitespace, drop a trailing code equal to the deal state, expand 'ft'->'fort', 'st'->'saint', 'mt'->'mount'); matcher uses it on both sides of the market comparison and for the TX county lookup."
+  },
+  {
+    "review": "correctness-api",
+    "id": "C-7",
+    "severity": "low",
+    "title": "load_brokers fails on a UTF-8 BOM or an all-blank row, aborting the whole load with no row context",
+    "set": "A",
+    "disposition": "planned",
+    "note": "load_brokers opens the CSV as utf-8-sig, skips rows whose values are all blank, and re-raises a bad row as ValueError naming the CSV line number and broker_id."
+  },
+  {
+    "review": "correctness-api",
+    "id": "A-1",
+    "severity": "low",
+    "title": "Extraction-failure 422 body is {detail: str}, but OpenAPI documents 422 only as HTTPValidationError (detail: array)",
+    "set": "B",
+    "disposition": "planned",
+    "note": "POST /match documents its 422 as anyOf HTTPValidationError | ErrorDetail, so both 422 bodies (request validation, extraction failure) match the published schema."
+  },
+  {
+    "review": "correctness-api",
+    "id": "A-2",
+    "severity": "low",
+    "title": "Errors after extraction (match, reshaping, follow-up) give a text/plain 500, not the documented JSON ErrorDetail",
+    "set": "B",
+    "disposition": "planned",
+    "note": "Everything after extraction (match, reshaping, follow-up, response) is wrapped: any exception gives a fixed JSON 500 {'detail': 'matching failed unexpectedly'} and one log line with post=<id> and the exception type only; the documented 500 covers it."
+  },
+  {
+    "review": "correctness-api",
+    "id": "A-3",
+    "severity": "low",
+    "title": "OpenAPI publishes minLength 1 / maxLength 4000 on the raw text, but the server applies them after stripping",
+    "set": "B",
+    "disposition": "planned",
+    "note": "MatchRequest.text's JSON schema drops the raw minLength/maxLength (the server strips first), states the 1-4000-after-stripping rule in its description and requires a non-whitespace character via pattern."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-2",
+    "severity": "low",
+    "title": "The gate has no snapshot age limit: as_of moves forward with the clock, but license status stays as it was in the Oct 20, 2026 TREC download",
+    "set": "A",
+    "disposition": "planned",
+    "note": "is_licensed fails closed for real-record rows (source 'trec_<YYYY-MM-DD>') when as_of is more than MAX_SNAPSHOT_AGE_DAYS (90) after the snapshot date, or the date can't be parsed; fictional rows are unaffected."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-3",
+    "severity": "low",
+    "title": "get_as_of uses the server's local date, not the deal state's date, so a license that expired yesterday (Texas time) can pass",
+    "set": "B",
+    "disposition": "planned",
+    "note": "get_as_of returns today's date in America/New_York, the easternmost zone of any US licensing authority, so the gate's date is never behind any state's local date whatever the server TZ (fail closed)."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-4",
+    "severity": "low",
+    "title": "The sales-agent referral note needs an exact 'Sales Agent' string; the loader accepts any license_type, so other spellings get no note",
+    "set": "A",
+    "disposition": "planned",
+    "note": "Broker.license_type is Literal['Broker Individual', 'Sales Agent'] via a shared LICENSE_TYPES constant that cli/build_brokers reuses; padded, lower-case or unknown types fail at load."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-5",
+    "severity": "low",
+    "title": "build_brokers.py: the 'keep every' Active-but-expired comment is really a [:N_INVALID] slice, status is classified on the raw value but written stripped, and the %y pivot is undocumented",
+    "set": "A",
+    "disposition": "planned",
+    "note": "build_brokers strips Status/expiration/type once after reading and uses that one value to classify and write; Active-but-expired rows are capped at N_INVALID//2 via rng.sample so other invalid statuses stay represented; parse_date documents the %y pivot and raises on a 4-digit year. No data rebuild."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-6",
+    "severity": "low",
+    "title": "README/docstrings say bad state output is never repaired, but the state validator strips and upper-cases it (Unicode case folds included) and quietly turns non-strings into None",
+    "set": "A",
+    "disposition": "planned",
+    "note": "ExtractedFields' state validator: None stays None, blank -> None, any non-str raises, a non-ASCII str raises, an ASCII str is stripped and upper-cased; city/notes non-str raises. parse_requirement then raises ExtractionError for 48, ['TX'], b'TX', 'ıl'. Docstrings say what is normalised."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-7",
+    "severity": "low",
+    "title": "DEAL_EXTRACTOR is unvalidated: 'claude' (or any typo) without a key is silently treated as auto and serves the regex baseline",
+    "set": "B",
+    "disposition": "planned",
+    "note": "config validates DEAL_EXTRACTOR against {'', 'auto', 'claude', 'regex'} (ValueError otherwise); 'claude' with no key gives /match a fixed JSON 503 instead of serving regex; auto resolving to regex logs one WARNING."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-8",
+    "severity": "low",
+    "title": "Regex invents a state for posts that name no state, from a neighbourhood name, a city abbreviation or a CRE abbreviation (Washington Heights->WA, 'CO pending'->CO, LA->LA, NE Portland->NE)",
+    "set": "A",
+    "disposition": "wontfix",
+    "note": "The regex baseline is frozen by owner rule, so its spurious-token states can't be fixed; the four stateless posts (Washington Heights->WA fx-16, 'CO pending'->CO fx-19, LA, NE Portland) get pinned regex-path tests, and the fake fail-closed Claude path is shown to return no brokers and a state follow-up."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-9",
+    "severity": "low",
+    "title": "Fictional NY-only broker fx-12 lists Hoboken (NJ); state-blind _market_point adds '+2 serves Hoboken' when a Hoboken, NJ deal is misrouted to NY",
+    "set": "A",
+    "disposition": "planned",
+    "note": "A market written 'City, ST' earns the market point only when ST equals the deal state; a test checks every fictional market lies in its row's license_state except an explicit trap allowlist (fx-12 Hoboken, a data row the owner controls)."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-10",
+    "severity": "low",
+    "title": "Claude output that is truncated, mislabelled or loosely typed is accepted and routed instead of raising",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Claude output is checked strictly before routing: extract_raw requires stop_reason 'tool_use' and the tool name record_deal_requirement; the raw tool input must have exactly ExtractedFields' keys with strict JSON types (bool, int not bool/float/str, str or null), else ExtractionError; eval applies the same check to Claude raws on rescore."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-12",
+    "severity": "low",
+    "title": "Compliance gate test skips holdout_v3 and can't take it in as written: every wrong-state variant moves to OK, and v3-01 is an OK deal",
+    "set": "A",
+    "disposition": "deferred",
+    "note": "owner decision: taking data/holdout_v3.jsonl into the compliance oracle conflicts with the owner rule 'never evaluate anything on holdout_v3'; the README sentence is docs-builder territory."
+  },
+  {
+    "review": "compliance-security",
+    "id": "C-13",
+    "severity": "low",
+    "title": "API integration test 'only returns brokers licensed in the deal state' is status-blind and vacuous (passes with a status-blind gate)",
+    "set": "B",
+    "disposition": "planned",
+    "note": "The API integration test asserts license_status == 'Active' for every match, a non-empty match list, and excluded_for_licensing equal to an independent reference count, so a status-blind gate fails it."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-1",
+    "severity": "low",
+    "title": "Content-Length header with more than 4300 digits crashes BodySizeLimit with a 500 instead of a 413",
+    "set": "B",
+    "disposition": "planned",
+    "note": "BodySizeLimit rejects a Content-Length with more digits than str(max_bytes) with the 413 before calling int(), so a 5000-digit header is a 413 JSON, not a 500."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-2",
+    "severity": "low",
+    "title": "Anthropic client is built with SDK tracing defaults, so one env var exports full post text in OTel spans",
+    "set": "B",
+    "disposition": "planned",
+    "note": "Every Anthropic client the package builds passes open_telemetry=False (or an explicit metadata-only config), so ANTHROPIC_OPEN_TELEMETRY_* env vars can't put post text into spans."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-3",
+    "severity": "low",
+    "title": "Log post id is an unsalted SHA-256 prefix plus exact length, so a guessed or templated post can be confirmed or brute-forced offline",
+    "set": "B",
+    "disposition": "planned",
+    "note": "_post_id is HMAC-SHA256 under a per-process random key (12 hex chars): stable within a process, not reproducible from the text alone; no env read."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-4",
+    "severity": "low",
+    "title": "--rescore writes the caller's path verbatim into committed results (absolute path leaks local username)",
+    "set": "C",
+    "disposition": "planned",
+    "note": "rescored_from is stored repo-relative (POSIX) when the source is under the repo, else just the file name, so no absolute path reaches results."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-5",
+    "severity": "low",
+    "title": "brokers.csv republishes sensitive real-licensee statuses (Deceased, plus 'Probation - Active') keyed by public license number",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "owner decision: removing Deceased / 'Probation - Active' TREC rows means changing data/brokers.csv, which is the owner's call."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-6",
+    "severity": "low",
+    "title": "requirements.txt pins httpx 0.x, which nothing uses at runtime; the HTTP stack that carries the API key (httpx2/httpcore2/truststore) and opentelemetry-api come from unpinned ranges",
+    "set": "D",
+    "disposition": "planned",
+    "note": "pyproject pins, with ==, the whole runtime closure of the anthropic SDK's transport (httpx2, httpcore2, truststore, h11, opentelemetry-api, ...) at the installed versions; a test walks importlib.metadata to keep it complete."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-7",
+    "severity": "low",
+    "title": ".gitignore ignores only the exact name `.env`; `.env.local`, `.env.production`, `*.pem`, `*.key` are not ignored",
+    "set": "D",
+    "disposition": "planned",
+    "note": ".gitignore covers .env, .env.*, *.pem, *.key and keeps .env.example tracked (!.env.example)."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-8",
+    "severity": "low",
+    "title": "Agent-editable Playbook tells the loop agent to load .env itself in ad-hoc probe code, contradicting the fixed 'Never read .env' rule; the Playbook is self-propagating agent instructions",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "loop/DRAFT.md is outside the fix loop's editable set (it is the finished loop's own file); the fix is an edit to its Playbook plus a FIXED rule, for the owner."
+  },
+  {
+    "review": "compliance-security",
+    "id": "S-10",
+    "severity": "low",
+    "title": "Loop agent's FIXED holdout ban is keyed on a literal \"split\": \"all\"; three pre-loop results files have no split key yet hold 26 holdout raw outputs each, and data/holdout_v3.jsonl is not named in any ban",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "The fix rewrites the FIXED rule text in .claude/agents/extractor-improver.md and loop/DRAFT.md; fix-loop may only update paths in the agent file and may not edit DRAFT.md."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-2",
+    "severity": "medium",
+    "title": "git_info 'dirty' counts eval's own results/ output, so --repeats 2..N (and any run after an uncommitted result) are dirty and get dropped",
+    "set": "C",
+    "disposition": "planned",
+    "note": "git_info()['dirty'] ignores changes under results/ and .cache/; main() snapshots git_info once before the repeat loop, so repeats 2..N of a clean tree stay clean."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-3",
+    "severity": "medium",
+    "title": "Run identity (PROMPT_VERSION) ignores model and request parameters; check_success pools and matches runs on it alone",
+    "set": "C",
+    "disposition": "planned",
+    "note": "claude.py exposes request_sha(model): a hash of SYSTEM_PROMPT, TOOL, max_tokens, tool_choice, the message template and the model (PROMPT_VERSION unchanged); eval writes 'request_sha' in every Claude result; loop/check_success matches dev and final runs on (prompt_version, model, request_sha), legacy runs without it never match."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-31",
+    "severity": "medium",
+    "title": "The loop guard only diffs exact protected paths, so new files can change scoring or skip all tests and the gate still passes",
+    "set": "C",
+    "disposition": "planned",
+    "note": "The loop guard is an allow-list over git diff --name-status loop-start plus untracked files: only deal_board/extractors/claude.py, loop/DRAFT.md (FIXED sections still checked), loop/LESSONS.md, loop/state.json, added results/claude_*.{json,md} and added tests/test_*.py may change; 'tests pass' also fails on any deselected test or more skips than the one known skip."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-4",
+    "severity": "medium",
+    "title": "test_check_success leaves the gate's key contracts unpinned: 5 semantic mutants survive the whole suite",
+    "set": "C",
+    "disposition": "planned",
+    "note": "test_check_success gets distinguishable fixtures and exact failed-set assertions: final uses the oldest run and gates errors and holdout hallucinations; dev gates mean accuracy alone; the five named mutants are killed."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-41",
+    "severity": "medium",
+    "title": "No test pins scoring's deal-value tolerance or city normalisation rules: six contract-breaking mutants survive",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Parametrised tests pin the +/-1% deal-value tolerance (abs, <=, 0.01) and city normalisation (case, periods, commas, extra spaces; no spelling tolerance) and the missing_fields error count for an errored deal post. scoring.py unchanged for this one."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-1",
+    "severity": "medium",
+    "title": "Cache replays across eval invocations, so the documented '3 separate dev runs' protocol yields one sample repeated 3 times",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Replaying cache entries written by an earlier invocation is opt-in (--resume); by default every call is fresh and only written to the cache. loop/check_success fails a dev run with any cached record or usage.cache_hits > 0."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-21",
+    "severity": "medium",
+    "title": "Dev gate scores only the newest 3 runs of a prompt, so rerunning until 3 good runs come up passes a prompt whose full record fails",
+    "set": "C",
+    "disposition": "planned",
+    "note": "The dev gate fails when the current prompt has more than REPEATS clean runs (a rerun needs a new prompt version), and its detail lists the run count and files."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-5",
+    "severity": "medium",
+    "title": "loop_runs counts --rescore outputs as fresh runs (dev gate fillable from one sample; a final rescore permanently fails 'one look only')",
+    "set": "C",
+    "disposition": "planned",
+    "note": "loop_runs skips results carrying 'rescored_from', so rescores never fill the dev gate or count as a second final look."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-7",
+    "severity": "medium",
+    "title": "Dev and holdout_v3 use opposite city labels for 'near/outside X'; the v3 agreement doc doesn't flag the conflict",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "owner decision: which 'near/outside X' city convention is right is a labelling call, and the fix relabels data/posts.jsonl or data/holdout_v3.jsonl (and would touch schema.py's city description, which changes PROMPT_VERSION)."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-21",
+    "severity": "low",
+    "title": "A truncated tool call (stop_reason max_tokens) is accepted and cached, and its missing keys are scored as correct_missing",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Same fix as correctness-api/C-1 and compliance-security/C-10: a max_tokens (or any non-tool_use) response raises ExtractionError, so it is recorded as an error and never cached as a prediction."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-22",
+    "severity": "low",
+    "title": "test_data validates labels through normalising validators, so a blank or non-string label passes and is scored as 'missed'",
+    "set": "A",
+    "disposition": "planned",
+    "note": "test_data asserts every label round-trips unchanged through the schema (as test_holdout_v3 does); with the compliance-security/C-6 validator, blank or non-string labels fail and parse_requirement({'state': 123}) raises."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-23",
+    "severity": "low",
+    "title": "Back-compat test pins the frozen regex results to current labels, so any label fix breaks it",
+    "set": "C",
+    "disposition": "planned",
+    "note": "The back-compat test checks key-set inclusion against the frozen regex results structurally and compares values against a re-score of the same records under a label snapshot in tests/golden/, so a label fix doesn't break it."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-24",
+    "severity": "low",
+    "title": "load_run promises exit 2 with no traceback for any non-run file, but non-JSON input raises a raw JSONDecodeError",
+    "set": "C",
+    "disposition": "planned",
+    "note": "load_run turns a missing, unreadable, empty or non-JSON file into a one-line stderr message and exit 2, no traceback, for --rescore and --compare."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-42",
+    "severity": "low",
+    "title": "Dev-vs-full --compare test asserts only header text, so it passes on an empty comparison and misses full-run-first order",
+    "set": "C",
+    "disposition": "planned",
+    "note": "The dev-vs-full --compare test runs in both argument orders and asserts comparison content ('common posts' for data/posts.jsonl, no 'No dataset path in common'); compare_results unit test with holdout unmatched before posts."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-43",
+    "severity": "low",
+    "title": "summarize_repeats, the --repeats 'noise floor' summary, is effectively untested",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Unit tests for summarize_repeats/format_repeat_summary with differing per-run accuracies, a None accuracy and a dataset present in one run."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-5",
+    "severity": "low",
+    "title": "test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested",
+    "set": "C",
+    "disposition": "planned",
+    "note": "test_eval calls rescore_records itself; a refusal record (raw None, error set) keeps its error through rescore and is counted as an error."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-51",
+    "severity": "low",
+    "title": "Scorer and matcher define city equality differently, so the eval counts cities as correct that the matcher can't use",
+    "set": "A",
+    "disposition": "planned",
+    "note": "With correctness-api/C-6, matcher equality is a coarsening of the scorer's city equality (market_key applied on top of scoring's rule), so any city the eval scores correct also earns the matcher's market/county point; a test pins it for St Louis / San Antonio variants."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-52",
+    "severity": "low",
+    "title": "Explicit --extractor claude with no API key silently runs regex instead, writes regex results and exits 0",
+    "set": "C",
+    "disposition": "planned",
+    "note": "An explicit --extractor claude with no API key exits non-zero before writing anything; only --extractor all keeps the regex fallback."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-61",
+    "severity": "low",
+    "title": "--rescore copies the source run's 'scoring' note into the new JSON while its .md shows the current rules",
+    "set": "C",
+    "disposition": "planned",
+    "note": "rescored_result writes the current SCORING_NOTE as 'scoring' (the source's note kept as 'source_scoring'), so the JSON and .md describe the same rules."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-7",
+    "severity": "low",
+    "title": "Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it",
+    "set": "C",
+    "disposition": "planned",
+    "note": "The dev gate re-scores each counted run against current labels (cli.eval.rescore) and fails if the gated metrics differ from the stored scores; the guard also fails if any commit since loop-start touched a protected path, not just the net diff."
+  },
+  {
+    "review": "eval-quality",
+    "id": "CQ-8",
+    "severity": "low",
+    "title": "score() hard-codes the good-outcome tuple for its failures list instead of using GOOD_OUTCOMES",
+    "set": "C",
+    "disposition": "planned",
+    "note": "score() builds its failures list with GOOD_OUTCOMES, the same predicate accuracy uses."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-2",
+    "severity": "low",
+    "title": "README overstates the loop's keep rule: iteration 2 was kept with state and city each down 3.5 pts",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "README prose is owned by the docs builder that follows this loop (fix-loop may only edit the architecture table); the fix is README wording on the keep rule."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-22",
+    "severity": "low",
+    "title": "README timeline error analysis says the model fails to subtract elapsed time, but the 45-day failures come from over-shortening",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "README prose is owned by the docs builder that follows this loop (fix-loop may only edit the architecture table); the other half is loop/DRAFT.md's backlog, outside the editable set."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-23",
+    "severity": "low",
+    "title": "baseline-v1_comparison.json uses the old all-posts metric and disagrees with every reported baseline number, with nothing saying so",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Without touching results/: load_run's exit-2 message names a datasets-less JSON as a legacy summary that predates deal-only scoring, and every new or rescored result carries scoring_version; the README/P6-doc note is left to the docs builder."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-24",
+    "severity": "low",
+    "title": "Hallucination rates count errored posts as clean: an all-errored run reports 0% hallucination",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Hallucination rates exclude errored posts from their denominators (per-field rate and posts_with_any_rate), None when nothing is left; SCORING_NOTE says so. Changes rescored rates: delta recorded."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-25",
+    "severity": "low",
+    "title": "README test count, 'next steps' and holdout status are out of date versus the code and data",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "README prose is owned by the docs builder that follows this loop (fix-loop may only edit the architecture table); the fix is README test count, next steps and holdout status."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-3",
+    "severity": "low",
+    "title": "Iteration table reports 'kept' prompt changes without noise or significance, and omits the drop on the 11 untuned posts",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "README prose is owned by the docs builder that follows this loop (fix-loop may only edit the architecture table); the fix adds noise/p-values to the README iteration table."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-31",
+    "severity": "low",
+    "title": "Text overlap contradicts the README's claim that the holdout was written blind to the other posts, and no brief was recorded",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "README prose is owned by the docs builder that follows this loop (fix-loop may only edit the architecture table); the alternative fix replaces holdout posts in data/holdout.jsonl, which is owner data."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-6",
+    "severity": "low",
+    "title": "Rescore/compare join old raw outputs to current labels by post id only, with no text or label hash",
+    "set": "C",
+    "disposition": "planned",
+    "note": "New results store text_sha256 and label_sha256 per record; rescore/compare exclude ids whose text or label changed, and report changed/missing/new ids under 'drift' with a one-line warning; legacy files without hashes warn once and score as before."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-61",
+    "severity": "low",
+    "title": "Per-field hallucination rate divides by all deal posts instead of posts whose label is empty, so guessing looks rare when the sets barely test it",
+    "set": "C",
+    "disposition": "planned",
+    "note": "Per-field hallucination_rate = hallucinated / n_null, where n_null counts non-errored deal posts whose gold value is None; Wilson ci95 over n_null; None when n_null == 0; each field cell exposes n_null. Changes rescored rates: delta recorded."
+  },
+  {
+    "review": "eval-quality",
+    "id": "EM-8",
+    "severity": "low",
+    "title": "s14 state label NJ can only be reached by inferring from city names, which the schema forbids",
+    "set": "-",
+    "disposition": "deferred",
+    "note": "owner decision: relabelling s14's state in data/posts.jsonl is a labelling call for the owner."
+  },
+  {
+    "review": "red-team",
+    "id": "RT-1",
+    "severity": "low",
+    "title": "rt-20: the regex path's city 'System Override Mode' is echoed into the follow-up",
+    "set": "A",
+    "disposition": "planned",
+    "note": "follow_up_question names a city only if cities' key of it is a known city (TX_CITY_TO_COUNTY keys plus the shipped brokers' markets, loaded lazily); anything else falls back to 'the property', so injected text is never echoed."
+  },
+  {
+    "review": "red-team",
+    "id": "RT-2",
+    "severity": "low",
+    "title": "smuggled-state-not-a-state: a model_construct'd state 'ZZ' reaches a 200 body",
+    "set": "B",
+    "disposition": "planned",
+    "note": "match_post re-validates the extractor's output before matching: state is kept only if it is exactly a State code (else None: fail closed, state follow-up), and the response carries the re-validated requirement."
+  },
+  {
+    "review": "red-team",
+    "id": "RT-3",
+    "severity": "low",
+    "title": "injection-in-city-with-follow-up: injected city echoed in the follow-up",
+    "set": "A",
+    "disposition": "planned",
+    "note": "Same fix as RT-1."
+  },
+  {
+    "review": "red-team",
+    "id": "RT-4",
+    "severity": "low",
+    "title": "injection-in-city-no-state: injected city echoed in the state question",
+    "set": "A",
+    "disposition": "planned",
+    "note": "Same fix as RT-1."
+  },
+  {
+    "review": "red-team",
+    "id": "RT-5",
+    "severity": "low",
+    "title": "smuggled-is-deal-request-no: a truthy non-bool is_deal_request gets matches",
+    "set": "B",
+    "disposition": "planned",
+    "note": "Same re-validation as RT-2: is_deal_request counts only if it is exactly True; anything else is a non-deal, so no matches."
+  },
+  {
+    "review": "p10",
+    "id": "P10-1",
+    "severity": "low",
+    "title": "Non-editable `pip install .` breaks: data/ lives outside the package",
+    "set": "D",
+    "disposition": "planned",
+    "note": "deal_board.paths fails at import with a clear message (install editable from a checkout) when data/ isn't next to the package, instead of a confusing FileNotFoundError deep in a request."
+  },
+  {
+    "review": "p10",
+    "id": "P10-2",
+    "severity": "low",
+    "title": "RegexExtractor can't be pickled",
+    "set": "D",
+    "disposition": "planned",
+    "note": "The typed shim makes RegexExtractor picklable (the frozen class is importable under the module name pickle records); the frozen file is untouched."
+  },
+  {
+    "review": "p10",
+    "id": "P10-3",
+    "severity": "low",
+    "title": "The API caches its first Claude key/model for the process",
+    "set": "B",
+    "disposition": "planned",
+    "note": "The cached Claude extractor is keyed on the current settings' key fingerprint and model (maxsize 1), so a changed key or DEAL_MODEL builds a new client."
+  },
+  {
+    "review": "p10",
+    "id": "P10-4",
+    "severity": "low",
+    "title": "README architecture table shows pre-packaging paths",
+    "set": "D",
+    "disposition": "planned",
+    "note": "Update only the README architecture table to deal_board/... paths."
+  },
+  {
+    "review": "p10",
+    "id": "P10-5",
+    "severity": "low",
+    "title": ".claude/agents/extractor-improver.md shows pre-packaging paths",
+    "set": "D",
+    "disposition": "planned",
+    "note": "Path updates only in the agent file (rule wording untouched)."
+  }
+]
