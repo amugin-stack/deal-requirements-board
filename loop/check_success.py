@@ -113,15 +113,30 @@ def n_errors(scores: JSONObject) -> int:
     return errors
 
 
+def run_files(runs: list[JSONObject]) -> str:
+    return ", ".join(str(r.get("_file", "?")) for r in runs) or "none"
+
+
+def repeats_check(runs: list[JSONObject]) -> Check:
+    """Exactly REPEATS runs per request. More would let reruns replace bad runs until REPEATS
+    good ones come up (optional stopping), so a rerun needs a new prompt version instead."""
+    return Check(
+        "repeats",
+        len(runs) == REPEATS,
+        f"need exactly {REPEATS} dev runs of this request, found {len(runs)}: {run_files(runs)}",
+    )
+
+
 def dev_checks(runs: list[JSONObject]) -> list[Check]:
-    """runs: the latest dev-split results for the current prompt version, newest first."""
+    """runs: every clean dev-split result for the current request identity, newest first."""
     if len(runs) < REPEATS:
-        return [Check("repeats", False, f"need {REPEATS} dev runs of this prompt, found {len(runs)}")]
+        return [repeats_check(runs)]
     scores = [r["datasets"]["posts_dev"]["scores"] for r in runs[:REPEATS]]
     field_means: dict[str, float] = {f: sum(s["fields"][f]["accuracy"] for s in scores) / REPEATS for f in KEY_FIELDS}
     mean = sum(run_mean(s) for s in scores) / REPEATS
     worst_field = min(field_means, key=field_means.__getitem__)
     return [
+        repeats_check(runs),
         Check(
             "schema errors", all(n_errors(s) == 0 for s in scores), f"errors per run: {[n_errors(s) for s in scores]}"
         ),
