@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 
+from deal_board.brokers import Broker
 from deal_board.cli import eval as ev
 from deal_board.extractors.claude import PROMPT_VERSION
+from deal_board.matcher import is_licensed
 
 ROOT = Path(__file__).resolve().parent.parent
 PRE_STRICT_RUN = ROOT / "results" / "claude_20261024T231514Z.json"  # prompt de789943: nulls could be omitted
@@ -46,3 +49,50 @@ def test_adv1_legacy_rescore_still_rejects_invalid_values(name: str) -> None:
     """ADV-1: the legacy path is main's behaviour, so schema-invalid values still raise there."""
     bad = {"is_deal_request": True, name: 48}
     assert ev.to_record(bad, None, ev.raw_check("claude", "de789943"))["error"]
+
+
+def _broker(source: str) -> Broker:
+    return Broker(
+        broker_id="tx-adv2",
+        name="TX Licensee",
+        source=source,
+        license_state="TX",
+        license_number="ADV-2",
+        license_type="Broker Individual",
+        license_status="Active",
+        license_expiration=date(2027, 12, 31),
+        county=None,
+        markets=[],
+        property_types=[],
+        transaction_types=[],
+        min_deal_usd=None,
+        max_deal_usd=None,
+    )
+
+
+ADV2_AS_OF = date(2026, 11, 30)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "TREC_2026-10-20",
+        "Trec_2026-10-20",
+        " trec_2026-10-20",
+        "trec-2026-10-20",
+        "tdlr_2026-10-20",
+        "real",
+        "trec_2026-12-01",  # snapshot after as_of: says nothing about that earlier day
+        "trec_2099-01-01",
+        "trec_2026-10-20 ",
+    ],
+)
+def test_adv2_unreadable_or_future_snapshot_fails_closed(source: str) -> None:
+    """ADV-2: only 'fictional' or an exact, past trec_YYYY-MM-DD within the age limit can pass the gate."""
+    assert is_licensed(_broker(source), "TX", ADV2_AS_OF) is False
+
+
+@pytest.mark.parametrize("source", ["fictional", "trec_2026-10-20", "trec_2026-11-30"])
+def test_adv2_controls_still_pass(source: str) -> None:
+    """ADV-2 control: fictional rows and fresh, well-formed snapshots (age 0 to 90 days) still pass."""
+    assert is_licensed(_broker(source), "TX", ADV2_AS_OF) is True

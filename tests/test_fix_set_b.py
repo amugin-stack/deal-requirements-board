@@ -360,7 +360,7 @@ from deal_board.schema import DealRequirement
 
 as_of = api.get_as_of()
 broker = Broker(
-    broker_id="tx-900", name="TX Licensee 900", source="test", license_state="TX",
+    broker_id="tx-900", name="TX Licensee 900", source="fictional", license_state="TX",
     license_number="900900-B", license_type="Broker Individual", license_status="Active",
     license_expiration=_dt.date.fromisoformat(sys.argv[2]), county="Travis", markets=[],
     property_types=[], transaction_types=[], min_deal_usd=None, max_deal_usd=None,
@@ -424,6 +424,9 @@ def test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host() -> 
 
     assert result["matches"] == 0
     assert result["excluded"] == 1
+    # Control: the same broker expiring on Jan 2 still matches, so the exclusion above is the date rule.
+    control = run_frozen_clock("Pacific/Honolulu", "2027-01-02T06:30:00+00:00", expiration="2027-01-02")
+    assert (control["matches"], control["excluded"]) == (1, 0)
 
 
 # --- compliance-security/C-7 ----------------------------------------------------------------

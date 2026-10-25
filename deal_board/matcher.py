@@ -41,26 +41,27 @@ _TX_COUNTY_BY_KEY = {market_key(city, "TX"): county for city, county in TX_CITY_
 # 2026-11-30 against the 2026-10-20 snapshot. Re-download the data to restore the rows.
 MAX_SNAPSHOT_AGE_DAYS = 90
 
-_TREC_PREFIX = "trec_"
-_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_FICTIONAL = "fictional"
+_SNAPSHOT_SOURCE = re.compile(r"trec_(\d{4}-\d{2}-\d{2})")
 
 
 def _snapshot_is_fresh(broker: Broker, as_of: date) -> bool:
-    """True unless the row is a 'trec_<YYYY-MM-DD>' record too old, or too garbled, to trust.
+    """True for a fictional row, or a 'trec_<YYYY-MM-DD>' record from 0 to MAX_SNAPSHOT_AGE_DAYS old.
 
-    Fictional rows carry no snapshot and are unaffected. An unparseable trec_ date fails
-    closed like any other unknown.
+    Allow-list, not deny-list: any other source spelling ('TREC_...', 'trec-...', a new registry)
+    is a record whose age we can't read, so it fails closed instead of never ageing out. A
+    snapshot dated after as_of fails too: it says nothing about the license on that earlier day.
     """
-    if not broker.source.startswith(_TREC_PREFIX):
+    if broker.source == _FICTIONAL:
         return True
-    stamp = broker.source.removeprefix(_TREC_PREFIX)
-    if not _ISO_DATE.fullmatch(stamp):
+    found = _SNAPSHOT_SOURCE.fullmatch(broker.source)
+    if found is None:
         return False
     try:
-        snapshot = date.fromisoformat(stamp)
+        snapshot = date.fromisoformat(found.group(1))
     except ValueError:  # e.g. 2026-02-30
         return False
-    return (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS
+    return 0 <= (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS
 
 
 def is_licensed(broker: Broker, state: str | None, as_of: date) -> bool:
@@ -68,8 +69,9 @@ def is_licensed(broker: Broker, state: str | None, as_of: date) -> bool:
 
     Status must be exactly "Active" because TREC uses compound statuses such as
     "Probation - Active" that carry restrictions we don't want to route referrals into.
-    A real (trec_) record also needs a snapshot no older than MAX_SNAPSHOT_AGE_DAYS at
-    `as_of`, since its status is frozen at download time while `as_of` moves on.
+    Any non-fictional record also needs a readable trec_ snapshot date at most
+    MAX_SNAPSHOT_AGE_DAYS before `as_of`, since its status is frozen at download time while
+    `as_of` moves on.
     `as_of` is passed in so results are reproducible and never depend on the clock.
     """
     return (
