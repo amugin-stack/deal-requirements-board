@@ -106,8 +106,8 @@ def post_diffs() -> dict[str, tuple[str, str]]:
     return {m["id"]: (m["diff"], "post") for m in spec["mutants"]}
 
 
-def run_one(key: str, diff: str, copy: Path) -> dict[str, Any]:
-    """Apply `diff` to `copy`, run the suite, restore the touched files from the worktree."""
+def run_one(key: str, diff: str, copy: Path, src: Path) -> dict[str, Any]:
+    """Apply `diff` to `copy`, run the suite, restore the copy's code, tests and data from `src`."""
     files = diff_files(diff)
     entry: dict[str, Any] = {"diff_sha256": sha256(diff), "files": files, "applied": False, "failed": []}
     if not diff or not applies(diff, copy):
@@ -124,12 +124,12 @@ def run_one(key: str, diff: str, copy: Path) -> dict[str, Any]:
         entry.update(failed=sorted(out.failed), counts=out.counts, note=out.note)
     finally:
         for f in files:
-            shutil.copy2(ROOT / f, copy / f)
+            shutil.copy2(src / f, copy / f)
         # A mutated run could write into the copy's tests or data; reset both so nothing it left
         # behind can fail (and falsely "kill") the next mutant run on this copy.
         for p in ("tests", "data"):
             shutil.rmtree(copy / p)
-            shutil.copytree(ROOT / p, copy / p, ignore=HELPERS.COPY_IGNORE)
+            shutil.copytree(src / p, copy / p)
     entry["killed_by_count"] = len(entry["failed"])
     return entry
 
@@ -162,13 +162,30 @@ def init_copy_repo(copy: Path) -> None:
     g("tag", "baseline-v1", commit)
 
 
+def snapshot(work: Path) -> Path:
+    """HEAD's code, tests, data and pyproject.toml exported with `git archive` into work/_snapshot.
+
+    Copies are filled and restored from this, never from the live worktree: files edited or
+    added there while a run is going (another agent writing tests, say) must not leak into it,
+    and the tree hashes the output records are exactly what ran.
+    """
+    dest = work / "_snapshot"
+    shutil.rmtree(dest, ignore_errors=True)
+    dest.mkdir(parents=True)
+    archive = subprocess.run(["git", "archive", "HEAD", *TREE_PATHS], cwd=ROOT, capture_output=True, check=True)
+    subprocess.run(["tar", "-x", "-C", str(dest)], input=archive.stdout, check=True)
+    return dest
+
+
 def run_all(diffs: dict[str, tuple[str, str]], work: Path) -> dict[str, Any]:
     copies = HELPERS.copies(work)
+    head = tree()
+    src = snapshot(work)
     for c in copies:  # the copies must hold today's tree, not the one `setup` saw
         for p in ("deal_board", "tests", "data"):
             shutil.rmtree(c / p)
-            shutil.copytree(ROOT / p, c / p, ignore=HELPERS.COPY_IGNORE)
-        shutil.copy2(ROOT / "pyproject.toml", c / "pyproject.toml")
+            shutil.copytree(src / p, c / p)
+        shutil.copy2(src / "pyproject.toml", c / "pyproject.toml")
         # Copies leave out .git so nothing can touch the real repo, but one test asks git which
         # files .gitignore covers. An empty repo of the copy's own answers that and holds nothing.
         if not (c / ".git").exists():
@@ -185,7 +202,7 @@ def run_all(diffs: dict[str, tuple[str, str]], work: Path) -> dict[str, Any]:
         key, (diff, source) = item
         copy = pool.get()
         try:
-            entry = {"diff_source": source, **run_one(key, diff, copy)}
+            entry = {"diff_source": source, **run_one(key, diff, copy, src)}
             state = "KILLED" if entry["failed"] else ("NOT APPLIED" if not entry["applied"] else "survived")
             print(f"  {key}: {state} ({len(entry['failed'])} failing) {entry.get('note', '')}", flush=True)
             return key, entry
@@ -195,7 +212,9 @@ def run_all(diffs: dict[str, tuple[str, str]], work: Path) -> dict[str, Any]:
     with ThreadPoolExecutor(max_workers=len(copies)) as ex:
         mutants = dict(ex.map(task, sorted(diffs.items())))
     baseline = {"failed": sorted(base.failed), "counts": base.counts, "note": base.note}
-    return {"tree": tree(), "baseline": baseline, "mutants": mutants}
+    if tree() != head:
+        raise SystemExit("HEAD moved during the run; rerun so the recorded tree is what ran")
+    return {"tree": head, "baseline": baseline, "mutants": mutants}
 
 
 def main(argv: list[str] | None = None) -> int:
