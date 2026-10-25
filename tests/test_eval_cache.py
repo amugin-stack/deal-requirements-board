@@ -426,10 +426,10 @@ def test_repeats_empty_cache_every_run_calls(
 
 
 def test_repeats_prewarmed_cache_run1_hits_rest_fresh(claude_main: RunMain, tmp_path: Path) -> None:
-    """On a warm cache, run 1 replays every post and runs 2 and 3 call the API for every post."""
+    """With --resume on a warm cache, run 1 replays every post and runs 2 and 3 call the API for every post."""
     out_dir, cache_dir = tmp_path / "out", tmp_path / "cache"
     claude_main(results_dir=tmp_path / "warmup", cache_dir=cache_dir)
-    client = claude_main("--repeats", "3", results_dir=out_dir, cache_dir=cache_dir)
+    client = claude_main("--repeats", "3", "--resume", results_dir=out_dir, cache_dir=cache_dir)
     assert client.calls == 2 * N_DEV_POSTS
     usage = [r["usage"] for r in load_results(out_dir)]
     assert [(u["api_calls"], u["cache_hits"]) for u in usage] == [(0, N_DEV_POSTS), (N_DEV_POSTS, 0), (N_DEV_POSTS, 0)]
@@ -437,10 +437,10 @@ def test_repeats_prewarmed_cache_run1_hits_rest_fresh(claude_main: RunMain, tmp_
 
 
 def test_cached_run_records_are_marked(claude_main: RunMain, tmp_path: Path) -> None:
-    """A second invocation on a warm cache makes no calls and marks every record cached."""
+    """A second --resume invocation on a warm cache makes no calls and marks every record cached."""
     cache_dir = tmp_path / "cache"
     claude_main(results_dir=tmp_path / "a", cache_dir=cache_dir)
-    client = claude_main(results_dir=tmp_path / "b", cache_dir=cache_dir)
+    client = claude_main("--resume", results_dir=tmp_path / "b", cache_dir=cache_dir)
     assert client.calls == 0
     (result,) = load_results(tmp_path / "b")
     assert all(r["call"]["cached"] for ds in result["datasets"].values() for r in ds["records"].values())

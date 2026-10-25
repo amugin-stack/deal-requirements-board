@@ -6,6 +6,7 @@
   python -m deal_board.cli.eval --compare results/A.json results/B.json         # paired test, writes nothing
   python -m deal_board.cli.eval --extractor claude --repeats 3                  # run-to-run variance
   python -m deal_board.cli.eval --extractor claude --no-cache                   # bypass the raw-output cache
+  python -m deal_board.cli.eval --extractor claude --resume                     # replay earlier runs' outputs
 
 Each run writes results/<extractor>_<UTC timestamp>.json (provenance, every raw output, every
 prediction, scores, token usage and cost) and a matching .md table. Scoring rules live in deal_board/scoring.py.
@@ -118,13 +119,24 @@ class RawCache:
     and tool, not max_tokens, tool_choice or the <post> wrapper. The CLI passes the sha256 of the
     extractor's source file, so any edit there turns old entries into misses instead of replaying
     outputs of a request that no longer exists. None means the caller doesn't fingerprint.
+
+    resume=False makes every get() a miss while put() still writes: the CLI's default, so each
+    invocation's calls are fresh samples (three separate dev runs must not be one run replayed
+    three times). The CLI passes resume=True only for --resume, to finish an interrupted run.
     """
 
     def __init__(
-        self, directory: Path, model: str, prompt_version: str, request_fingerprint: str | None = None
+        self,
+        directory: Path,
+        model: str,
+        prompt_version: str,
+        request_fingerprint: str | None = None,
+        *,
+        resume: bool = True,
     ) -> None:
         self.directory, self.model, self.prompt_version = Path(directory), model, prompt_version
         self.request_fingerprint = request_fingerprint
+        self.resume = resume
         self._looked_up: set[str] = set()
 
     def _path(self, key: str) -> Path:
@@ -142,14 +154,15 @@ class RawCache:
         """The cached entry for text, or None (a miss).
 
         Only the first lookup of a key on this instance can hit. The CLI shares one instance
-        across all repeats, so run 1 may resume from disk while runs 2..N always call the API:
+        across all repeats, so with --resume run 1 may replay disk while runs 2..N always call the API:
         repeats stay independent samples instead of replaying run 1's outputs. A file that is
         unreadable, or whose stored identity doesn't match the request, is treated as a miss
         rather than trusted on the strength of its filename; so is one missing an entry field
         (hand-edited, or written by an older entry format), which would otherwise crash the run.
         """
         key = cache_key(self.model, self.prompt_version, text)
-        if key in self._looked_up:
+        if key in self._looked_up or not self.resume:
+            self._looked_up.add(key)
             return None
         self._looked_up.add(key)
         try:
@@ -698,6 +711,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     ap.add_argument("--repeats", type=int, default=1, help="run each extractor N times, then summarize")
     ap.add_argument("--no-cache", action="store_true", help="bypass the raw-output cache entirely")
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="replay cached outputs written by earlier invocations (e.g. to finish an interrupted run); "
+        "by default every call is fresh and only written to the cache",
+    )
     ap.add_argument("--results-dir", type=Path, help=f"where results are written (default {RESULTS_DIR})")
     ap.add_argument("--cache-dir", type=Path, help=f"raw-output cache directory (default {CACHE_DIR})")
     args = ap.parse_args(argv)
@@ -746,6 +765,7 @@ def main(argv: list[str] | None = None) -> None:
                 meta["model"],
                 meta["prompt_version"],
                 source_sha256(extractor),
+                resume=args.resume,
             )
         )
         stamp = timestamp()
