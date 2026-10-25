@@ -274,7 +274,14 @@ def test_claude_client_gets_key_explicitly(monkeypatch: pytest.MonkeyPatch, buil
     extractor = api.get_extractor()
 
     assert extractor.name == "claude"
-    assert built == [{"api_key": SECRET, "timeout": api.CLAUDE_TIMEOUT_SECONDS, "max_retries": api.CLAUDE_MAX_RETRIES}]
+    assert built == [
+        {
+            "api_key": SECRET,
+            "timeout": api.CLAUDE_TIMEOUT_SECONDS,
+            "max_retries": api.CLAUDE_MAX_RETRIES,
+            "open_telemetry": False,
+        }
+    ]
     assert isinstance(extractor, ClaudeExtractor)
     assert extractor.model == "claude-configured"
 

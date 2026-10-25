@@ -481,7 +481,12 @@ def test_claude_client_has_bounded_timeout_and_retries(
     api.get_extractor()
 
     assert fresh_extractor_cache == [
-        {"api_key": "test-key", "timeout": api.CLAUDE_TIMEOUT_SECONDS, "max_retries": api.CLAUDE_MAX_RETRIES}
+        {
+            "api_key": "test-key",
+            "timeout": api.CLAUDE_TIMEOUT_SECONDS,
+            "max_retries": api.CLAUDE_MAX_RETRIES,
+            "open_telemetry": False,
+        }
     ]  # built once, with bounds, and the key passed explicitly from deal_board.config
 
 

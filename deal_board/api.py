@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 
 # The Anthropic SDK logs full request options, post text included, at DEBUG (enabled by
 # ANTHROPIC_LOG=debug or a DEBUG root logger). Pin it and its HTTP client to WARNING so turning
-# on debug logging for this app can never write a post to the logs.
+# on debug logging for this app can never write a post to the logs. Tracing is the other channel:
+# the client is built with `open_telemetry=False` (see `_claude_extractor`), so the SDK's
+# ANTHROPIC_OPEN_TELEMETRY_* env vars can't turn on spans that carry the post text either.
 for _sdk_logger in ("anthropic", "httpx", "httpx2"):
     logging.getLogger(_sdk_logger).setLevel(logging.WARNING)
 
@@ -155,8 +157,14 @@ def _claude_extractor() -> Extractor:
     from deal_board.extractors.claude import ClaudeExtractor
 
     settings = load_settings()
+    # open_telemetry=False: with the default (None) the SDK reads ANTHROPIC_OPEN_TELEMETRY_* env
+    # vars, and ..._TRACES_CONTENT_MODE=content would export the full post text in span
+    # attributes. False disables the client's spans outright, whatever the environment says.
     client = anthropic.Anthropic(
-        api_key=settings.api_key_value(), timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES
+        api_key=settings.api_key_value(),
+        timeout=CLAUDE_TIMEOUT_SECONDS,
+        max_retries=CLAUDE_MAX_RETRIES,
+        open_telemetry=False,
     )
     return ClaudeExtractor(client=client)
 
