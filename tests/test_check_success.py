@@ -47,6 +47,8 @@ def scores(acc: float = 1.0, errors: int = 0, is_deal: float = 1.0, non_deal_fil
         "is_deal_request": {"accuracy": is_deal, "error": errors},
         "fields": {f: {"accuracy": acc} for f in KEY_FIELDS},
         "non_deal_hallucinations": {"fields_filled": non_deal_filled},
+        "n_posts": 24,  # a gated count too (postreview-1/EVAL-2)
+        "n_deal_posts": 20,
     }
 
 
@@ -62,6 +64,7 @@ def final_run(version: str = "v1", **kw: Unpack[ScoreKw]) -> JSONObject:
         "prompt_version": version,
         "model": V1.model,
         "request_sha": V1.request_sha,
+        "git": {"commit": "c", "dirty": False},
         "datasets": {"holdout": {"scores": scores(**kw)}, "posts": {"scores": scores()}},
     }
 
@@ -96,27 +99,29 @@ def test_fixed_sections_ignore_editable_ones() -> None:
 
 
 def test_final_allows_one_look_at_a_dev_passed_prompt() -> None:
-    assert failed(cs.final_checks([final_run()], V1)) == set()
-    assert "one look only" in failed(cs.final_checks([final_run(), final_run()], V1))
-    assert "prompt passed dev first" in failed(cs.final_checks([final_run()], None))
-    assert "holdout mean accuracy" in failed(cs.final_checks([final_run(acc=0.7)], V1))
+    assert failed(cs.final_checks([final_run()], V1, stored)) == set()
+    assert "one look only" in failed(cs.final_checks([final_run(), final_run()], V1, stored))
+    assert "prompt passed dev first" in failed(cs.final_checks([final_run()], None, stored))
+    assert "holdout mean accuracy" in failed(cs.final_checks([final_run(acc=0.7)], V1, stored))
 
 
 def test_final_uses_oldest_run_and_gates_errors_and_hallucinations() -> None:
     """eval-quality/CQ-4: the first final look counts (finals are newest first); errors and fills gate it."""
     newer_v2, older_v1 = final_run("v2"), final_run("v1")
-    assert failed(cs.final_checks([newer_v2, older_v1], V1)) == {"one look only"}
-    assert failed(cs.final_checks([older_v1, newer_v2], V1)) == {"one look only", "prompt passed dev first"}
-    assert failed(cs.final_checks([final_run(), final_run(acc=0.7)], V1)) == {
+    assert failed(cs.final_checks([newer_v2, older_v1], V1, stored)) == {"one look only"}
+    assert failed(cs.final_checks([older_v1, newer_v2], V1, stored)) == {"one look only", "prompt passed dev first"}
+    assert failed(cs.final_checks([final_run(), final_run(acc=0.7)], V1, stored)) == {
         "one look only",
         "holdout mean accuracy",
     }
-    assert failed(cs.final_checks([final_run(errors=1)], V1)) == {"schema errors"}
+    assert failed(cs.final_checks([final_run(errors=1)], V1, stored)) == {"schema errors"}
     posts_error = {**final_run(), "datasets": {**final_run()["datasets"], "posts": {"scores": scores(errors=1)}}}
-    assert failed(cs.final_checks([posts_error], V1)) == {"schema errors"}
-    assert failed(cs.final_checks([final_run(non_deal_filled=cs.FINAL_MAX_NON_DEAL_FILLED)], V1)) == set()
+    assert failed(cs.final_checks([posts_error], V1, stored)) == {"schema errors"}
+    assert failed(cs.final_checks([final_run(non_deal_filled=cs.FINAL_MAX_NON_DEAL_FILLED)], V1, stored)) == set()
     too_many = cs.FINAL_MAX_NON_DEAL_FILLED + 1
-    assert failed(cs.final_checks([final_run(non_deal_filled=too_many)], V1)) == {"holdout non-deal hallucinations"}
+    assert failed(cs.final_checks([final_run(non_deal_filled=too_many)], V1, stored)) == {
+        "holdout non-deal hallucinations"
+    }
 
 
 def test_dev_gates_mean_accuracy_alone() -> None:

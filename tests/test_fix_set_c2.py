@@ -420,7 +420,9 @@ def test_cq31_allowed_changes_pass_every_guard_check(guard_repo: Path) -> None:
     write(root, "loop/DRAFT.md", DRAFT.replace("1. a\n", "1. b\n2. c\n"))
     write(root, "loop/LESSONS.md", "# Lessons\n- one\n")
     write(root, "loop/state.json", '{"iteration": 1}\n')
-    write(root, "results/claude_20261101T000001Z.json", "{}\n")
+    # A run written now records the commit it ran at (postreview-1/EVAL-4 checks it is on HEAD).
+    run = {"split": "dev", "git": {"commit": git(root, "rev-parse", "HEAD"), "dirty": False}}
+    write(root, "results/claude_20261101T000001Z.json", json.dumps(run) + "\n")
     write(root, "results/claude_20261101T000001Z.md", "# run\n")
     assert failed(cs.guard_checks()) == set()
 
