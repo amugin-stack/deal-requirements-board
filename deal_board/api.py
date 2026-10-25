@@ -37,7 +37,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from deal_board import brokers as broker_store
 from deal_board.brokers import Broker
-from deal_board.config import load_settings
+from deal_board.config import FORCE_CLAUDE, FORCE_REGEX, load_settings
 from deal_board.extractors import ExtractionError, Extractor
 from deal_board.followup import follow_up_question
 from deal_board.schema import DealRequirement
@@ -169,16 +169,47 @@ MatchFn = Callable[[DealRequirement, list[Broker], date], MatchResultLike]
 # --- Dependencies -------------------------------------------------------------------------------
 
 
+class ExtractorUnavailable(RuntimeError):
+    """The extractor config is unusable (DEAL_EXTRACTOR invalid, or `claude` with no API key).
+
+    A deployment problem, not something the caller did, so it maps to a fixed 503.
+    """
+
+
 def get_extractor() -> Extractor:
     """Claude when `ANTHROPIC_API_KEY` is set, unless `DEAL_EXTRACTOR=regex`; otherwise regex.
+
+    `DEAL_EXTRACTOR=claude` without a key raises `ExtractorUnavailable` (a fixed 503, see the
+    handler below) instead of serving regex: the operator asked for Claude, and the regex
+    baseline routes some posts to the wrong state. An invalid DEAL_EXTRACTOR (config raises
+    ValueError) gets the same 503 rather than a bare 500. Auto mode falling back to regex logs
+    one WARNING per process, so the downgrade is visible without flooding the logs.
 
     Settings are read on every call so the choice follows the current config, but the
     Claude extractor itself is cached: it owns an HTTP client with a connection pool, and
     building one per request would throw that pool away each time.
     """
-    if load_settings().use_claude:
+    try:
+        settings = load_settings()
+    except ValueError as e:
+        logger.error("invalid extractor configuration: %s", type(e).__name__)
+        raise ExtractorUnavailable from e
+    if settings.use_claude:
         return _claude_extractor()
+    if settings.deal_extractor == FORCE_CLAUDE:
+        logger.error("DEAL_EXTRACTOR=claude but no ANTHROPIC_API_KEY is set")
+        raise ExtractorUnavailable
+    if settings.deal_extractor != FORCE_REGEX:
+        _warn_auto_fell_back_to_regex()
     return _regex_extractor()
+
+
+@lru_cache(maxsize=1)
+def _warn_auto_fell_back_to_regex() -> None:
+    # lru_cache makes this run once per process (cache_clear() re-arms it in tests).
+    logger.warning(
+        "no ANTHROPIC_API_KEY set: serving the regex baseline extractor (set DEAL_EXTRACTOR=regex to silence)"
+    )
 
 
 @lru_cache(maxsize=1)
@@ -387,6 +418,12 @@ def _matcher_unavailable(_: Request, __: MatcherUnavailable) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": "matcher unavailable"})
 
 
+@app.exception_handler(ExtractorUnavailable)
+def _extractor_unavailable(_: Request, __: ExtractorUnavailable) -> JSONResponse:
+    # Raised while resolving a dependency, like MatcherUnavailable, so it needs a handler too.
+    return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": "extractor not configured"})
+
+
 @app.exception_handler(RequestValidationError)
 def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     """FastAPI's default 422, minus each error's `input`.
@@ -422,7 +459,7 @@ def _post_id(text: str) -> str:
     responses={
         413: {"model": ErrorDetail, "description": "Request body over the size limit"},
         500: {"model": ErrorDetail, "description": "The extractor or the matching step failed unexpectedly"},
-        503: {"model": ErrorDetail, "description": "Extraction service or matcher unavailable"},
+        503: {"model": ErrorDetail, "description": "Extraction service or matcher unavailable or not configured"},
     },
 )
 def match_post(
