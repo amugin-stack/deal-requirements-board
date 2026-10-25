@@ -60,8 +60,19 @@ def _path_like_tokens(markdown: str) -> list[str]:
 
 
 def _is_repo_path(token: str) -> bool:
-    """Exclude things that are paths but not repo files: the local venv and URLs."""
-    return not (token.startswith((".venv/", "http://", "https://")) or token.startswith("<"))
+    """Exclude things that are paths but not repo files: the local venv, URLs and HTTP routes."""
+    return not token.startswith((".venv/", "http://", "https://", "<", "/"))
+
+
+def _exists_in_repo(token: str) -> bool:
+    """A path exists relative to the root; a bare file name (prose shorthand) exists somewhere in the repo.
+
+    Bare names that are retired flat paths (e.g. `scoring.py`) are still caught by the separate
+    pre-packaging assertion, so accepting shorthand here doesn't let an old path through.
+    """
+    if "/" in token:
+        return (ROOT / token).exists()
+    return any(p.name == token for p in ROOT.rglob(token) if ".venv" not in p.parts)
 
 
 # ---------------------------------------------------------------- compliance-security/S-6
@@ -217,7 +228,7 @@ def test_p10_4_readme_architecture_table_uses_packaged_paths() -> None:
     table = _architecture_table((ROOT / "README.md").read_text(encoding="utf-8"))
     tokens = [t for t in _path_like_tokens(table) if _is_repo_path(t)]
     assert tokens, "architecture table names no files"
-    assert not [t for t in tokens if not (ROOT / t).exists()], tokens
+    assert not [t for t in tokens if not _exists_in_repo(t)], tokens
     assert not sorted(set(tokens) & _pre_packaging_paths())
 
 
@@ -228,5 +239,5 @@ def test_p10_5_extractor_improver_agent_uses_packaged_paths() -> None:
     """p10/P10-5: every repo path in .claude/agents/extractor-improver.md exists; no pre-packaging path appears."""
     tokens = [t for t in _path_like_tokens(AGENT_FILE.read_text(encoding="utf-8")) if _is_repo_path(t)]
     assert tokens, "agent file names no files"
-    assert not [t for t in tokens if not (ROOT / t).exists()], tokens
+    assert not [t for t in tokens if not _exists_in_repo(t)], tokens
     assert not sorted(set(tokens) & _pre_packaging_paths())
