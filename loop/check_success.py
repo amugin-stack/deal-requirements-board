@@ -127,6 +127,25 @@ def repeats_check(runs: list[JSONObject]) -> Check:
     )
 
 
+def is_fresh(run: JSONObject) -> bool:
+    """True if no record was replayed from the eval cache.
+
+    A replayed record is an earlier run's output, so three runs with cache hits can be one
+    sample counted three times. A record without a `call` block (or with `cached` anything but
+    False) can't show it was fresh and counts as replayed.
+    """
+    usage = run.get("usage")
+    if isinstance(usage, dict) and usage.get("cache_hits", 0) != 0:
+        return False
+    records = [rec for ds in run["datasets"].values() for rec in ds.get("records", {}).values()]
+    return all(isinstance(rec.get("call"), dict) and rec["call"].get("cached") is False for rec in records)
+
+
+def fresh_check(runs: list[JSONObject]) -> Check:
+    stale = [r for r in runs if not is_fresh(r)]
+    return Check("fresh runs", not stale, f"runs with cached records: {run_files(stale)}")
+
+
 def dev_checks(runs: list[JSONObject]) -> list[Check]:
     """runs: every clean dev-split result for the current request identity, newest first."""
     if len(runs) < REPEATS:
@@ -137,6 +156,7 @@ def dev_checks(runs: list[JSONObject]) -> list[Check]:
     worst_field = min(field_means, key=field_means.__getitem__)
     return [
         repeats_check(runs),
+        fresh_check(runs[:REPEATS]),
         Check(
             "schema errors", all(n_errors(s) == 0 for s in scores), f"errors per run: {[n_errors(s) for s in scores]}"
         ),
