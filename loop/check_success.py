@@ -15,10 +15,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+from deal_board.paths import REPO_ROOT
+from deal_board.schema import KEY_FIELDS
 
-from schema import KEY_FIELDS  # noqa: E402
+ROOT = REPO_ROOT
 
 LOOP_START_TAG = "loop-start"
 BASELINE_TAG = "baseline-v1"
@@ -140,7 +140,7 @@ def dev_runs_for(version: str) -> list[dict]:
 
 
 def current_prompt_version() -> str:
-    from extractors.claude import PROMPT_VERSION
+    from deal_board.extractors.claude import PROMPT_VERSION
     return PROMPT_VERSION
 
 

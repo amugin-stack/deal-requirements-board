@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from extractors.regex_baseline import RegexExtractor
-from scoring import load_posts
+from deal_board.extractors.regex_baseline import RegexExtractor
+from deal_board.scoring import load_posts
 
 ROOT = Path(__file__).parent.parent
 GOLDEN: dict[str, Any] = json.loads((Path(__file__).parent / "golden" / "regex_baseline.json").read_text())

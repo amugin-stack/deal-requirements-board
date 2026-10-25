@@ -1,14 +1,14 @@
 """Run extractors on the labeled sets and score them. The independent holdout is the headline number.
 
-  python scripts/eval.py                      # baseline, plus Claude if ANTHROPIC_API_KEY is set
-  python scripts/eval.py --extractor regex
-  python scripts/eval.py --rescore results/claude_20261024T120000Z.json   # no API calls
-  python scripts/eval.py --compare results/A.json results/B.json         # paired test, writes nothing
-  python scripts/eval.py --extractor claude --repeats 3                  # run-to-run variance
-  python scripts/eval.py --extractor claude --no-cache                   # bypass the raw-output cache
+  python -m deal_board.cli.eval                      # baseline, plus Claude if ANTHROPIC_API_KEY is set
+  python -m deal_board.cli.eval --extractor regex
+  python -m deal_board.cli.eval --rescore results/claude_20261024T120000Z.json   # no API calls
+  python -m deal_board.cli.eval --compare results/A.json results/B.json         # paired test, writes nothing
+  python -m deal_board.cli.eval --extractor claude --repeats 3                  # run-to-run variance
+  python -m deal_board.cli.eval --extractor claude --no-cache                   # bypass the raw-output cache
 
 Each run writes results/<extractor>_<UTC timestamp>.json (provenance, every raw output, every
-prediction, scores, token usage and cost) and a matching .md table. Scoring rules live in scoring.py.
+prediction, scores, token usage and cost) and a matching .md table. Scoring rules live in deal_board/scoring.py.
 """
 import argparse
 import hashlib
@@ -23,12 +23,10 @@ from datetime import datetime, timezone
 from itertools import count
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from extractors import ExtractionError, Extractor, parse_requirement  # noqa: E402
-from schema import KEY_FIELDS  # noqa: E402
-from scoring import (  # noqa: E402
+from deal_board import paths
+from deal_board.extractors import ExtractionError, Extractor, parse_requirement
+from deal_board.schema import KEY_FIELDS
+from deal_board.scoring import (
     DEAL_VALUE_TOLERANCE,
     FIELD_OUTCOMES,
     SCORED_FIELDS,
@@ -38,7 +36,8 @@ from scoring import (  # noqa: E402
     score,
 )
 
-RESULTS_DIR = ROOT / "results"
+ROOT = paths.REPO_ROOT
+RESULTS_DIR = paths.RESULTS_DIR
 CACHE_DIR = ROOT / ".cache" / "extractor"
 DATASETS = {  # headline first
     "holdout": "data/holdout.jsonl",
@@ -474,9 +473,9 @@ def load_run(path: Path) -> dict:
 
 def make_extractor(name: str) -> tuple[Extractor, dict]:
     if name == "regex":
-        from extractors.regex_baseline import RegexExtractor
+        from deal_board.extractors.regex_baseline import RegexExtractor
         return RegexExtractor(), {}
-    from extractors.claude import PROMPT_VERSION, ClaudeExtractor
+    from deal_board.extractors.claude import PROMPT_VERSION, ClaudeExtractor
     ex = ClaudeExtractor()
     return ex, {"model": ex.model, "prompt_version": PROMPT_VERSION}
 
@@ -551,10 +550,17 @@ def main(argv: list[str] | None = None) -> None:
             print(format_repeat_summary(summarize_repeats(results)))
 
 
-if __name__ == "__main__":
-    # Loaded only when run as a script, so tests calling main() never pick up a real key.
-    # A key already set in the shell wins over the file (override=False).
+def run() -> None:
+    """Entry point for `deal-eval` and `python -m deal_board.cli.eval`.
+
+    .env is loaded only here, so tests calling main() never pick up a real key.
+    A key already set in the shell wins over the file (override=False).
+    """
     from dotenv import load_dotenv
 
     load_dotenv(ROOT / ".env", override=False)
     main()
+
+
+if __name__ == "__main__":
+    run()

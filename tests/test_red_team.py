@@ -30,13 +30,13 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-import api
-import matcher
-from brokers import Broker, load_brokers
-from extractors import parse_requirement
-from extractors.regex_baseline import RegexExtractor
-from matcher import is_licensed  # bound now, so monkeypatching matcher.is_licensed can't alter it
-from schema import DealRequirement, State
+from deal_board import api
+from deal_board import matcher
+from deal_board.brokers import Broker, load_brokers
+from deal_board.extractors import parse_requirement
+from deal_board.extractors.regex_baseline import RegexExtractor
+from deal_board.matcher import is_licensed  # bound now, so monkeypatching matcher.is_licensed can't alter it
+from deal_board.schema import DealRequirement, State
 
 # --- fixed inputs -------------------------------------------------------------------------------
 

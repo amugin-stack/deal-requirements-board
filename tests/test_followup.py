@@ -1,8 +1,8 @@
 """Tests for the deterministic follow-up question template."""
 import pytest
 
-from followup import PRIORITY, _QUESTIONS, follow_up_question
-from schema import KEY_FIELDS, DealRequirement, PropertyType, Timeline, TransactionType
+from deal_board.followup import PRIORITY, _QUESTIONS, follow_up_question
+from deal_board.schema import KEY_FIELDS, DealRequirement, PropertyType, Timeline, TransactionType
 
 COMPLETE = dict(
     is_deal_request=True,

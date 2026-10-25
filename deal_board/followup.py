@@ -7,7 +7,7 @@ question gets answered; a list of six gets ignored.
 """
 from collections.abc import Callable
 
-from schema import KEY_FIELDS, DealRequirement, PropertyType
+from deal_board.schema import KEY_FIELDS, DealRequirement, PropertyType
 
 # Most important first. State leads because the license gate depends on it:
 # without a state we cannot match any broker at all, whereas every other gap

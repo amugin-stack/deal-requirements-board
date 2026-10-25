@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deal-board"
+version = "0.10.0"
+description = "Broker deal posts to structured requirements to licensed, ranked broker matches."
+readme = "README.md"
+requires-python = ">=3.14"
+# Exact pins, moved here from requirements.txt (now deleted) so there is one source of truth.
+# This is an application, not a library: exact pins keep eval runs reproducible across machines.
+dependencies = [
+    "anthropic==1.15.0",
+    "fastapi==0.162.0",
+    "pydantic==2.14.1",
+    "python-dotenv==1.2.4",
+    "uvicorn==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx==0.28.1",  # FastAPI's TestClient
+    "mypy==2.4.0",
+    "pytest==9.1.1",
+    "ruff==0.17.2",
+]
+
+[project.scripts]
+deal-eval = "deal_board.cli.eval:run"
+deal-build-brokers = "deal_board.cli.build_brokers:run"
+
+[tool.setuptools.packages.find]
+include = ["deal_board*"]
+namespaces = false  # deal_board/extractors/frozen/ is source kept as data, never a package
+
+[tool.setuptools.package-data]
+"deal_board.extractors" = ["frozen/*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# importlib mode puts nothing on sys.path, so tests pass only if deal_board is installed.
+addopts = ["--import-mode=importlib"]

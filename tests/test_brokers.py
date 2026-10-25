@@ -2,7 +2,7 @@
 import re
 from datetime import date
 
-from brokers import load_brokers
+from deal_board.brokers import load_brokers
 
 BROKERS = load_brokers()
 REAL = [b for b in BROKERS if not b.is_fictional]

@@ -1,9 +1,9 @@
 """eval.py end to end on 2 posts, with a fake Claude client so nothing touches the network."""
 from types import SimpleNamespace as NS
 
-from extractors.claude import ClaudeExtractor
-from scoring import score
-from scripts import eval as ev
+from deal_board.extractors.claude import ClaudeExtractor
+from deal_board.scoring import score
+from deal_board.cli import eval as ev
 
 DEAL = {"id": "t1", "text": "Need a buyer agent in Austin, TX ...", "label": {
     "is_deal_request": True, "state": "TX", "city": "St. Louis", "property_type": "single_family",
@@ -60,7 +60,7 @@ def test_invalid_output_is_an_error_and_rescore_needs_no_client():
 
 
 def test_dev_split_never_scores_holdout():
-    from extractors.regex_baseline import RegexExtractor
+    from deal_board.extractors.regex_baseline import RegexExtractor
     result = ev.evaluate(RegexExtractor(), "dev")
     assert list(result) == ["posts_dev"]
     assert all(pid.startswith("s") for pid in result["posts_dev"]["records"])

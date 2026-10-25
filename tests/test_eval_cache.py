@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from extractors.claude import PROMPT_VERSION, ClaudeExtractor, Usage
-from schema import DealRequirement, KEY_FIELDS
-from scripts import eval as ev
+from deal_board.extractors.claude import PROMPT_VERSION, ClaudeExtractor, Usage
+from deal_board.schema import DealRequirement, KEY_FIELDS
+from deal_board.cli import eval as ev
 
 ROOT = Path(__file__).parent.parent
 MODEL = "claude-haiku-5-5"
@@ -244,7 +244,7 @@ def test_call_dict_without_usage_has_none_tokens() -> None:
 
 def test_regex_records_have_call_with_no_tokens() -> None:
     """The regex baseline gets a call dict with None tokens."""
-    from extractors.regex_baseline import RegexExtractor
+    from deal_board.extractors.regex_baseline import RegexExtractor
     records = ev.run_posts(RegexExtractor(), POSTS)
     assert all(r["call"]["input_tokens"] is None and r["call"]["cached"] is False for r in records.values())
 

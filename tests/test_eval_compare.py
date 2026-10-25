@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from schema import KEY_FIELDS
-from scoring import SCORED_FIELDS, exact_mcnemar_p, load_posts
-from scripts import eval as ev
+from deal_board.schema import KEY_FIELDS
+from deal_board.scoring import SCORED_FIELDS, exact_mcnemar_p, load_posts
+from deal_board.cli import eval as ev
 
 ROOT = Path(__file__).parent.parent
 RESULTS = ROOT / "results"

@@ -10,9 +10,9 @@ from datetime import date, timedelta
 
 import pytest
 
-from brokers import TX_CITY_TO_COUNTY, Broker, load_brokers
-from matcher import Match, MatchResult, match
-from schema import DealRequirement, PropertyType, TransactionType
+from deal_board.brokers import TX_CITY_TO_COUNTY, Broker, load_brokers
+from deal_board.matcher import Match, MatchResult, match
+from deal_board.schema import DealRequirement, PropertyType, TransactionType
 
 AS_OF = date(2026, 10, 20)
 FAR_FUTURE = date(2030, 1, 1)

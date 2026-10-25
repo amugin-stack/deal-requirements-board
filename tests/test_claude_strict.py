@@ -1,6 +1,6 @@
 """The Claude tool schema must satisfy strict-mode requirements."""
-from extractors.claude import TOOL
-from schema import ExtractedFields
+from deal_board.extractors.claude import TOOL
+from deal_board.schema import ExtractedFields
 
 
 def test_tool_is_strict():

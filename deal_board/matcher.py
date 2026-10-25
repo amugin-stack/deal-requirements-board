@@ -8,8 +8,8 @@ from datetime import date
 
 from pydantic import BaseModel
 
-from brokers import TX_CITY_TO_COUNTY, Broker
-from schema import DealRequirement
+from deal_board.brokers import TX_CITY_TO_COUNTY, Broker
+from deal_board.schema import DealRequirement
 
 
 class Match(BaseModel):

@@ -1,7 +1,7 @@
 """One interface for every extractor, so eval.py and the API can swap them freely."""
 from typing import Protocol
 
-from schema import DealRequirement
+from deal_board.schema import DealRequirement
 
 
 class ExtractionError(Exception):

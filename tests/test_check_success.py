@@ -1,6 +1,28 @@
 """The loop's success test must reject what it should reject. Pure checks only; no git, no API."""
-from loop import check_success as cs
-from schema import KEY_FIELDS
+import importlib.util
+import sys
+from pathlib import Path
+
+from deal_board.schema import KEY_FIELDS
+
+CHECK_SUCCESS = Path(__file__).resolve().parent.parent / "loop" / "check_success.py"
+
+
+def _load_check_success():
+    """loop/ is a historical script directory, not a package, so load the script by its path.
+
+    Registered in sys.modules before running, as the importlib recipe does, because its
+    dataclass resolves annotations through its own module entry.
+    """
+    spec = importlib.util.spec_from_file_location("check_success", CHECK_SUCCESS)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+cs = _load_check_success()
 
 
 def scores(acc=1.0, errors=0, is_deal=1.0, non_deal_filled=0):

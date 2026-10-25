@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from schema import ExtractedFields
+from deal_board.schema import ExtractedFields
 
 HOLDOUT_PATH = Path(__file__).resolve().parent.parent / "data" / "holdout_v3.jsonl"
 RECORD_KEYS = {"id", "source", "split", "tags", "text", "label", "label_note", "adjudication"}

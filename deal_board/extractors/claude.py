@@ -12,8 +12,8 @@ from dataclasses import dataclass
 
 import anthropic
 
-from extractors import ExtractionError, parse_requirement
-from schema import DealRequirement, ExtractedFields
+from deal_board.extractors import ExtractionError, parse_requirement
+from deal_board.schema import DealRequirement, ExtractedFields
 
 # A cheap model. Note: Haiku 5.5 accepts a forced tool_choice, but Opus 5.5 and Sonnet 5.5
 # reject it with a 400. Switching to those would need tool_choice "auto" plus a prompt instruction.

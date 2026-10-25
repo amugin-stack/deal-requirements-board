@@ -15,10 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-import api
-from brokers import Broker, load_brokers
-from extractors import ExtractionError
-from schema import DealRequirement
+from deal_board import api
+from deal_board.brokers import Broker, load_brokers
+from deal_board.extractors import ExtractionError
+from deal_board.schema import DealRequirement
 
 AS_OF = date(2026, 10, 20)
 # Distinctive enough that a substring hit in logs or a response can only be a leak.
@@ -466,7 +466,7 @@ def test_brokers_are_loaded_once(monkeypatch):
 # --- integration with the real matcher ---------------------------------------
 
 def test_real_matcher_only_returns_brokers_licensed_in_the_deal_state(client):
-    pytest.importorskip("matcher")
+    pytest.importorskip("deal_board.matcher")
     # Real get_matcher and get_brokers; only the extractor and the clock are pinned.
     api.app.dependency_overrides[api.get_extractor] = lambda: FakeExtractor(FULL_TX_DEAL)
     api.app.dependency_overrides[api.get_as_of] = lambda: AS_OF

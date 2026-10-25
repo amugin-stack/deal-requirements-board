@@ -1,6 +1,6 @@
 """One-time build of data/brokers.csv from the raw TREC download plus data/fictional_brokers.csv.
 
-Run: python scripts/build_brokers.py data/raw/<TREC file>.csv
+Run: python -m deal_board.cli.build_brokers data/raw/<TREC file>.csv
 
 The raw file stays in data/raw/ (gitignored). The output keeps only license fields and county.
 Names are replaced with "TX Licensee 001" and so on. License numbers are kept, and they are
@@ -12,11 +12,13 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+from deal_board.paths import REPO_ROOT
+
 SEED = 20261020
 AS_OF = date(2026, 10, 20)  # download date; used only to pick the strata, not by the matcher
 N_VALID, N_INVALID = 150, 50
 PEOPLE = {"Sales Agent", "Broker Individual"}  # companies aren't people to match with
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = REPO_ROOT
 FIELDS = [
     "broker_id", "name", "source", "license_state", "license_number", "license_type",
     "license_status", "license_expiration", "county", "markets", "property_types",
@@ -86,5 +88,10 @@ def main(raw_path: str) -> None:
     print(f"wrote {len(real)} TREC rows ({n_ok} valid as of {AS_OF}) + {len(fictional)} fictional")
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Console-script entry point (`deal-build-brokers <raw TREC csv>`)."""
     main(sys.argv[1])
+
+
+if __name__ == "__main__":
+    run()

@@ -8,9 +8,10 @@ from pathlib import Path
 
 from pydantic import BaseModel, field_validator
 
-from schema import PropertyType, State, TransactionType
+from deal_board.paths import DATA_DIR
+from deal_board.schema import PropertyType, State, TransactionType
 
-BROKERS_CSV = Path(__file__).parent / "data/brokers.csv"
+BROKERS_CSV = DATA_DIR / "brokers.csv"
 
 # Deal posts name cities; TREC records counties. Each city maps to its main county only.
 # Austin, Houston, Dallas, and San Antonio spill into neighboring counties; we ignore that.

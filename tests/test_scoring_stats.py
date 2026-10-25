@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from extractors.claude import ClaudeExtractor
-from schema import KEY_FIELDS
-from scoring import (
+from deal_board.extractors.claude import ClaudeExtractor
+from deal_board.schema import KEY_FIELDS
+from deal_board.scoring import (
     SCORED_FIELDS,
     exact_mcnemar_p,
     load_posts,
@@ -19,7 +19,7 @@ from scoring import (
     score,
     wilson_interval,
 )
-from scripts import eval as ev
+from deal_board.cli import eval as ev
 
 ROOT = Path(__file__).parent.parent
 NULL_FIELDS = dict.fromkeys(KEY_FIELDS)

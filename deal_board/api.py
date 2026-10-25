@@ -28,11 +28,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-import brokers as broker_store
-from brokers import Broker
-from extractors import ExtractionError, Extractor
-from followup import follow_up_question
-from schema import DealRequirement
+from deal_board import brokers as broker_store
+from deal_board.brokers import Broker
+from deal_board.extractors import ExtractionError, Extractor
+from deal_board.followup import follow_up_question
+from deal_board.schema import DealRequirement
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ def get_extractor() -> Extractor:
 @lru_cache(maxsize=1)
 def _claude_extractor() -> Extractor:
     # Imported here so the regex-only path never constructs an Anthropic client.
-    from extractors.claude import ClaudeExtractor
+    from deal_board.extractors.claude import ClaudeExtractor
 
     client = anthropic.Anthropic(timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=CLAUDE_MAX_RETRIES)
     return ClaudeExtractor(client=client)
@@ -151,7 +151,7 @@ def _claude_extractor() -> Extractor:
 
 @lru_cache(maxsize=1)
 def _regex_extractor() -> Extractor:
-    from extractors.regex_baseline import RegexExtractor
+    from deal_board.extractors.regex_baseline import RegexExtractor
 
     return RegexExtractor()
 
@@ -186,7 +186,7 @@ def get_matcher() -> MatchFn:
     Only ImportError is mapped; any other error while importing is a bug and stays a 500.
     """
     try:
-        from matcher import match
+        from deal_board.matcher import match
     except ImportError as e:
         logger.error("matcher import failed: %s", type(e).__name__)
         raise MatcherUnavailable from e

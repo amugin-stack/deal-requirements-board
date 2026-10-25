@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from extractors.claude import PROMPT_VERSION, ClaudeExtractor
-from scoring import wilson_interval
-from scripts import eval as ev
+from deal_board.extractors.claude import PROMPT_VERSION, ClaudeExtractor
+from deal_board.scoring import wilson_interval
+from deal_board.cli import eval as ev
 
 MODEL = "claude-haiku-5-5"
 OUTPUT = {"is_deal_request": True, "state": "TX", "city": "Austin", "property_type": "single_family",
@@ -67,7 +67,7 @@ def test_cli_fingerprints_the_extractor_source(monkeypatch: pytest.MonkeyPatch, 
     """F2: the CLI stores the sha256 of the extractor's source file in every cache entry."""
     cache_dir = tmp_path / "cache"
     run_claude(monkeypatch, "--results-dir", str(tmp_path / "r"), "--cache-dir", str(cache_dir))
-    expected = ev.file_sha256(Path(ev.ROOT / "extractors" / "claude.py"))
+    expected = ev.file_sha256(Path(ev.ROOT / "deal_board" / "extractors" / "claude.py"))
     entries = [json.loads(p.read_text()) for p in cache_dir.glob("*.json")]
     assert entries and all(e["request_sha256"] == expected for e in entries)
 

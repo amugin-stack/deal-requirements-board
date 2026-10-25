@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from brokers import BROKERS_CSV, Broker, load_brokers
-from matcher import is_licensed, match
-from schema import DealRequirement
+from deal_board.brokers import BROKERS_CSV, Broker, load_brokers
+from deal_board.matcher import is_licensed, match
+from deal_board.schema import DealRequirement
 
 AS_OF = date(2026, 10, 20)
 DATA = Path(__file__).parent.parent / "data"

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from schema import ExtractedFields, KEY_FIELDS
+from deal_board.schema import ExtractedFields, KEY_FIELDS
 
 DATA = Path(__file__).parent.parent / "data"
 SETS = {

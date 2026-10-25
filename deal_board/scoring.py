@@ -22,7 +22,7 @@ import json
 import math
 from pathlib import Path
 
-from schema import KEY_FIELDS
+from deal_board.schema import KEY_FIELDS
 
 DEAL_VALUE_TOLERANCE = 0.01  # deal_value_usd matches if within 1% of the label
 FIELD_OUTCOMES = ("correct", "wrong", "missed", "correct_missing", "hallucinated", "error")
