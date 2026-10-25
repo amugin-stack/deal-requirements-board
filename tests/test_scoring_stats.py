@@ -34,7 +34,11 @@ class FakeClient:
 
     def create(self, **kwargs: object) -> NS:
         self.calls += 1
-        return NS(stop_reason="tool_use", content=[NS(type="tool_use", input=self.outputs.pop(0))])
+        return NS(
+            stop_reason="tool_use",
+            # Labels carry no notes, but the strict tool always returns every key (check_claude_raw).
+            content=[NS(type="tool_use", name="record_deal_requirement", input={"notes": None, **self.outputs.pop(0)})],
+        )
 
 
 def deal(pid: str, **label: object) -> JSONObject:

@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
@@ -178,11 +179,30 @@ class RawCache:
             raise
 
 
-def to_record(raw: JSONObject | None, error: str | None = None) -> JSONObject:
+RawCheck = Callable[[JSONObject], None]
+
+
+def raw_check(extractor_name: str | None) -> RawCheck | None:
+    """The shape check an extractor's raw outputs must pass before validation, or None.
+
+    Claude's raw is the model's tool input, so it gets claude.check_claude_raw (exact keys, strict
+    JSON types): the same gate ClaudeExtractor.extract applies, here on fresh runs and on rescores
+    of saved Claude runs alike. The regex baseline's raw is already a validated model dump.
+    """
+    if extractor_name != "claude":
+        return None
+    from deal_board.extractors.claude import check_claude_raw
+
+    return check_claude_raw
+
+
+def to_record(raw: JSONObject | None, error: str | None = None, check: RawCheck | None = None) -> JSONObject:
     """Turn one raw output into a scored record. Used for fresh runs and for re-scoring."""
     if raw is None:
         return {"raw": None, "prediction": None, "error": error}
     try:
+        if check is not None:
+            check(raw)
         return {"raw": raw, "prediction": parse_requirement(raw).model_dump(mode="json"), "error": None}
     except ExtractionError as e:
         return {"raw": raw, "prediction": None, "error": str(e)}
@@ -243,7 +263,8 @@ def run_post(extractor: Extractor, text: str, cache: RawCache | None) -> JSONObj
         entry = fresh_entry(extractor, text)
         if cache is not None:
             cache.put(text, entry)
-    return {**to_record(entry["raw"], entry["error"]), "call": call_info(entry, cached)}
+    record = to_record(entry["raw"], entry["error"], raw_check(extractor.name))
+    return {**record, "call": call_info(entry, cached)}
 
 
 def run_posts(extractor: Extractor, posts: list[JSONObject], cache: RawCache | None = None) -> dict[str, JSONObject]:
@@ -293,10 +314,10 @@ def usage_totals(datasets: JSONObject, model: str | None) -> JSONObject:
     }
 
 
-def rescore_records(records: dict[str, JSONObject]) -> dict[str, JSONObject]:
+def rescore_records(records: dict[str, JSONObject], check: RawCheck | None = None) -> dict[str, JSONObject]:
     """Rebuild records from their raw outputs, keeping each one's `call` provenance if it has one."""
     return {
-        pid: {**to_record(r["raw"], r["error"]), **({"call": r["call"]} if "call" in r else {})}
+        pid: {**to_record(r["raw"], r["error"], check), **({"call": r["call"]} if "call" in r else {})}
         for pid, r in records.items()
     }
 
@@ -306,7 +327,7 @@ def rescore(saved: JSONObject) -> JSONObject:
     out = {}
     for name, ds in saved["datasets"].items():
         posts = [p for p in load_posts(ROOT / ds["path"]) if p["id"] in ds["records"]]
-        records = rescore_records(ds["records"])
+        records = rescore_records(ds["records"], raw_check(saved.get("extractor")))
         out[name] = {"path": ds["path"], "records": records, "scores": score(posts, records)}
     return out
 
@@ -342,14 +363,15 @@ def compare_results(a: JSONObject, b: JSONObject) -> JSONObject:
     """
     a_by_path = {ds["path"]: ds["records"] for ds in a["datasets"].values()}
     b_by_path = {ds["path"]: ds["records"] for ds in b["datasets"].values()}
+    a_check, b_check = raw_check(a.get("extractor")), raw_check(b.get("extractor"))
     out = {}
     for path, a_records in a_by_path.items():
         if path not in b_by_path:
             continue
         b_records = b_by_path[path]
         posts = [p for p in load_posts(ROOT / path) if p["id"] in a_records and p["id"] in b_records]
-        a_ok = post_correctness(posts, rescore_records(a_records))
-        b_ok = post_correctness(posts, rescore_records(b_records))
+        a_ok = post_correctness(posts, rescore_records(a_records, a_check))
+        b_ok = post_correctness(posts, rescore_records(b_records, b_check))
         out[path] = {
             "n_common_posts": len(posts),
             "fields": {f: paired_comparison(a_ok[f], b_ok[f]) for f in SCORED_FIELDS},

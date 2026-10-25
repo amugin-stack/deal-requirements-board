@@ -33,6 +33,11 @@ NON_DEAL: JSONObject = {
     },
 }
 
+# Every non-flag key of the strict tool's output, null: check_claude_raw rejects a missing key.
+NULL_OUTPUT: JSONObject = dict.fromkeys(
+    ["state", "city", "property_type", "transaction_type", "deal_value_usd", "timeline", "notes"]
+)
+
 
 class FakeClient:
     """Returns one canned tool call per request, in order, and counts the calls."""
@@ -42,7 +47,10 @@ class FakeClient:
 
     def create(self, **kwargs: object) -> NS:
         self.calls += 1
-        return NS(stop_reason="tool_use", content=[NS(type="tool_use", input=self.outputs.pop(0))])
+        return NS(
+            stop_reason="tool_use",
+            content=[NS(type="tool_use", name="record_deal_requirement", input=self.outputs.pop(0))],
+        )
 
 
 def run(outputs: list[JSONObject]) -> tuple[FakeClient, dict[str, JSONObject], JSONObject]:
@@ -60,8 +68,9 @@ def test_eval_scores_fake_claude_outputs() -> None:
         "transaction_type": "buy",
         "deal_value_usd": 653000,
         "timeline": "within_30_days",
+        "notes": None,
     }
-    non_deal_out = {"is_deal_request": False, "city": "Denver"}
+    non_deal_out = {"is_deal_request": False, **NULL_OUTPUT, "city": "Denver"}
     client, records, s = run([deal_out, non_deal_out])
 
     assert client.calls == 2
@@ -77,8 +86,8 @@ def test_eval_scores_fake_claude_outputs() -> None:
 
 
 def test_invalid_output_is_an_error_and_rescore_needs_no_client() -> None:
-    bad = {"is_deal_request": True, "state": "Texas"}  # not a 2-letter code
-    _, records, s = run([bad, {"is_deal_request": False}])
+    bad = {"is_deal_request": True, **NULL_OUTPUT, "state": "Texas"}  # not a 2-letter code
+    _, records, s = run([bad, {"is_deal_request": False, **NULL_OUTPUT}])
     assert records["t1"]["error"] and records["t1"]["raw"] == bad
     assert s["fields"]["state"]["error"] == 1 and s["is_deal_request"]["accuracy"] == 0.5
 

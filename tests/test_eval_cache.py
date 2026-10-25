@@ -51,7 +51,11 @@ class FakeClient:
         extra = {"usage": NS(input_tokens=IN_TOK, output_tokens=OUT_TOK)} if self.usage else {}
         if self.refuse:
             return NS(stop_reason="refusal", content=[], **extra)
-        return NS(stop_reason="tool_use", content=[NS(type="tool_use", input=dict(self.output))], **extra)
+        return NS(
+            stop_reason="tool_use",
+            content=[NS(type="tool_use", name="record_deal_requirement", input=dict(self.output))],
+            **extra,
+        )
 
 
 def entry(text: str, model: str = MODEL, prompt_version: str = PROMPT_VERSION) -> JSONObject:
