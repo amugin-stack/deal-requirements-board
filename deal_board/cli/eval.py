@@ -85,6 +85,17 @@ def text_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
 
 
+def label_sha256(label: JSONObject) -> str:
+    """sha256 of the label as JSON with sorted keys, so key order in data/*.jsonl doesn't matter."""
+    return hashlib.sha256(json.dumps(label, sort_keys=True).encode()).hexdigest()
+
+
+def post_hashes(post: JSONObject) -> JSONObject:
+    """What a record stores about the post it was scored on, so a later rescore or compare can
+    tell an edited post from an unchanged one with the same id."""
+    return {"text_sha256": text_sha256(post["text"]), "label_sha256": label_sha256(post["label"])}
+
+
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -281,7 +292,7 @@ def run_post(extractor: Extractor, text: str, cache: RawCache | None) -> JSONObj
 
 
 def run_posts(extractor: Extractor, posts: list[JSONObject], cache: RawCache | None = None) -> dict[str, JSONObject]:
-    return {p["id"]: run_post(extractor, p["text"], cache) for p in posts}
+    return {p["id"]: {**run_post(extractor, p["text"], cache), **post_hashes(p)} for p in posts}
 
 
 def select(split: str) -> dict[str, str]:
@@ -327,21 +338,89 @@ def usage_totals(datasets: JSONObject, model: str | None) -> JSONObject:
     }
 
 
+RECORD_PROVENANCE_KEYS = ("call", "text_sha256", "label_sha256")
+
+
 def rescore_records(records: dict[str, JSONObject], check: RawCheck | None = None) -> dict[str, JSONObject]:
-    """Rebuild records from their raw outputs, keeping each one's `call` provenance if it has one."""
+    """Rebuild records from their raw outputs, keeping each one's `call` provenance and post hashes."""
     return {
-        pid: {**to_record(r["raw"], r["error"], check), **({"call": r["call"]} if "call" in r else {})}
+        pid: {**to_record(r["raw"], r["error"], check), **{k: r[k] for k in RECORD_PROVENANCE_KEYS if k in r}}
         for pid, r in records.items()
     }
 
 
-def rescore(saved: JSONObject) -> JSONObject:
-    """Re-score a saved run against the current labels, from its raw outputs. No API calls."""
+def has_hashes(records: dict[str, JSONObject]) -> bool:
+    """False for a file saved before records carried post hashes: its edits can't be detected."""
+    return all("text_sha256" in r and "label_sha256" in r for r in records.values())
+
+
+def post_drift(
+    records: dict[str, JSONObject], all_posts: list[JSONObject], split_posts: list[JSONObject]
+) -> JSONObject:
+    """How the dataset moved since a run: ids whose text or label hash changed, ids the run scored
+    that the file no longer has, and ids of the run's split that the run never saw.
+
+    Why: rescore and compare join old outputs to current labels by id, so an edited post would
+    score an old answer against a new question. A record without hashes can't be checked and is
+    never listed as changed (has_hashes reports that once per file instead).
+    """
+    current = {p["id"]: post_hashes(p) for p in all_posts}
+    changed = [
+        pid
+        for pid, r in records.items()
+        if pid in current and any(k in r and r[k] != current[pid][k] for k in ("text_sha256", "label_sha256"))
+    ]
+    return {
+        "changed": sorted(changed),
+        "missing": sorted(pid for pid in records if pid not in current),
+        "new": sorted(p["id"] for p in split_posts if p["id"] not in records),
+    }
+
+
+def drift_is_empty(drift: JSONObject) -> bool:
+    return not any(drift[k] for k in ("changed", "missing", "new"))
+
+
+def warn_legacy(name: str) -> None:
+    print(
+        f"warning: {name} has records without text/label hashes (saved before drift checks), so edited "
+        "posts can't be detected; scored by post id as before",
+        file=sys.stderr,
+    )
+
+
+def warn_drift(name: str, drifts: dict[str, JSONObject]) -> None:
+    """One stderr line for every dataset whose posts moved since the run, or nothing."""
+    moved = {ds: d for ds, d in drifts.items() if not drift_is_empty(d)}
+    if moved:
+        parts = "; ".join(
+            f"{ds}: {len(d['changed'])} changed (excluded), {len(d['missing'])} missing, {len(d['new'])} new"
+            for ds, d in moved.items()
+        )
+        print(f"warning: {name}: posts changed since the run: {parts}", file=sys.stderr)
+
+
+def rescore(saved: JSONObject, name: str = "saved run") -> JSONObject:
+    """Re-score a saved run against the current labels, from its raw outputs. No API calls.
+
+    Posts whose text or label changed since the run are excluded and listed under each dataset's
+    'drift' with the missing and new ids; name labels the stderr warnings.
+    """
     out = {}
-    for name, ds in saved["datasets"].items():
-        posts = [p for p in load_posts(ROOT / ds["path"]) if p["id"] in ds["records"]]
-        records = rescore_records(ds["records"], raw_check(saved.get("extractor")))
-        out[name] = {"path": ds["path"], "records": records, "scores": score(posts, records)}
+    split = saved.get("split", "all")
+    drifts: dict[str, JSONObject] = {}
+    if not all(has_hashes(ds["records"]) for ds in saved["datasets"].values()):
+        warn_legacy(name)
+    for ds_name, ds in saved["datasets"].items():
+        all_posts = load_posts(ROOT / ds["path"])
+        drift = post_drift(ds["records"], all_posts, load_split(ds["path"], split))
+        drifts[ds_name] = drift
+        changed = set(drift["changed"])
+        kept = {pid: r for pid, r in ds["records"].items() if pid not in changed}
+        posts = [p for p in all_posts if p["id"] in kept]
+        records = rescore_records(kept, raw_check(saved.get("extractor")))
+        out[ds_name] = {"path": ds["path"], "records": records, "scores": score(posts, records), "drift": drift}
+    warn_drift(name, drifts)
     return out
 
 
@@ -381,38 +460,64 @@ def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject
         "source_scoring": saved.get("scoring"),
         "scoring_version": SCORING_VERSION,
         "rescored_from": source_label(source),
-        "datasets": rescore(saved),
+        "datasets": rescore(saved, source_label(source)),
     }
 
 
-def compare_results(a: JSONObject, b: JSONObject) -> JSONObject:
+def compare_results(a: JSONObject, b: JSONObject, a_name: str = "A", b_name: str = "B") -> JSONObject:
     """Post-by-post paired comparison of two saved runs, per field.
 
     Both runs are re-scored from their raw outputs against the current labels, so a label fixed
     between the two runs can't masquerade as a model change. Datasets are matched by path (a
     dev-split `posts_dev` run compares with a full run's `posts`) and only posts present in both
     runs are compared, because a paired test is only valid on the same posts.
+
+    Posts whose text or label changed since either run are excluded too; each path's 'drift' is the
+    union of both runs' changed, missing and new ids. a_name/b_name label the stderr warnings.
     """
     a_by_path = {ds["path"]: ds["records"] for ds in a["datasets"].values()}
     b_by_path = {ds["path"]: ds["records"] for ds in b["datasets"].values()}
     a_check, b_check = raw_check(a.get("extractor")), raw_check(b.get("extractor"))
+    for run, name in ((a, a_name), (b, b_name)):
+        if not all(has_hashes(ds["records"]) for ds in run["datasets"].values()):
+            warn_legacy(name)
     out = {}
+    drifts: dict[str, JSONObject] = {}
     for path, a_records in a_by_path.items():
         if path not in b_by_path:
             continue
         b_records = b_by_path[path]
-        posts = [p for p in load_posts(ROOT / path) if p["id"] in a_records and p["id"] in b_records]
+        all_posts = load_posts(ROOT / path)
+        a_drift = post_drift(a_records, all_posts, load_split(path, a.get("split", "all")))
+        b_drift = post_drift(b_records, all_posts, load_split(path, b.get("split", "all")))
+        drift = {k: sorted(set(a_drift[k]) | set(b_drift[k])) for k in ("changed", "missing", "new")}
+        drifts[path] = drift
+        excluded = set(drift["changed"])
+        posts = [p for p in all_posts if p["id"] in a_records and p["id"] in b_records and p["id"] not in excluded]
         a_ok = post_correctness(posts, rescore_records(a_records, a_check))
         b_ok = post_correctness(posts, rescore_records(b_records, b_check))
         out[path] = {
             "n_common_posts": len(posts),
             "fields": {f: paired_comparison(a_ok[f], b_ok[f]) for f in SCORED_FIELDS},
+            "drift": drift,
         }
+    warn_drift(f"{a_name} vs {b_name}", drifts)
     return out
 
 
 def ids(xs: list[str]) -> str:
     return ", ".join(xs) if xs else "–"
+
+
+def drift_lines(drift: JSONObject | None) -> list[str]:
+    """A markdown note on posts that moved since the run, or nothing when none did (or no drift key)."""
+    if drift is None or drift_is_empty(drift):
+        return []
+    return [
+        f"**Posts changed since the run:** changed (excluded) {ids(drift['changed'])}; "
+        f"missing {ids(drift['missing'])}; new {ids(drift['new'])}.",
+        "",
+    ]
 
 
 def format_comparison(cmp: JSONObject, a_name: str, b_name: str) -> str:
@@ -429,6 +534,7 @@ def format_comparison(cmp: JSONObject, a_name: str, b_name: str) -> str:
         lines += [
             f"## `{path}`: {c['n_common_posts']} common posts",
             "",
+            *drift_lines(c.get("drift")),
             "| field | n | A correct | B correct | B only (B right, A wrong) | A only (A right, B wrong) "
             "| p (exact McNemar) |",
             "|---|---:|---:|---:|---|---|---:|",
@@ -544,6 +650,7 @@ def markdown(result: JSONObject) -> str:
             f"## {title}: `{ds['path']}`, {s['n_posts']} posts "
             f"({s['n_deal_posts']} deal, {s['n_non_deal_posts']} non-deal)",
             "",
+            *drift_lines(ds.get("drift")),
             "| field | accuracy | halluc. rate | " + " | ".join(o.replace("_", "-") for o in FIELD_OUTCOMES) + " |",
             "|---|---:|---:|" + "---:|" * len(FIELD_OUTCOMES),
         ]
@@ -731,7 +838,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.compare:
         a_path, b_path = args.compare
-        print(format_comparison(compare_results(load_run(a_path), load_run(b_path)), str(a_path), str(b_path)))
+        cmp = compare_results(load_run(a_path), load_run(b_path), str(a_path), str(b_path))
+        print(format_comparison(cmp, str(a_path), str(b_path)))
         return
 
     if args.rescore:
