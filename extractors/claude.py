@@ -8,6 +8,7 @@ import copy
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 
 import anthropic
 
@@ -77,6 +78,14 @@ PROMPT_VERSION = hashlib.sha256(
 ).hexdigest()[:8]
 
 
+@dataclass(frozen=True)
+class Usage:
+    """Billed tokens for one API call, so eval.py can report what a run cost."""
+
+    input_tokens: int
+    output_tokens: int
+
+
 class ClaudeExtractor:
     name = "claude"
 
@@ -84,6 +93,9 @@ class ClaudeExtractor:
         # A client can be passed in, so tests can use a fake one and run offline.
         self.client = client or anthropic.Anthropic()
         self.model = model or os.environ.get("DEAL_MODEL", DEFAULT_MODEL)
+        # Usage of the most recent extract_raw call; None before any call or when the response
+        # carries no usage (fake clients). Reset per call, so a stale value is never reported.
+        self.last_usage: Usage | None = None
 
     def extract(self, text: str) -> DealRequirement:
         return parse_requirement(self.extract_raw(text))
@@ -93,6 +105,7 @@ class ClaudeExtractor:
 
         eval.py saves this so results can be re-scored later without calling the API again.
         """
+        self.last_usage = None
         response = self.client.messages.create(
             model=self.model,
             max_tokens=1024,
@@ -101,6 +114,10 @@ class ClaudeExtractor:
             tool_choice={"type": "tool", "name": TOOL["name"]},
             messages=[{"role": "user", "content": f"<post>\n{text}\n</post>"}],
         )
+        # Recorded before the refusal/no-tool-call checks: those calls are billed too.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.last_usage = Usage(usage.input_tokens, usage.output_tokens)
         if response.stop_reason == "refusal":
             raise ExtractionError("model refused")
         call = next((b for b in response.content if b.type == "tool_use"), None)
