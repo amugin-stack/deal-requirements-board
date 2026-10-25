@@ -458,18 +458,14 @@ def current_prompt_version() -> str:
 
 
 def current_request_sha(model: str) -> str | None:
-    """deal_board.extractors.claude.request_sha(model), or None if the extractor has none.
+    """deal_board.extractors.claude.request_sha(model): what a run made now would record.
 
-    Looked up with getattr so this file typechecks and runs against an extractor that predates
-    request_sha; None then makes every run fail to match, so the gate fails closed.
+    Imported at call time, like PROMPT_VERSION, so loading this script never imports the SDK.
+    An empty value fails closed (no run can match it).
     """
-    from deal_board.extractors import claude
+    from deal_board.extractors.claude import request_sha
 
-    fn = getattr(claude, "request_sha", None)
-    if not callable(fn):
-        return None
-    sha = fn(model)
-    return sha if isinstance(sha, str) and sha else None
+    return request_sha(model) or None
 
 
 def current_identity() -> RunIdentity | None:
