@@ -60,6 +60,28 @@ class Broker(BaseModel):
         return self.source == "fictional"
 
 
+def _is_blank(row: dict[str | None, str | list[str] | None]) -> bool:
+    """A row of only commas/whitespace (e.g. a trailing line from a spreadsheet) carries no broker."""
+    return all(v is None or (isinstance(v, str) and not v.strip()) for v in row.values())
+
+
 def load_brokers(path: Path = BROKERS_CSV) -> list[Broker]:
-    with open(path, newline="") as f:
-        return [Broker.model_validate(row) for row in csv.DictReader(f)]
+    """Load every broker row; a bad row fails the whole load, naming its line and broker_id.
+
+    utf-8-sig, because a spreadsheet-saved CSV starts with a BOM that would otherwise turn
+    the first header into '\ufeffbroker_id'. Blank rows are skipped rather than failing.
+    A bad row still raises: silently dropping a broker would hide a data error.
+    """
+    brokers: list[Broker] = []
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if _is_blank(row):
+                continue
+            try:
+                brokers.append(Broker.model_validate(row))
+            except ValueError as e:  # pydantic.ValidationError subclasses ValueError
+                raise ValueError(
+                    f"{path}: bad broker row at CSV line {reader.line_num} (broker_id={row.get('broker_id')!r}): {e}"
+                ) from e
+    return brokers
