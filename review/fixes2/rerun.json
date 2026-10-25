@@ -1,0 +1,601 @@
+{
+  "tree": {
+    "deal_board": "dc63ce5fca5b0cb60101f387e2574c08c6ceda43",
+    "tests": "920651ef62dc6741e888644fc4f7822990940bc7",
+    "data": "f839299f8d4fe2067c57d5957e95f94b65929a05",
+    "pyproject.toml": "29ae66d12f011e970b73de312bacc3fb9d35776d"
+  },
+  "baseline": {
+    "failed": [],
+    "counts": {
+      "passed": 1498,
+      "skipped": 1
+    },
+    "note": "1498 passed, 1 skipped in 40.57s"
+  },
+  "mutants": {
+    "api-10": {
+      "diff_source": "rewritten",
+      "diff_sha256": "586214de76e291953150c5a4ceacbf6b908a26e1c9972b06b15eb6407b5f3b8b",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_get_as_of_follows_the_clock",
+        "tests/test_api_mutants.py::test_get_as_of_is_today",
+        "tests/test_api_mutants.py::test_get_as_of_matches_the_real_clock",
+        "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc",
+        "tests/test_api_mutants.py::test_production_as_of_excludes_license_expired_yesterday",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[honolulu-behind]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]",
+        "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
+      ],
+      "counts": {
+        "failed": 9,
+        "passed": 1489,
+        "skipped": 1
+      },
+      "note": "9 failed, 1489 passed, 1 skipped in 64.61s (0:01:04)",
+      "killed_by_count": 9
+    },
+    "api-21": {
+      "diff_source": "original",
+      "diff_sha256": "ea02b8d185357513de39d111e25c3efd41ca0b79b294308b6d1978012d8927b4",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_matcher_import_error_is_503_and_returns_no_brokers"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1497,
+        "skipped": 1
+      },
+      "note": "1 failed, 1497 passed, 1 skipped in 64.56s (0:01:04)",
+      "killed_by_count": 1
+    },
+    "api-28": {
+      "diff_source": "original",
+      "diff_sha256": "2540eba15b2057acd3d62cab2da1bf2c428b56614635fdcf1586a23cfbda9968",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_matcher_non_import_error_stays_500"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1497,
+        "skipped": 1
+      },
+      "note": "1 failed, 1497 passed, 1 skipped in 64.46s (0:01:04)",
+      "killed_by_count": 1
+    },
+    "api-44": {
+      "diff_source": "original",
+      "diff_sha256": "7e007a58c6bd9fb816f24ee598e2206192043b6b2f221493060a1c46d4b981ac",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_body_of_exactly_max_bytes_is_accepted",
+        "tests/test_api_mutants.py::test_chunked_body_of_exactly_max_bytes_is_accepted"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1496,
+        "skipped": 1
+      },
+      "note": "2 failed, 1496 passed, 1 skipped in 64.58s (0:01:04)",
+      "killed_by_count": 2
+    },
+    "gate-20": {
+      "diff_source": "rewritten",
+      "diff_sha256": "a72adef337bcf2ac644d5a6ce306e2097664cd59573352d5284fea394a09241f",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_get_as_of_follows_the_clock",
+        "tests/test_api_mutants.py::test_get_as_of_is_today",
+        "tests/test_api_mutants.py::test_get_as_of_matches_the_real_clock",
+        "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc",
+        "tests/test_api_mutants.py::test_production_as_of_excludes_license_expired_yesterday",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[honolulu-behind]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]",
+        "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
+      ],
+      "counts": {
+        "failed": 9,
+        "passed": 1489,
+        "skipped": 1
+      },
+      "note": "9 failed, 1489 passed, 1 skipped in 64.57s (0:01:04)",
+      "killed_by_count": 9
+    },
+    "gate-21": {
+      "diff_source": "rewritten",
+      "diff_sha256": "fe19d3d3c96a64d4330359679657c1618b6112f4fb313c2641ec2ff5fde5a10a",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1495,
+        "skipped": 1
+      },
+      "note": "3 failed, 1495 passed, 1 skipped in 75.33s (0:01:15)",
+      "killed_by_count": 3
+    },
+    "gate-22": {
+      "diff_source": "rewritten",
+      "diff_sha256": "a17faccac6729ebfe1a00044e16074a06fc7cd9ad1d7d22d8b860f112a55d8dc",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_get_as_of_follows_the_clock",
+        "tests/test_api_mutants.py::test_get_as_of_is_today",
+        "tests/test_api_mutants.py::test_get_as_of_matches_the_real_clock",
+        "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc",
+        "tests/test_api_mutants.py::test_production_as_of_excludes_license_expired_yesterday",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[honolulu-behind]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]",
+        "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
+      ],
+      "counts": {
+        "failed": 9,
+        "passed": 1489,
+        "skipped": 1
+      },
+      "note": "9 failed, 1489 passed, 1 skipped in 75.21s (0:01:15)",
+      "killed_by_count": 9
+    },
+    "gate-23": {
+      "diff_source": "rewritten",
+      "diff_sha256": "7d8ece6ac9217dfc5adc5baf1532dbf1dcb7033f2b88eb86997bda0c0d27534b",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api.py::test_real_matcher_only_returns_brokers_licensed_in_the_deal_state",
+        "tests/test_api_mutants.py::test_real_get_brokers_keeps_every_record_and_counts_exclusions"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1496,
+        "skipped": 1
+      },
+      "note": "2 failed, 1496 passed, 1 skipped in 75.20s (0:01:15)",
+      "killed_by_count": 2
+    },
+    "gate-25": {
+      "diff_source": "original",
+      "diff_sha256": "9c29811a07a404adbdf9136b8806134aee5e7ded3f00ba43325c0c0f3f319fca",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_brokers_mutants.py::test_leading_space_status_is_not_trimmed_on_load",
+        "tests/test_brokers_mutants.py::test_padded_status_is_kept_verbatim_and_fails_closed",
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[ trec_2026-10-20]",
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[trec_2026-10-20 ]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected[ Broker Individual]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected[Sales Agent ]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected_at_load"
+      ],
+      "counts": {
+        "failed": 7,
+        "passed": 1491,
+        "skipped": 1
+      },
+      "note": "7 failed, 1491 passed, 1 skipped in 75.18s (0:01:15)",
+      "killed_by_count": 7
+    },
+    "gate-28": {
+      "diff_source": "rewritten",
+      "diff_sha256": "10d95de4d99303beff84fe96b85c2e082413fb2cac2d55b4aa45bf1c8e72dd3a",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_brokers_mutants.py::test_leading_space_status_is_not_trimmed_on_load"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1497,
+        "skipped": 1
+      },
+      "note": "1 failed, 1497 passed, 1 skipped in 75.18s (0:01:15)",
+      "killed_by_count": 1
+    },
+    "gate-35": {
+      "diff_source": "rewritten",
+      "diff_sha256": "d4105dbf02c66e74d83f43ca602cedc51e9d1c08e6795e8206c7b7e495cccece",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_matcher_mutants.py::test_is_licensed_rejects_partial_or_empty_state[T]",
+        "tests/test_matcher_mutants.py::test_is_licensed_rejects_partial_or_empty_state[X]",
+        "tests/test_matcher_mutants.py::test_is_licensed_rejects_partial_or_empty_state[]",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[T]",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[X]",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[]"
+      ],
+      "counts": {
+        "failed": 6,
+        "passed": 1492,
+        "skipped": 1
+      },
+      "note": "6 failed, 1492 passed, 1 skipped in 69.34s (0:01:09)",
+      "killed_by_count": 6
+    },
+    "gate-41": {
+      "diff_source": "rewritten",
+      "diff_sha256": "000ad53cd37448c0253513fa0559b70e07a7bf20a3eac4f0650259fa1e43971e",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_excludes_non_person_license_types",
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_labels_trec_rows_with_trec_source",
+        "tests/test_build_brokers.py::test_build_output_has_unique_ids",
+        "tests/test_build_brokers.py::test_build_strata_counts",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_parse_date_is_month_first",
+        "tests/test_build_brokers.py::test_small_build_exact_output",
+        "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented",
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written",
+        "tests/test_fix_set_a.py::test_comp_c5_parse_date_pivot_pinned"
+      ],
+      "counts": {
+        "failed": 5,
+        "passed": 1486,
+        "skipped": 1,
+        "errors": 7
+      },
+      "note": "5 failed, 1486 passed, 1 skipped, 7 errors in 69.33s (0:01:09)",
+      "killed_by_count": 12
+    },
+    "gate-42": {
+      "diff_source": "rewritten",
+      "diff_sha256": "55a6bdf247b2913d2342fb581db41f8586e2d1b7f4d8decfd78f44bded8d477a",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_excludes_non_person_license_types",
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_labels_trec_rows_with_trec_source",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_parse_date_unreadable_is_none",
+        "tests/test_build_brokers.py::test_small_build_exact_output"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1491,
+        "skipped": 1,
+        "errors": 5
+      },
+      "note": "2 failed, 1491 passed, 1 skipped, 5 errors in 69.52s (0:01:09)",
+      "killed_by_count": 7
+    },
+    "gate-43": {
+      "diff_source": "rewritten",
+      "diff_sha256": "aafa7872c37257b22fd6996e92abe5579e44f7e58caf74bd79d86f2f274e2fa2",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_strata_counts",
+        "tests/test_build_brokers.py::test_small_build_exact_output",
+        "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented"
+      ],
+      "counts": {
+        "failed": 4,
+        "passed": 1494,
+        "skipped": 1
+      },
+      "note": "4 failed, 1494 passed, 1 skipped in 69.50s (0:01:09)",
+      "killed_by_count": 4
+    },
+    "gate-44": {
+      "diff_source": "rewritten",
+      "diff_sha256": "2ab5199022b275252bcb7a15ebb19f61ba1954c5bf1610b886cf422eff173bd7",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_strata_counts",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_small_build_exact_output"
+      ],
+      "counts": {
+        "failed": 5,
+        "passed": 1493,
+        "skipped": 1
+      },
+      "note": "5 failed, 1493 passed, 1 skipped in 69.50s (0:01:09)",
+      "killed_by_count": 5
+    },
+    "gate-45": {
+      "diff_source": "rewritten",
+      "diff_sha256": "e47e0a67c1df681c54faf6c5cc676282e72812bba4e9b0ca685fee11aa08ac9d",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_small_build_exact_output"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1495,
+        "skipped": 1
+      },
+      "note": "3 failed, 1495 passed, 1 skipped in 69.39s (0:01:09)",
+      "killed_by_count": 3
+    },
+    "gate-47": {
+      "diff_source": "rewritten",
+      "diff_sha256": "d64d1b48c3db6ed32892826f37aca68a3937c9b2a013b53dd2e3801ad7377a00",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_excludes_non_person_license_types",
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_labels_trec_rows_with_trec_source",
+        "tests/test_build_brokers.py::test_build_strata_counts",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_parse_date_is_month_first",
+        "tests/test_build_brokers.py::test_parse_date_unreadable_is_none",
+        "tests/test_build_brokers.py::test_small_build_exact_output",
+        "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented",
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written"
+      ],
+      "counts": {
+        "failed": 6,
+        "passed": 1487,
+        "skipped": 1,
+        "errors": 5
+      },
+      "note": "6 failed, 1487 passed, 1 skipped, 5 errors in 69.71s (0:01:09)",
+      "killed_by_count": 11
+    },
+    "gate-48": {
+      "diff_source": "original",
+      "diff_sha256": "ecdea93e6f98e76f27f846841a15ea5932e9242e22d9cf00324ec861c8db93a8",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_output_has_unique_ids",
+        "tests/test_build_brokers.py::test_build_strata_counts"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1495,
+        "skipped": 1
+      },
+      "note": "3 failed, 1495 passed, 1 skipped in 69.64s (0:01:09)",
+      "killed_by_count": 3
+    },
+    "gate-49": {
+      "diff_source": "rewritten",
+      "diff_sha256": "64f4dd62e8f718b0ea80eb3e10040a196cfb1d994410e6c26406940ec0b982c9",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_excludes_non_person_license_types",
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_small_build_exact_output",
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written"
+      ],
+      "counts": {
+        "failed": 6,
+        "passed": 1492,
+        "skipped": 1
+      },
+      "note": "6 failed, 1492 passed, 1 skipped in 69.62s (0:01:09)",
+      "killed_by_count": 6
+    },
+    "gate-50": {
+      "diff_source": "rewritten",
+      "diff_sha256": "9663f90c786b48d84aff8291329cb8fda29456bf85b4496eef83fb116175bd17",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_labels_trec_rows_with_trec_source",
+        "tests/test_build_brokers.py::test_build_output_has_unique_ids",
+        "tests/test_build_brokers.py::test_build_strata_counts"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1495,
+        "skipped": 1
+      },
+      "note": "3 failed, 1495 passed, 1 skipped in 69.58s (0:01:09)",
+      "killed_by_count": 3
+    },
+    "gate-53": {
+      "diff_source": "rewritten",
+      "diff_sha256": "222af41f88e2b10ce95d7707fa6f4e7cad5f0b4518d37633bc87aba62f0f4363",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_brokers_mutants.py::test_load_brokers_keeps_rows_sharing_a_broker_id"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1497,
+        "skipped": 1
+      },
+      "note": "1 failed, 1497 passed, 1 skipped in 77.08s (0:01:17)",
+      "killed_by_count": 1
+    },
+    "gate-69": {
+      "diff_source": "rewritten",
+      "diff_sha256": "d5da69f1377f078494d4033b169cb235d81e2bd3a77744fff565a4124225ba21",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_extractor_mutants.py::test_claude_null_state_is_not_guessed_from_text[Fictional client wants a retail buy, OK with any size, ME too]",
+        "tests/test_extractor_mutants.py::test_claude_null_state_is_not_guessed_from_text[Fictional client wants a retail buy, call me IN the morning]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1496,
+        "skipped": 1
+      },
+      "note": "2 failed, 1496 passed, 1 skipped in 76.72s (0:01:16)",
+      "killed_by_count": 2
+    },
+    "gate-71": {
+      "diff_source": "rewritten",
+      "diff_sha256": "b9de0168073fa5891fbbc0b6999c1f5f93e1d543cade4a6c0b1b6264fab54849",
+      "files": [
+        "deal_board/extractors/regex_baseline.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_extractor_mutants.py::test_regex_api_does_not_reuse_results_for_shared_prefix",
+        "tests/test_extractor_mutants.py::test_regex_extractor_does_not_reuse_results_for_shared_prefix[order0]",
+        "tests/test_extractor_mutants.py::test_regex_extractor_does_not_reuse_results_for_shared_prefix[order1]"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1495,
+        "skipped": 1
+      },
+      "note": "3 failed, 1495 passed, 1 skipped in 76.73s (0:01:16)",
+      "killed_by_count": 3
+    },
+    "match-28": {
+      "diff_source": "original",
+      "diff_sha256": "70aaf89bcf4822d93d3854c34838534495bef973305be66800d273a1d3d84ccd",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_matcher_mutants.py::test_transaction_reason_names_the_transaction_type[1031_exchange]",
+        "tests/test_matcher_mutants.py::test_transaction_reason_names_the_transaction_type[buy]",
+        "tests/test_matcher_mutants.py::test_transaction_reason_names_the_transaction_type[lease]",
+        "tests/test_matcher_mutants.py::test_transaction_reason_names_the_transaction_type[sell]",
+        "tests/test_matcher_mutants.py::test_transaction_reason_names_the_transaction_type_lease"
+      ],
+      "counts": {
+        "failed": 5,
+        "passed": 1493,
+        "skipped": 1
+      },
+      "note": "5 failed, 1493 passed, 1 skipped in 76.76s (0:01:16)",
+      "killed_by_count": 5
+    },
+    "match-30": {
+      "diff_source": "original",
+      "diff_sha256": "d4fafb25c6ba208ddd41fc97e00ae4402e3a0342f728b8544a8a6beaa7e94813",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_matcher_mutants.py::test_tie_break_uses_broker_id_not_name[False]",
+        "tests/test_matcher_mutants.py::test_tie_break_uses_broker_id_not_name[True]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1496,
+        "skipped": 1
+      },
+      "note": "2 failed, 1496 passed, 1 skipped in 76.70s (0:01:16)",
+      "killed_by_count": 2
+    },
+    "match-41": {
+      "diff_source": "original",
+      "diff_sha256": "ab3ce58f47755fb7f7787fc950f8b9c6bfdb0fc0be21db76007cc62077e76b16",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_brokers_mutants.py::test_fort_worth_maps_to_tarrant_county",
+        "tests/test_brokers_mutants.py::test_tx_city_to_county_table_is_exact",
+        "tests/test_fix_set_a.py::test_corr_c6_ft_abbreviation_earns_county_point"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1495,
+        "skipped": 1
+      },
+      "note": "3 failed, 1495 passed, 1 skipped in 52.90s",
+      "killed_by_count": 3
+    },
+    "match-43": {
+      "diff_source": "original",
+      "diff_sha256": "a96057240026803395b18734200921e34ef7c661073be21fc6eaa7f250dd3f53",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_brokers_mutants.py::test_tx_city_to_county_table_is_exact"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1498,
+        "skipped": 1
+      },
+      "note": "1 failed, 1498 passed, 1 skipped in 52.80s",
+      "killed_by_count": 1
+    }
+  }
+}
