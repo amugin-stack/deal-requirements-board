@@ -732,5 +732,38 @@
     "note": "Fixed as planned: Path updates only in the agent file (rule wording untouched).",
     "commit": "b3c38ed47785",
     "regression_test": "tests/test_fix_set_d.py::test_p10_5_extractor_improver_agent_uses_packaged_paths"
+  },
+  {
+    "review": "adversarial",
+    "id": "ADV-1",
+    "severity": "medium",
+    "title": "Strict Claude-output check rewrote rescores of runs from older prompts",
+    "set": "C1",
+    "disposition": "fixed",
+    "note": "Fixed: check_claude_raw now applies to fresh runs and saved runs of the current prompt only; older prompts (de789943 let null keys be omitted) re-score exactly as on main, and the rescore records raw_check strict|legacy. Verified: all 21 saved runs rescore identically to main apart from the intended EM-61 keys (review/fixes/RESCORE_DIFF.md).",
+    "regression_test": "tests/test_fix_adversarial.py::test_adv1_rescore_of_a_pre_strict_run_keeps_its_valid_outputs",
+    "commit": "a52435f4ad3f"
+  },
+  {
+    "review": "adversarial",
+    "id": "ADV-2",
+    "severity": "low",
+    "title": "Snapshot-age rule skipped misspelled or future-dated sources",
+    "set": "A",
+    "disposition": "fixed",
+    "note": "Fixed: only 'fictional' rows skip the rule; any other source must be exactly trec_YYYY-MM-DD and 0-90 days before as_of, else fail closed. The C-3 clock test's broker became 'fictional' and gained a same-day control so it isn't vacuous.",
+    "regression_test": "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed",
+    "commit": "c39348811568"
+  },
+  {
+    "review": "adversarial",
+    "id": "ADV-3",
+    "severity": "low",
+    "title": "A non-requirement from the extractor became a 200 'not a deal'",
+    "set": "B",
+    "disposition": "fixed",
+    "note": "Fixed: revalidate_requirement raises TypeError for anything that isn't ExtractedFields, so the route returns the logged fixed JSON 500 (correctness-api/A-2).",
+    "regression_test": "tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500",
+    "commit": "e643c2888012"
   }
 ]
