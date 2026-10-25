@@ -95,7 +95,637 @@ MUTANTS: list[Mutant] = [
         description="Gate always returns True: every broker in every state passes, whatever the status or expiry.",
         edits=(("    return (\n        state is not None\n", "    return True or (\n        state is not None\n"),),
     ),
-    # @@ROUND1@@
+    Mutant(
+        id="gate-01",
+        file=MATCHER,
+        function="is_licensed",
+        description="Expiry compared by year only, so a license that expired earlier in the as_of year still counts as licensed.",
+        edits=(
+            (
+                "        and broker.license_expiration >= as_of\n",
+                "        and broker.license_expiration.year >= as_of.year\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-02",
+        file=MATCHER,
+        function="is_licensed",
+        description="Uses > instead of >=, so a license expiring exactly on as_of is wrongly rejected.",
+        edits=(
+            ("        and broker.license_expiration >= as_of\n", "        and broker.license_expiration > as_of\n"),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-03",
+        file=MATCHER,
+        function="is_licensed",
+        description="Status compared case-insensitively, so 'ACTIVE' or 'active' pass the exact-'Active' gate.",
+        edits=(
+            (
+                '        and broker.license_status == "Active"\n',
+                '        and broker.license_status.lower() == "active"\n',
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-04",
+        file=MATCHER,
+        function="is_licensed",
+        description="Status checked with startswith('Active'), so variants like 'Active - Inactive Sponsor' or 'Active (restricted)' pass.",
+        edits=(
+            (
+                '        and broker.license_status == "Active"\n',
+                '        and broker.license_status.startswith("Active")\n',
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-05",
+        file=MATCHER,
+        function="is_licensed",
+        description="Status checked with substring 'Active' in status, so 'Probation - Active' and other compound statuses are licensed.",
+        edits=(('        and broker.license_status == "Active"\n', '        and "Active" in broker.license_status\n'),),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-06",
+        file=MATCHER,
+        function="is_licensed",
+        description="Missing expiration treated as licensed (fail-open), so brokers with unknown expiry pass.",
+        edits=(
+            (
+                "        and broker.license_expiration is not None\n        and broker.license_expiration >= as_of\n",
+                "        and (broker.license_expiration is None or broker.license_expiration >= as_of)\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-07",
+        file=MATCHER,
+        function="is_licensed",
+        description="State compared case-insensitively, so a lowercase/mis-cased state string matches a broker's state.",
+        edits=(
+            (
+                "        and broker.license_state == state\n",
+                "        and broker.license_state.lower() == state.lower()\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-08",
+        file=MATCHER,
+        function="is_licensed",
+        description="State compared by first letter only, so a TX broker matches deals in TN, etc.",
+        edits=(("        and broker.license_state == state\n", "        and broker.license_state[0] == state[0]\n"),),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-09",
+        file=MATCHER,
+        function="is_licensed",
+        description="Compares expiry to date.today() instead of as_of, making results clock-dependent and wrong for historical/future as_of.",
+        edits=(
+            (
+                "        and broker.license_expiration >= as_of\n",
+                "        and broker.license_expiration >= date.today()\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-10",
+        file=MATCHER,
+        function="is_licensed",
+        description="Off-by-one day: accepts a license that expired the day before as_of.",
+        edits=(
+            (
+                "from datetime import date\n\nfrom pydantic",
+                "from datetime import date, datetime, timedelta\n\nfrom pydantic",
+            ),
+            (
+                "        and broker.license_expiration >= as_of\n",
+                "        and broker.license_expiration >= as_of - timedelta(days=1)\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-11",
+        file=MATCHER,
+        function="is_licensed",
+        description="Empty or None deal state matches every broker instead of failing closed.",
+        edits=(
+            (
+                "        state is not None\n        and broker.license_state == state\n",
+                "        (not state or broker.license_state == state)\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-12",
+        file=MATCHER,
+        function="is_licensed",
+        description="Expiry compared by (year, month) only, so a license that expired earlier in the as_of month still counts.",
+        edits=(
+            (
+                "        and broker.license_expiration >= as_of\n",
+                "        and (broker.license_expiration.year, broker.license_expiration.month) >= (as_of.year, as_of.month)\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-13",
+        file=MATCHER,
+        function="is_licensed",
+        description="Timezone-style shift: as_of converted to a midnight datetime and shifted by a -6h UTC offset, landing on the previous day, so a license expired the day before passes.",
+        edits=(
+            (
+                "from datetime import date\n\nfrom pydantic",
+                "from datetime import date, datetime, timedelta\n\nfrom pydantic",
+            ),
+            (
+                "        and broker.license_expiration >= as_of\n",
+                "        and broker.license_expiration >= (datetime.combine(as_of, datetime.min.time()) - timedelta(hours=6)).date()\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-14",
+        file=MATCHER,
+        function="is_licensed",
+        description="Status conjunct dropped entirely, so Expired/Inactive/Probation brokers with a future expiration date are licensed.",
+        edits=(('        and broker.license_status == "Active"\n', ""),),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-15",
+        file=MATCHER,
+        function="is_licensed",
+        description="'or' instead of 'and' before the status check, so (state matches) alone or (Active and unexpired in any state) is enough.",
+        edits=(('        and broker.license_status == "Active"\n', '        or broker.license_status == "Active"\n'),),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-16",
+        file=MATCHER,
+        function="is_licensed",
+        description="Expiration date comparison dropped, so any Active in-state broker with a non-null but past expiration is licensed.",
+        edits=(
+            (
+                "        and broker.license_expiration is not None\n        and broker.license_expiration >= as_of\n",
+                "        and broker.license_expiration is not None\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-17",
+        file=BROKERS,
+        function="Broker._blank_to_none",
+        description="Loader normalizes strings with strip().title(), so 'ACTIVE', ' active ' etc. become 'Active' and pass the exact-status gate (also rewrites 'verbatim' status).",
+        edits=(
+            (
+                '        return None if v == "" else v\n',
+                '        return None if v == "" else (v.strip().title() if isinstance(v, str) else v)\n',
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="gate-18",
+        file=MATCHER,
+        function="is_licensed",
+        description="Expiry compared against as_of + 1 day (off-by-one the other way), so a license expiring exactly on as_of is rejected.",
+        edits=(
+            (
+                "from datetime import date\n\nfrom pydantic",
+                "from datetime import date, datetime, timedelta\n\nfrom pydantic",
+            ),
+            (
+                "        and broker.license_expiration >= as_of\n",
+                "        and broker.license_expiration >= as_of + timedelta(days=1)\n",
+            ),
+        ),
+        round=1,
+        author="gate-writer",
+    ),
+    Mutant(
+        id="match-01",
+        file=MATCHER,
+        function="match",
+        description="When limit >= len(brokers) the gate is skipped and every broker is ranked, so unlicensed brokers are returned for large limits.",
+        edits=(
+            (
+                "    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+                "    licensed = brokers if limit >= len(brokers) else [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-02",
+        file=MATCHER,
+        function="match",
+        description="excluded_for_licensing counts the licensed brokers instead of the rejected ones.",
+        edits=(
+            (
+                "        excluded_for_licensing=len(brokers) - len(licensed),\n",
+                "        excluded_for_licensing=len(licensed),\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-03",
+        file=MATCHER,
+        function="match",
+        description="Ranking sorts over all brokers instead of the licensed list, returning ungated brokers.",
+        edits=(("        (_score(req, b) for b in licensed),\n", "        (_score(req, b) for b in brokers),\n"),),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-04",
+        file=MATCHER,
+        function="match",
+        description="When fewer than limit brokers are licensed, results are padded with unlicensed brokers to fill the page.",
+        edits=(
+            (
+                "        matches=[m for m, _ in scored[: max(limit, 0)]],\n",
+                "        matches=[m for m, _ in scored[: max(limit, 0)]]\n        + [_score(req, b)[0] for b in brokers if b not in licensed][: max(limit - len(scored), 0)],\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-05",
+        file=MATCHER,
+        function="_score",
+        description="Sales Agent note is never appended, so referral-fee compliance note is dropped.",
+        edits=(
+            (
+                '    if broker.license_type == "Sales Agent":\n        reasons.append(SALES_AGENT_NOTE)\n',
+                '    if broker.license_type == "Sales agent":\n        reasons.append(SALES_AGENT_NOTE)\n',
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-06",
+        file=MATCHER,
+        function="match",
+        description="Matcher sorts the shared cached broker list in place by broker_id before gating, mutating get_brokers() state across requests.",
+        edits=(
+            (
+                "    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+                "    brokers.sort(key=lambda b: b.broker_id)\n    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-07",
+        file=MATCHER,
+        function="match",
+        description="Unlicensed brokers are removed from the caller's list in place, mutating the shared cache (and making excluded count 0).",
+        edits=(
+            (
+                "    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+                "    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n    brokers[:] = licensed\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-08",
+        file=MATCHER,
+        function="match",
+        description="excluded_for_licensing computed as len(brokers) - len(matches), so licensed brokers cut by limit are counted as excluded.",
+        edits=(
+            (
+                "        matches=[m for m, _ in scored[: max(limit, 0)]],\n        excluded_for_licensing=len(brokers) - len(licensed),\n",
+                "        matches=[m for m, _ in scored[: max(limit, 0)]],\n        excluded_for_licensing=len(brokers) - len(scored[: max(limit, 0)]),\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-09",
+        file=MATCHER,
+        function="match",
+        description="Tie-break on rules-matched is flipped, so brokers with fewer matched rules rank first among equal scores.",
+        edits=(
+            (
+                "        key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n",
+                "        key=lambda pair: (-pair[0].score, pair[1], pair[0].broker.broker_id),\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-10",
+        file=MATCHER,
+        function="match",
+        description="limit is ignored; every licensed broker is returned.",
+        edits=(
+            ("        matches=[m for m, _ in scored[: max(limit, 0)]],\n", "        matches=[m for m, _ in scored],\n"),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-11",
+        file=MATCHER,
+        function="match",
+        description="Negative limit slices scored[:limit], returning all but the last |limit| brokers instead of none.",
+        edits=(
+            (
+                "        matches=[m for m, _ in scored[: max(limit, 0)]],\n",
+                "        matches=[m for m, _ in scored[:limit]],\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-12",
+        file=MATCHER,
+        function="match",
+        description="Non-deal posts report every broker as excluded instead of 0.",
+        edits=(
+            (
+                "        return MatchResult(matches=[], excluded_for_licensing=0)\n",
+                "        return MatchResult(matches=[], excluded_for_licensing=len(brokers))\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-13",
+        file=MATCHER,
+        function="match",
+        description="Non-deal check removed, so non-deal posts with a state get matched against licensed brokers.",
+        edits=(
+            ("    if not req.is_deal_request:\n        return MatchResult(matches=[], excluded_for_licensing=0)\n", ""),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-14",
+        file=MATCHER,
+        function="match",
+        description="A deal with no state skips the gate and matches every broker.",
+        edits=(
+            (
+                "    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+                "    licensed = [b for b in brokers if req.state is None or is_licensed(b, req.state, as_of)]\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-15",
+        file=MATCHER,
+        function="match",
+        description="broker_id tie-break is descending, so equal-score/equal-rule ties order Z..A instead of A..Z.",
+        edits=(
+            (
+                "        key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n    )\n",
+                "        key=lambda pair: (-pair[0].score, -pair[1]),\n    )\n    scored = sorted(scored, key=lambda pair: pair[0].broker.broker_id, reverse=True)\n    scored = sorted(scored, key=lambda pair: (-pair[0].score, -pair[1]))\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-16",
+        file=MATCHER,
+        function="match",
+        description="excluded_for_licensing is off by one (len(brokers) - len(licensed) - 1).",
+        edits=(
+            (
+                "        excluded_for_licensing=len(brokers) - len(licensed),\n",
+                "        excluded_for_licensing=max(len(brokers) - len(licensed) - 1, 0),\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-17",
+        file=MATCHER,
+        function="match",
+        description="Ranking sorts by score ascending, so worst-fit licensed brokers come first.",
+        edits=(
+            (
+                "        key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n",
+                "        key=lambda pair: (pair[0].score, -pair[1], pair[0].broker.broker_id),\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-18",
+        file=MATCHER,
+        function="_score",
+        description="Rules-matched tie-breaker counts all rules rather than those that earned points, so it never breaks ties.",
+        edits=(("reasons=reasons), len(points)\n", "reasons=reasons), len(RULES)\n"),),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-19",
+        file=MATCHER,
+        function="_score",
+        description="Sales Agent note replaces the scoring reasons instead of being appended.",
+        edits=(("        reasons.append(SALES_AGENT_NOTE)\n", "        reasons = [SALES_AGENT_NOTE]\n"),),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="match-20",
+        file=MATCHER,
+        function="match",
+        description="Gate checks the broker's own license_state instead of the deal state, so any active in-date broker from any state passes.",
+        edits=(
+            (
+                "    licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n",
+                "    licensed = [b for b in brokers if req.state is not None and is_licensed(b, b.license_state, as_of)]\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-01",
+        file=API,
+        function="match_post",
+        description="API builds MatchResponse.model_construct with a sign-flipped excluded count, skipping the ge=0 validator inside the route (FastAPI response_model revalidation may still 500; calling match_post directly returns a negative count).",
+        edits=(
+            (
+                "    return MatchResponse(\n        # Extractor",
+                "    return MatchResponse.model_construct(\n        # Extractor",
+            ),
+            (
+                "        excluded_for_licensing=result.excluded_for_licensing,\n        follow_up",
+                "        excluded_for_licensing=-result.excluded_for_licensing,\n        follow_up",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-02",
+        file=API,
+        function="match_post",
+        description="BrokerMatch built with model_construct, skipping field validation so a Sequence/tuple reasons or wrong-typed fields from a fake matcher pass through unvalidated (observable via direct match_post call returning non-list reasons).",
+        edits=(
+            (
+                "        BrokerMatch(\n            broker_id",
+                "        BrokerMatch.model_construct(\n            broker_id",
+            ),
+            ("            reasons=list(m.reasons),\n", "            reasons=m.reasons,\n"),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-03",
+        file=API,
+        function="match_post",
+        description="API passes date.today() instead of the injected as_of, so pinned dates are ignored and expired-as-of brokers can be returned.",
+        edits=(
+            (
+                "    result = match(requirement, brokers, as_of)\n",
+                "    result = match(requirement, brokers, date.today())\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-04",
+        file=API,
+        function="match_post",
+        description="API drops reasons (returns empty list), losing the Sales Agent note and fit explanations.",
+        edits=(("            reasons=list(m.reasons),\n", "            reasons=[],\n"),),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-05",
+        file=API,
+        function="match_post",
+        description="license_number is filled from broker_id instead of the license number.",
+        edits=(
+            (
+                "            license_number=m.broker.license_number,\n",
+                "            license_number=m.broker.broker_id,\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-06",
+        file=API,
+        function="match_post",
+        description="API reports excluded_for_licensing as 0 always.",
+        edits=(
+            (
+                "        excluded_for_licensing=result.excluded_for_licensing,\n        follow_up",
+                "        excluded_for_licensing=0,\n        follow_up",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-07",
+        file=API,
+        function="match_post",
+        description="API sorts the shared cached get_brokers() list in place by name before matching, mutating state across requests.",
+        edits=(
+            (
+                "    result = match(requirement, brokers, as_of)\n",
+                "    brokers.sort(key=lambda b: b.name)\n    result = match(requirement, brokers, as_of)\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-08",
+        file=API,
+        function="match_post",
+        description="API reshapes only the first match's broker for every row (uses result.matches[0]), duplicating one broker.",
+        edits=(
+            (
+                "            broker_id=m.broker.broker_id,\n",
+                "            broker_id=result.matches[0].broker.broker_id,\n",
+            ),
+        ),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-09",
+        file=API,
+        function="match_post",
+        description="license_type taken from broker.source, so Sales Agents are not identifiable to the client.",
+        edits=(("            license_type=m.broker.license_type,\n", "            license_type=m.broker.source,\n"),),
+        round=1,
+        author="match-api-writer",
+    ),
+    Mutant(
+        id="api-10",
+        file=API,
+        function="get_as_of",
+        description="get_as_of returns a date one year in the past, so licenses expired within the last year pass the gate.",
+        edits=(("    return date.today()\n", "    return date.today().replace(year=date.today().year - 1)\n"),),
+        round=1,
+        author="match-api-writer",
+    ),
+    # @@ROUND2@@
 ]
 
 
@@ -138,7 +768,11 @@ def setup_copy(dest: Path) -> None:
 
 def _nodeid(case: ET.Element, copy: Path) -> str:
     """Turn a junit testcase's dotted classname into a pytest node id like tests/x.py::Cls::name."""
-    parts = case.get("classname", "").split(".")
+    parts = [p for p in case.get("classname", "").split(".") if p]
+    if not parts:  # a collection error has no class; pytest puts the module path in `name`
+        module = case.get("name", "<unknown>")
+        path = Path(*module.split(".")).with_suffix(".py")
+        return f"{path.as_posix() if (copy / path).is_file() else module}::<collection-error>"
     for i in range(len(parts), 0, -1):
         path = Path(*parts[:i]).with_suffix(".py")
         if (copy / path).is_file():
