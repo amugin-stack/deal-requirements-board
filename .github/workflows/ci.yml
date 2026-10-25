@@ -19,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # full history + tags: a test compares the frozen baseline with tag baseline-v1
+          # Full history + tags: a test compares the frozen baseline with tag baseline-v1. The tags
+          # are lightweight, so push them explicitly (git push origin baseline-v1 loop-start).
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
