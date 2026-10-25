@@ -75,6 +75,18 @@ class RegexExtractor:
     def __init__(self) -> None:
         self._impl = _FROZEN_CLASS()
 
+    def __reduce__(self) -> tuple[type[RegexExtractor], tuple[()]]:
+        """Pickle as "build a fresh shim", never as the wrapped frozen instance.
+
+        Root cause of the old failure: `_load_frozen` runs the frozen class under this
+        module's name, so the frozen class says it is `deal_board.extractors.regex_baseline.
+        RegexExtractor`. Pickle stores classes by that import path, and looking it up finds
+        this shim class instead, so pickling `self._impl` raised "not the same object". The
+        frozen class keeps no state (all its tables are module-level), so a fresh `_impl`
+        after unpickling extracts identically, and the frozen file stays untouched.
+        """
+        return (RegexExtractor, ())
+
     def extract(self, text: str) -> DealRequirement:
         result = self._impl.extract(text)
         if not isinstance(result, DealRequirement):
