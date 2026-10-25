@@ -24,3 +24,19 @@ marking it confirmed or rejected. No network, no key, no repo edits.
   results/*.json hold no paths/usernames/keys; RawCache names are sha256, files 0600, .cache/
   ignored; posts data has no phones/emails/URLs; no test reads the real clock (suite passes with
   get_as_of pinned to 2026-10-24, 2028-06-01, 2099-01-01).
+
+## Round 2
+
+- candidates: 9 (compliance 5: C-7..C-11; security_data 4: S-6..S-9)
+- confirmed: 7 — C-7 (downgraded medium→low), C-8, C-9 (downgraded medium→low), C-10, S-6, S-7, S-8
+- rejected: 2 — C-11 (BrokerMatch "contact and verify" docstring: license_number + source is the
+  public lookup key, so "verify" is honest; one-word nit below the bar); S-9 (username paths in
+  *sibling* review branches: out of scope, `main` has none and check (g) matches its spec;
+  passed to the orchestrator as a pre-merge note)
+- new_confirmed: 7
+- Surfaces checked and clean: four weakened gates (month-only expiry, 1-day grace,
+  status endswith "Active", unknown expiry allowed) each fail the suite; model-supplied
+  missing_fields is recomputed; first tool_use wins; follow-ups never imply a licensed match;
+  git history never held .env, data/raw/ or real names (only the `sk-ant-XXXX` test
+  placeholder); /docs and /openapi.json expose only the schema; 404/405/413 bodies fixed;
+  SDK logger pin holds after import; shared broker list never mutated; no cross-request state.
