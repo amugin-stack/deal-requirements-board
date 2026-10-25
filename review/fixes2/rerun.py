@@ -135,8 +135,14 @@ def run_all(diffs: dict[str, tuple[str, str]], work: Path) -> dict[str, Any]:
             shutil.rmtree(c / p)
             shutil.copytree(ROOT / p, c / p, ignore=HELPERS.COPY_IGNORE)
         shutil.copy2(ROOT / "pyproject.toml", c / "pyproject.toml")
+        # Copies leave out .git so nothing can touch the real repo, but one test asks git which
+        # files .gitignore covers. An empty repo of the copy's own answers that and holds nothing.
+        if not (c / ".git").exists():
+            subprocess.run(["git", "init", "-q"], cwd=c, check=True)
     base = HELPERS.run_suite(copies[0], "baseline")
     print(f"baseline (unpatched copy): {base.note}", flush=True)
+    if base.failed:  # a failure here would be counted as a kill for every mutant
+        raise SystemExit(f"unpatched copy is not green: {base.failed[:5]}")
     pool: Queue[Path] = Queue()
     for c in copies:
         pool.put(c)
