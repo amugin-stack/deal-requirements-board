@@ -487,11 +487,22 @@ def usage_line(u: JSONObject) -> str:
     )
 
 
+# Paths eval itself writes; changes there are output, not code, so they never make a run dirty.
+DIRTY_EXCLUDES = ("results", ".cache")
+
+
 def git_info() -> JSONObject:
+    """HEAD and whether the tree has uncommitted changes outside eval's own output.
+
+    Why exclude results/ and .cache/: each run writes there, so counting them made every run after
+    an uncommitted result (and repeats 2..N of one invocation) dirty with unchanged code.
+    """
+
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
 
-    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
+    excludes = [f":(exclude){d}" for d in DIRTY_EXCLUDES]
+    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", ".", *excludes))}
 
 
 def markdown(result: JSONObject) -> str:
@@ -640,7 +651,10 @@ def run_once(
     stamp: str,
     index: int,
     of: int,
+    git: JSONObject | None = None,
 ) -> JSONObject:
+    """One scored run. git is main()'s snapshot taken before the first repeat, so every repeat of an
+    invocation reports the tree it started from; None (direct callers) reads it now."""
     result = {
         "extractor": name,
         "model": None,
@@ -649,7 +663,7 @@ def run_once(
         "request_sha": run_request_sha(name, meta.get("model")),
         "split": split,
         "timestamp": stamp,
-        "git": git_info(),
+        "git": git_info() if git is None else git,
         "scoring": SCORING_NOTE,
         "scoring_version": SCORING_VERSION,
         "repeat": {"index": index, "of": of},
@@ -709,6 +723,7 @@ def main(argv: list[str] | None = None) -> None:
             "Running the regex baseline only.\n"
         )
         names = ["regex"]
+    git = git_info()  # once, before anything is written, so later repeats can't see earlier output
     for name in names:
         extractor, meta = make_extractor(name)
         # One cache instance per extractor per invocation, shared by every repeat (see RawCache.get).
@@ -726,7 +741,7 @@ def main(argv: list[str] | None = None) -> None:
         stamp = timestamp()
         results = []
         for k in range(1, args.repeats + 1):
-            result = run_once(name, extractor, meta, args.split, cache, stamp, k, args.repeats)
+            result = run_once(name, extractor, meta, args.split, cache, stamp, k, args.repeats, git)
             path = save(result, results_dir)
             print(markdown(result), f"\nsaved {path}", sep="\n")
             results.append(result)
