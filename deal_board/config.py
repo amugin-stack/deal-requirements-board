@@ -4,9 +4,14 @@ Three variables configure the package:
 
 - `ANTHROPIC_API_KEY`: enables the Claude extractor. Unset or empty means no key, so the API and
   the eval CLI fall back to the regex baseline instead of failing.
-- `DEAL_EXTRACTOR`: set to `regex` (any case, surrounding spaces ignored) to force the regex
-  baseline even when a key is present, e.g. to run the API without spending tokens. Any other
-  value means "use Claude if there is a key".
+- `DEAL_EXTRACTOR`: which extractor to use. Case-insensitive, surrounding spaces ignored; one of
+  `EXTRACTOR_CHOICES`, anything else raises ValueError (a typo must not silently pick one):
+  - unset, empty or `auto`: Claude if there is a key, otherwise the regex baseline (the API logs
+    one WARNING per process when it falls back).
+  - `claude`: Claude, and only Claude. Without a key the API answers 503 rather than quietly
+    serving the regex baseline the operator didn't ask for.
+  - `regex`: force the regex baseline even when a key is present, e.g. to run the API without
+    spending tokens.
 - `DEAL_MODEL`: the Claude model id. Unset or empty means `DEFAULT_MODEL`.
 
 Why one module: the key is a secret, so every read goes through one place that wraps it in
@@ -16,8 +21,8 @@ plaintext, and it exists to hand the key to the Anthropic client.
 
 Why read at call time: nothing here touches the environment at import time. `load_settings()`
 reads `os.environ` each time it is called, so tests see the current values and importing the
-package never depends on the environment. (The API still builds its Claude client once per
-process, so a running server keeps the key and model it started with.)
+package never depends on the environment. (The API caches its Claude client keyed on a
+fingerprint of the current key and the model, so a changed key or DEAL_MODEL builds a new one.)
 
 The Anthropic SDK reads a few `ANTHROPIC_*` variables of its own (for example
 `ANTHROPIC_BASE_URL`). This package never relies on its key lookup: clients always get
@@ -47,8 +52,11 @@ DEFAULT_MODEL: Final = "claude-haiku-5-5"
 # The checkout's `.env`. Only CLI entry points load it (see `load_dotenv_file`).
 DOTENV_PATH: Final[Path] = paths.REPO_ROOT / ".env"
 
-# The one DEAL_EXTRACTOR value with a meaning: force the regex baseline.
+# DEAL_EXTRACTOR values: force the regex baseline, or require Claude. "" and "auto" mean "Claude
+# if there is a key". Values are compared after stripping and lowercasing.
 FORCE_REGEX: Final = "regex"
+FORCE_CLAUDE: Final = "claude"
+EXTRACTOR_CHOICES: Final = frozenset({"", "auto", FORCE_CLAUDE, FORCE_REGEX})
 
 
 @dataclass(frozen=True)
@@ -67,7 +75,7 @@ class Settings:
     anthropic_api_key: SecretStr | None = field(default=None, repr=False)
     """ANTHROPIC_API_KEY; unset or empty -> None."""
     deal_extractor: str = ""
-    """DEAL_EXTRACTOR, stripped and lowercased; only "regex" means anything."""
+    """DEAL_EXTRACTOR, stripped and lowercased; one of EXTRACTOR_CHOICES."""
     deal_model: str = DEFAULT_MODEL
     """DEAL_MODEL, stripped; unset or empty -> DEFAULT_MODEL."""
 
@@ -76,6 +84,11 @@ class Settings:
         # same way. object.__setattr__ because the dataclass is frozen.
         object.__setattr__(self, "deal_extractor", self.deal_extractor.strip().lower())
         object.__setattr__(self, "deal_model", self.deal_model.strip() or DEFAULT_MODEL)
+        if self.deal_extractor not in EXTRACTOR_CHOICES:
+            # The value itself is left out of the message: it's an operator typo, but env values
+            # are the kind of thing that ends up holding a pasted secret.
+            choices = ", ".join(repr(c) for c in sorted(EXTRACTOR_CHOICES))
+            raise ValueError(f"DEAL_EXTRACTOR must be one of {choices} (case-insensitive)")
 
     @property
     def has_api_key(self) -> bool:
@@ -102,7 +115,7 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
 
     Pass a mapping to build settings from something other than the process environment (tests);
     `os.environ` is then not consulted at all. Missing variables take the defaults documented on
-    `Settings`. Never raises for odd values: an unknown DEAL_EXTRACTOR just means "not regex".
+    `Settings`. Raises ValueError for a DEAL_EXTRACTOR outside `EXTRACTOR_CHOICES`.
     """
     env: Mapping[str, str] = os.environ if environ is None else environ
     key = env.get("ANTHROPIC_API_KEY", "")

@@ -86,4 +86,5 @@ def test_r3_key_from_config_is_passed_explicitly(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-r3")
     monkeypatch.setattr(anthropic, "Anthropic", recorder)
     claude.ClaudeExtractor()
-    assert built == [{"api_key": "sk-test-r3"}]
+    # open_telemetry=False pins tracing off so env vars can't record post text (compliance-security/S-2).
+    assert built == [{"api_key": "sk-test-r3", "open_telemetry": False}]

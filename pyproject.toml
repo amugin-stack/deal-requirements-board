@@ -17,11 +17,30 @@ dependencies = [
     "python-dotenv==1.2.4",
     "starlette==1.10.0",  # imported directly by api.py (ASGI types); the version fastapi 0.162.0 resolves to
     "uvicorn==0.54.0",
+    # Transitive runtime closure, pinned too (versions as installed when these pins were set).
+    # The transport that carries the API key (httpx2 -> httpcore2 -> h11/truststore/idna/anyio)
+    # must be pinned, not left to whatever a range resolves to on the day of install; the rest
+    # of the closure is pinned for the same reproducibility reason as the direct pins above.
+    "annotated-doc==0.0.5",
+    "annotated-types==0.8.0",
+    "anyio==4.15.1",
+    "click==8.5.0",
+    "docstring-parser==0.18.0",
+    "h11==0.16.0",
+    "httpcore2==2.15.1",
+    "httpx2==2.15.1",  # anthropic's HTTP client (runtime); also Starlette's TestClient and the tests' fake errors
+    "idna==3.20",
+    "jiter==0.18.0",
+    "opentelemetry-api==1.45.1",
+    "pydantic-core==2.50.1",
+    "sniffio==1.3.1",
+    "truststore==0.10.5",
+    "typing-extensions==4.16.0",
+    "typing-inspection==0.4.4",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "httpx2==2.15.1",  # Starlette's TestClient and the tests' fake Anthropic errors (also an anthropic dependency)
     "mypy==2.4.0",
     "pytest==9.1.1",
     "ruff==0.17.2",

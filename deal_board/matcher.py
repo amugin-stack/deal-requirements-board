@@ -5,11 +5,13 @@ in the deal's state is never returned, however good the fit. Ranking only orders
 the brokers who pass the gate, and every point comes with a plain-English reason.
 """
 
+import re
 from datetime import date
 
 from pydantic import BaseModel
 
-from deal_board.brokers import TX_CITY_TO_COUNTY, Broker
+from deal_board.brokers import SALES_AGENT, TX_CITY_TO_COUNTY, Broker
+from deal_board.cities import market_key
 from deal_board.schema import DealRequirement
 
 
@@ -29,16 +31,52 @@ Point = tuple[int, str]
 
 SALES_AGENT_NOTE = "Referral fee must be paid through sponsoring broker"
 
+# The county map keyed the same way as the deal's city, so "Ft Worth" finds Tarrant.
+_TX_COUNTY_BY_KEY = {market_key(city, "TX"): county for city, county in TX_CITY_TO_COUNTY.items()}
+
+
+# A real license record's status is only as current as its download. Past this many days after the
+# snapshot, a suspension or revocation since then could be missed, so the gate stops vouching for
+# the row. 90, not 30: TREC status changes slowly, and the red-team suite pins an as_of of
+# 2026-11-30 against the 2026-10-20 snapshot. Re-download the data to restore the rows.
+MAX_SNAPSHOT_AGE_DAYS = 90
+
+_FICTIONAL = "fictional"
+_SNAPSHOT_SOURCE = re.compile(r"trec_(\d{4}-\d{2}-\d{2})")
+
+
+def _snapshot_is_fresh(broker: Broker, as_of: date) -> bool:
+    """True for a fictional row, or a 'trec_<YYYY-MM-DD>' record from 0 to MAX_SNAPSHOT_AGE_DAYS old.
+
+    Allow-list, not deny-list: any other source spelling ('TREC_...', 'trec-...', a new registry)
+    is a record whose age we can't read, so it fails closed instead of never ageing out. A
+    snapshot dated after as_of fails too: it says nothing about the license on that earlier day.
+    """
+    if broker.source == _FICTIONAL:
+        return True
+    found = _SNAPSHOT_SOURCE.fullmatch(broker.source)
+    if found is None:
+        return False
+    try:
+        snapshot = date.fromisoformat(found.group(1))
+    except ValueError:  # e.g. 2026-02-30
+        return False
+    return 0 <= (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS
+
 
 def is_licensed(broker: Broker, state: str | None, as_of: date) -> bool:
     """Fail closed: any unknown (no state, no expiration) means we can't vouch for the broker.
 
     Status must be exactly "Active" because TREC uses compound statuses such as
     "Probation - Active" that carry restrictions we don't want to route referrals into.
+    Any non-fictional record also needs a readable trec_ snapshot date at most
+    MAX_SNAPSHOT_AGE_DAYS before `as_of`, since its status is frozen at download time while
+    `as_of` moves on.
     `as_of` is passed in so results are reproducible and never depend on the clock.
     """
     return (
-        state is not None
+        _snapshot_is_fresh(broker, as_of)
+        and state is not None
         and broker.license_state == state
         and broker.license_status == "Active"
         and broker.license_expiration is not None
@@ -63,13 +101,17 @@ def _market_point(req: DealRequirement, broker: Broker) -> Point | None:
 
     The county map is Texas-only, so it is consulted only for TX deals, and a city
     missing from the map must not "match" a broker whose county is also unknown.
+    Both sides go through cities.market_key, so "Austin, TX", "Ft. Lauderdale" or a
+    non-breaking space still match, and any city the eval scores correct can earn the
+    point. A market written "City, ST" counts only when ST is the deal's state, so a NY
+    broker listing "Hoboken, NJ" gets no local-fit point on a deal routed to NY.
     """
     if req.city is None:
         return None
-    city = req.city.strip().lower()
-    if city in {m.strip().lower() for m in broker.markets}:
+    city = market_key(req.city, req.state)
+    if city in {market_key(m, req.state) for m in broker.markets}:
         return 2, f"+2 serves {req.city}"
-    county = TX_CITY_TO_COUNTY.get(city) if req.state == "TX" else None
+    county = _TX_COUNTY_BY_KEY.get(city) if req.state == "TX" else None
     if county is not None and county == broker.county:
         return 2, f"+2 based in {county} County, which covers {req.city}"
     return None
@@ -90,7 +132,7 @@ def _score(req: DealRequirement, broker: Broker) -> tuple[Match, int]:
     """Return the match and how many rules earned points (the first tie-breaker)."""
     points = [p for rule in RULES if (p := rule(req, broker)) is not None]
     reasons = [text for _, text in points]
-    if broker.license_type == "Sales Agent":
+    if broker.license_type == SALES_AGENT:
         reasons.append(SALES_AGENT_NOTE)
     return Match(broker=broker, score=sum(n for n, _ in points), reasons=reasons), len(points)
 

@@ -6,6 +6,7 @@
   python -m deal_board.cli.eval --compare results/A.json results/B.json         # paired test, writes nothing
   python -m deal_board.cli.eval --extractor claude --repeats 3                  # run-to-run variance
   python -m deal_board.cli.eval --extractor claude --no-cache                   # bypass the raw-output cache
+  python -m deal_board.cli.eval --extractor claude --resume                     # replay earlier runs' outputs
 
 Each run writes results/<extractor>_<UTC timestamp>.json (provenance, every raw output, every
 prediction, scores, token usage and cost) and a matching .md table. Scoring rules live in deal_board/scoring.py.
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
@@ -32,6 +34,7 @@ from deal_board.scoring import (
     DEAL_VALUE_TOLERANCE,
     FIELD_OUTCOMES,
     SCORED_FIELDS,
+    SCORING_VERSION,
     load_posts,
     paired_comparison,
     post_correctness,
@@ -49,7 +52,9 @@ SCORING_NOTE = (
     "is_deal_request is scored on all posts; the other rows only on posts labeled as deal requests. "
     f"deal_value_usd matches within ±{DEAL_VALUE_TOLERANCE:.0%}. city ignores case, spacing, periods and "
     "commas (no spelling tolerance). missing_fields is exact set equality. notes is free text and NOT "
-    "scored. Errors never count as correct and stay in the denominator. Brackets are 95% Wilson intervals."
+    "scored. Errors never count as correct and stay in the accuracy denominator. A field's hallucination "
+    "rate is guesses / n_null, the non-errored deal posts whose label for that field is empty; the "
+    "non-deal posts-with-any rate divides by the non-errored non-deal posts. Brackets are 95% Wilson intervals."
 )
 
 # Anthropic first-party API list prices for prompts under 100K tokens, from the Claude API reference
@@ -78,6 +83,17 @@ def text_sha256(text: str) -> str:
     """sha256 of the text's UTF-8 bytes. surrogatepass, so a lone surrogate (which json.loads can
     produce from a post) hashes instead of crashing the run; normal text hashes as plain UTF-8."""
     return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def label_sha256(label: JSONObject) -> str:
+    """sha256 of the label as JSON with sorted keys, so key order in data/*.jsonl doesn't matter."""
+    return hashlib.sha256(json.dumps(label, sort_keys=True).encode()).hexdigest()
+
+
+def post_hashes(post: JSONObject) -> JSONObject:
+    """What a record stores about the post it was scored on, so a later rescore or compare can
+    tell an edited post from an unchanged one with the same id."""
+    return {"text_sha256": text_sha256(post["text"]), "label_sha256": label_sha256(post["label"])}
 
 
 def file_sha256(path: Path) -> str:
@@ -114,13 +130,24 @@ class RawCache:
     and tool, not max_tokens, tool_choice or the <post> wrapper. The CLI passes the sha256 of the
     extractor's source file, so any edit there turns old entries into misses instead of replaying
     outputs of a request that no longer exists. None means the caller doesn't fingerprint.
+
+    resume=False makes every get() a miss while put() still writes: the CLI's default, so each
+    invocation's calls are fresh samples (three separate dev runs must not be one run replayed
+    three times). The CLI passes resume=True only for --resume, to finish an interrupted run.
     """
 
     def __init__(
-        self, directory: Path, model: str, prompt_version: str, request_fingerprint: str | None = None
+        self,
+        directory: Path,
+        model: str,
+        prompt_version: str,
+        request_fingerprint: str | None = None,
+        *,
+        resume: bool = True,
     ) -> None:
         self.directory, self.model, self.prompt_version = Path(directory), model, prompt_version
         self.request_fingerprint = request_fingerprint
+        self.resume = resume
         self._looked_up: set[str] = set()
 
     def _path(self, key: str) -> Path:
@@ -138,14 +165,15 @@ class RawCache:
         """The cached entry for text, or None (a miss).
 
         Only the first lookup of a key on this instance can hit. The CLI shares one instance
-        across all repeats, so run 1 may resume from disk while runs 2..N always call the API:
+        across all repeats, so with --resume run 1 may replay disk while runs 2..N always call the API:
         repeats stay independent samples instead of replaying run 1's outputs. A file that is
         unreadable, or whose stored identity doesn't match the request, is treated as a miss
         rather than trusted on the strength of its filename; so is one missing an entry field
         (hand-edited, or written by an older entry format), which would otherwise crash the run.
         """
         key = cache_key(self.model, self.prompt_version, text)
-        if key in self._looked_up:
+        if key in self._looked_up or not self.resume:
+            self._looked_up.add(key)
             return None
         self._looked_up.add(key)
         try:
@@ -175,11 +203,59 @@ class RawCache:
             raise
 
 
-def to_record(raw: JSONObject | None, error: str | None = None) -> JSONObject:
+RawCheck = Callable[[JSONObject], None]
+
+
+def raw_check(extractor_name: str | None, prompt_version: str | None = None) -> RawCheck | None:
+    """The shape check an extractor's raw outputs must pass before validation, or None.
+
+    Claude's raw is the model's tool input, so it gets claude.check_claude_raw (exact keys, strict
+    JSON types): the same gate ClaudeExtractor.extract applies. It holds outputs to the current
+    tool schema, so it applies to fresh runs (prompt_version None) and to saved runs of the current
+    prompt. Older prompts had a different contract (e.g. de789943 let null fields be omitted), so
+    their saved outputs are re-scored exactly as when they ran; holding them to today's schema
+    would rewrite the historical record. The regex baseline's raw is already a validated dump.
+    """
+    if extractor_name != "claude" or not is_current_prompt(prompt_version):
+        return None
+    from deal_board.extractors.claude import check_claude_raw
+
+    return check_claude_raw
+
+
+def is_current_prompt(prompt_version: str | None) -> bool:
+    """True for a fresh run (None) or a saved run made with today's prompt and tool schema."""
+    if prompt_version is None:
+        return True
+    from deal_board.extractors.claude import PROMPT_VERSION
+
+    return prompt_version == PROMPT_VERSION
+
+
+def run_raw_check(run: JSONObject) -> RawCheck | None:
+    """The shape check a saved run's raw outputs get on rescore or compare.
+
+    Strict if the run says it was checked strictly when it ran (its recorded 'raw_check'), or if it
+    is a run of the current prompt. The record can only add strictness, never remove it: a run
+    whose strict-check errors were recorded must keep them after the prompt changes, or a later
+    --compare would credit the old prompt with answers it got wrong at the time.
+    """
+    strict_at_run_time = run.get("extractor") == "claude" and run.get("raw_check") == "strict"
+    return raw_check(run.get("extractor"), None if strict_at_run_time else run.get("prompt_version", ""))
+
+
+def raw_check_name(run: JSONObject) -> str:
+    """'strict' or 'legacy': which shape check a rescore of `run` applies, recorded in its result."""
+    return "strict" if run_raw_check(run) else "legacy"
+
+
+def to_record(raw: JSONObject | None, error: str | None = None, check: RawCheck | None = None) -> JSONObject:
     """Turn one raw output into a scored record. Used for fresh runs and for re-scoring."""
     if raw is None:
         return {"raw": None, "prediction": None, "error": error}
     try:
+        if check is not None:
+            check(raw)
         return {"raw": raw, "prediction": parse_requirement(raw).model_dump(mode="json"), "error": None}
     except ExtractionError as e:
         return {"raw": raw, "prediction": None, "error": str(e)}
@@ -240,11 +316,12 @@ def run_post(extractor: Extractor, text: str, cache: RawCache | None) -> JSONObj
         entry = fresh_entry(extractor, text)
         if cache is not None:
             cache.put(text, entry)
-    return {**to_record(entry["raw"], entry["error"]), "call": call_info(entry, cached)}
+    record = to_record(entry["raw"], entry["error"], raw_check(extractor.name))
+    return {**record, "call": call_info(entry, cached)}
 
 
 def run_posts(extractor: Extractor, posts: list[JSONObject], cache: RawCache | None = None) -> dict[str, JSONObject]:
-    return {p["id"]: run_post(extractor, p["text"], cache) for p in posts}
+    return {p["id"]: {**run_post(extractor, p["text"], cache), **post_hashes(p)} for p in posts}
 
 
 def select(split: str) -> dict[str, str]:
@@ -290,62 +367,202 @@ def usage_totals(datasets: JSONObject, model: str | None) -> JSONObject:
     }
 
 
-def rescore_records(records: dict[str, JSONObject]) -> dict[str, JSONObject]:
-    """Rebuild records from their raw outputs, keeping each one's `call` provenance if it has one."""
+RECORD_PROVENANCE_KEYS = ("call", "text_sha256", "label_sha256")
+
+
+def rescore_records(records: dict[str, JSONObject], check: RawCheck | None = None) -> dict[str, JSONObject]:
+    """Rebuild records from their raw outputs, keeping each one's `call` provenance and post hashes."""
     return {
-        pid: {**to_record(r["raw"], r["error"]), **({"call": r["call"]} if "call" in r else {})}
+        pid: {**to_record(r["raw"], r["error"], check), **{k: r[k] for k in RECORD_PROVENANCE_KEYS if k in r}}
         for pid, r in records.items()
     }
 
 
-def rescore(saved: JSONObject) -> JSONObject:
-    """Re-score a saved run against the current labels, from its raw outputs. No API calls."""
+def has_hashes(records: dict[str, JSONObject]) -> bool:
+    """False for a file saved before records carried post hashes: its edits can't be detected."""
+    return all("text_sha256" in r and "label_sha256" in r for r in records.values())
+
+
+DRIFT_KEYS = ("changed", "relabeled", "missing", "new")
+
+
+def _hash_differs(record: JSONObject, current: JSONObject, key: str) -> bool:
+    return key in record and record[key] != current[key]
+
+
+def post_drift(
+    records: dict[str, JSONObject], all_posts: list[JSONObject], split_posts: list[JSONObject]
+) -> JSONObject:
+    """How the dataset moved since a run: ids whose text changed ('changed'), ids whose text is the
+    same but whose label changed ('relabeled'), ids the run scored that the file no longer has, and
+    ids of the run's split that the run never saw.
+
+    Why the split: an edited text means the old output answered a different question, so those
+    posts are excluded. A relabel is what rescoring is for (score old outputs against the current,
+    corrected labels), so relabeled posts are re-scored, and listed so a reader (or the loop
+    guard) can see the labels moved. A record without hashes can't be checked and is never
+    listed (has_hashes reports that once per file instead).
+    """
+    current = {p["id"]: post_hashes(p) for p in all_posts}
+    present = {pid: r for pid, r in records.items() if pid in current}
+    changed = {pid for pid, r in present.items() if _hash_differs(r, current[pid], "text_sha256")}
+    relabeled = {
+        pid for pid, r in present.items() if pid not in changed and _hash_differs(r, current[pid], "label_sha256")
+    }
+    return {
+        "changed": sorted(changed),
+        "relabeled": sorted(relabeled),
+        "missing": sorted(pid for pid in records if pid not in current),
+        "new": sorted(p["id"] for p in split_posts if p["id"] not in records),
+    }
+
+
+def drift_is_empty(drift: JSONObject) -> bool:
+    return not any(drift.get(k) for k in DRIFT_KEYS)
+
+
+def warn_legacy(name: str) -> None:
+    print(
+        f"warning: {name} has records without text/label hashes (saved before drift checks), so edited "
+        "posts can't be detected; scored by post id as before",
+        file=sys.stderr,
+    )
+
+
+def warn_drift(name: str, drifts: dict[str, JSONObject]) -> None:
+    """One stderr line for every dataset whose posts moved since the run, or nothing."""
+    moved = {ds: d for ds, d in drifts.items() if not drift_is_empty(d)}
+    if moved:
+        parts = "; ".join(
+            f"{ds}: {len(d['changed'])} changed (excluded), {len(d['relabeled'])} relabeled (re-scored), "
+            f"{len(d['missing'])} missing, {len(d['new'])} new"
+            for ds, d in moved.items()
+        )
+        print(f"warning: {name}: posts changed since the run: {parts}", file=sys.stderr)
+
+
+def rescore(saved: JSONObject, name: str = "saved run") -> JSONObject:
+    """Re-score a saved run against the current labels, from its raw outputs. No API calls.
+
+    Posts whose text changed since the run are excluded; relabeled posts are re-scored against the
+    current label. Both are listed under each dataset's 'drift' with the missing and new ids; name
+    labels the stderr warnings.
+    """
     out = {}
-    for name, ds in saved["datasets"].items():
-        posts = [p for p in load_posts(ROOT / ds["path"]) if p["id"] in ds["records"]]
-        records = rescore_records(ds["records"])
-        out[name] = {"path": ds["path"], "records": records, "scores": score(posts, records)}
+    split = saved.get("split", "all")
+    drifts: dict[str, JSONObject] = {}
+    if not all(has_hashes(ds["records"]) for ds in saved["datasets"].values()):
+        warn_legacy(name)
+    for ds_name, ds in saved["datasets"].items():
+        all_posts = load_posts(ROOT / ds["path"])
+        drift = post_drift(ds["records"], all_posts, load_split(ds["path"], split))
+        drifts[ds_name] = drift
+        changed = set(drift["changed"])
+        kept = {pid: r for pid, r in ds["records"].items() if pid not in changed}
+        posts = [p for p in all_posts if p["id"] in kept]
+        records = rescore_records(kept, run_raw_check(saved))
+        out[ds_name] = {"path": ds["path"], "records": records, "scores": score(posts, records), "drift": drift}
+    warn_drift(name, drifts)
     return out
 
 
+# The regex baseline run, scored deal-only, that replaces the legacy all-posts summary.
+SUPERSEDING_BASELINE_RUN = "results/regex_20261024T224817Z.json"
+
 RUN_ONLY_KEYS = ("usage", "repeat", "cache_enabled")
+
+
+def source_label(source: Path) -> str:
+    """How a rescore names its source: repo-relative POSIX when under ROOT, else the bare file name.
+
+    Results are committed, so the caller's path as typed (often absolute, with the local username
+    and directory layout in it) must never be written into them.
+    """
+    resolved = Path(source).resolve()
+    try:
+        return resolved.relative_to(ROOT.resolve()).as_posix()
+    except ValueError:  # outside the repo
+        return resolved.name
 
 
 def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject) -> JSONObject:
     """A rescore's own results dict. It drops the source run's usage, repeat and cache_enabled:
     a rescore makes no API calls, and copying them would report the old run's cost (and name the
-    file as a repeat) as if this run had spent it. The source file keeps them."""
+    file as a repeat) as if this run had spent it. The source file keeps them.
+
+    'scoring' is the current SCORING_NOTE, because the scores are recomputed under the current
+    rules (and the .md prints that note); the source's note is kept as 'source_scoring'."""
     kept = {k: v for k, v in saved.items() if k not in RUN_ONLY_KEYS}
-    return {**kept, "timestamp": stamp, "git": git, "rescored_from": str(source), "datasets": rescore(saved)}
+    return {
+        **kept,
+        "request_sha": saved.get("request_sha"),  # the source run's, or None for runs that predate it
+        "timestamp": stamp,
+        "git": git,
+        "scoring": SCORING_NOTE,
+        "source_scoring": saved.get("scoring"),
+        "scoring_version": SCORING_VERSION,
+        "rescored_from": source_label(source),
+        "raw_check": raw_check_name(saved),
+        "datasets": rescore(saved, source_label(source)),
+    }
 
 
-def compare_results(a: JSONObject, b: JSONObject) -> JSONObject:
+def compare_results(a: JSONObject, b: JSONObject, a_name: str = "A", b_name: str = "B") -> JSONObject:
     """Post-by-post paired comparison of two saved runs, per field.
 
     Both runs are re-scored from their raw outputs against the current labels, so a label fixed
     between the two runs can't masquerade as a model change. Datasets are matched by path (a
     dev-split `posts_dev` run compares with a full run's `posts`) and only posts present in both
     runs are compared, because a paired test is only valid on the same posts.
+
+    Posts whose text changed since either run are excluded too (relabeled ones are compared on the
+    current label); each path's 'drift' is the union of both runs' drift lists. a_name/b_name
+    label the stderr warnings.
     """
     a_by_path = {ds["path"]: ds["records"] for ds in a["datasets"].values()}
     b_by_path = {ds["path"]: ds["records"] for ds in b["datasets"].values()}
+    a_check, b_check = run_raw_check(a), run_raw_check(b)
+    for run, name in ((a, a_name), (b, b_name)):
+        if not all(has_hashes(ds["records"]) for ds in run["datasets"].values()):
+            warn_legacy(name)
     out = {}
+    drifts: dict[str, JSONObject] = {}
     for path, a_records in a_by_path.items():
         if path not in b_by_path:
             continue
         b_records = b_by_path[path]
-        posts = [p for p in load_posts(ROOT / path) if p["id"] in a_records and p["id"] in b_records]
-        a_ok = post_correctness(posts, rescore_records(a_records))
-        b_ok = post_correctness(posts, rescore_records(b_records))
+        all_posts = load_posts(ROOT / path)
+        a_drift = post_drift(a_records, all_posts, load_split(path, a.get("split", "all")))
+        b_drift = post_drift(b_records, all_posts, load_split(path, b.get("split", "all")))
+        drift = {k: sorted(set(a_drift[k]) | set(b_drift[k])) for k in DRIFT_KEYS}
+        drifts[path] = drift
+        excluded = set(drift["changed"])
+        posts = [p for p in all_posts if p["id"] in a_records and p["id"] in b_records and p["id"] not in excluded]
+        a_ok = post_correctness(posts, rescore_records(a_records, a_check))
+        b_ok = post_correctness(posts, rescore_records(b_records, b_check))
         out[path] = {
             "n_common_posts": len(posts),
             "fields": {f: paired_comparison(a_ok[f], b_ok[f]) for f in SCORED_FIELDS},
+            "drift": drift,
         }
+    warn_drift(f"{a_name} vs {b_name}", drifts)
     return out
 
 
 def ids(xs: list[str]) -> str:
     return ", ".join(xs) if xs else "–"
+
+
+def drift_lines(drift: JSONObject | None) -> list[str]:
+    """A markdown note on posts that moved since the run, or nothing when none did (or no drift key)."""
+    if drift is None or drift_is_empty(drift):
+        return []
+    return [
+        f"**Posts changed since the run:** changed (excluded) {ids(drift['changed'])}; "
+        f"relabeled (re-scored) {ids(drift.get('relabeled', []))}; "
+        f"missing {ids(drift['missing'])}; new {ids(drift['new'])}.",
+        "",
+    ]
 
 
 def format_comparison(cmp: JSONObject, a_name: str, b_name: str) -> str:
@@ -362,6 +579,7 @@ def format_comparison(cmp: JSONObject, a_name: str, b_name: str) -> str:
         lines += [
             f"## `{path}`: {c['n_common_posts']} common posts",
             "",
+            *drift_lines(c.get("drift")),
             "| field | n | A correct | B correct | B only (B right, A wrong) | A only (A right, B wrong) "
             "| p (exact McNemar) |",
             "|---|---:|---:|---:|---|---|---:|",
@@ -438,11 +656,22 @@ def usage_line(u: JSONObject) -> str:
     )
 
 
+# Paths eval itself writes; changes there are output, not code, so they never make a run dirty.
+DIRTY_EXCLUDES = ("results", ".cache")
+
+
 def git_info() -> JSONObject:
+    """HEAD and whether the tree has uncommitted changes outside eval's own output.
+
+    Why exclude results/ and .cache/: each run writes there, so counting them made every run after
+    an uncommitted result (and repeats 2..N of one invocation) dirty with unchanged code.
+    """
+
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
 
-    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
+    excludes = [f":(exclude){d}" for d in DIRTY_EXCLUDES]
+    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", ".", *excludes))}
 
 
 def markdown(result: JSONObject) -> str:
@@ -466,6 +695,7 @@ def markdown(result: JSONObject) -> str:
             f"## {title}: `{ds['path']}`, {s['n_posts']} posts "
             f"({s['n_deal_posts']} deal, {s['n_non_deal_posts']} non-deal)",
             "",
+            *drift_lines(ds.get("drift")),
             "| field | accuracy | halluc. rate | " + " | ".join(o.replace("_", "-") for o in FIELD_OUTCOMES) + " |",
             "|---|---:|---:|" + "---:|" * len(FIELD_OUTCOMES),
         ]
@@ -528,10 +758,28 @@ def save(result: JSONObject, results_dir: Path | None = None) -> Path:
 
 def load_run(path: Path) -> JSONObject:
     """Load an eval-run results file, exiting with status 2 (no traceback) for anything else,
-    e.g. results/baseline-v1_comparison.json, which is a summary with no raw outputs to re-score."""
-    saved = json.loads(path.read_text())
-    if not isinstance(saved, dict) or "datasets" not in saved:
-        print(f"error: {path} has no 'datasets' key, so it is not an eval run results file", file=sys.stderr)
+    e.g. results/baseline-v1_comparison.json, which is a summary with no raw outputs to re-score.
+    That file scores the key fields on all posts (non-deal posts earn correct_missing credit), so
+    its numbers disagree with every current one; the message names the run that supersedes it.
+
+    A missing, unreadable, empty or non-JSON path (say the run's .md twin) gets the same one-line
+    exit: --rescore and --compare are read-only, so a traceback would only bury the actual mistake.
+    """
+    try:
+        saved = json.loads(path.read_text())
+    except (OSError, ValueError) as e:  # ValueError covers JSONDecodeError and UnicodeDecodeError
+        print(f"error: can't load {path} as an eval run results file: {type(e).__name__}: {e}", file=sys.stderr)
+        raise SystemExit(2) from None
+    if not isinstance(saved, dict):
+        print(f"error: {path} is not a JSON object, so it is not an eval run results file", file=sys.stderr)
+        raise SystemExit(2)
+    if "datasets" not in saved:
+        print(
+            f"error: {path} has no 'datasets' key: it is a legacy summary that predates deal-only scoring, "
+            "not an eval run results file; "
+            f"results/baseline-v1_comparison.json is superseded by {SUPERSEDING_BASELINE_RUN}",
+            file=sys.stderr,
+        )
         raise SystemExit(2)
     return saved
 
@@ -551,6 +799,19 @@ def timestamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+def run_request_sha(name: str, model: str | None) -> str | None:
+    """claude.request_sha for a Claude run's recorded model; None for regex, which sends no request.
+
+    Derived here from the model the result records, rather than taken from make_extractor's meta,
+    so every Claude result carries one and it always describes that result's own model.
+    """
+    if name != "claude" or model is None:
+        return None
+    from deal_board.extractors.claude import request_sha
+
+    return request_sha(model)
+
+
 def run_once(
     name: str,
     extractor: Extractor,
@@ -560,16 +821,24 @@ def run_once(
     stamp: str,
     index: int,
     of: int,
+    git: JSONObject | None = None,
 ) -> JSONObject:
+    """One scored run. git is main()'s snapshot taken before the first repeat, so every repeat of an
+    invocation reports the tree it started from; None (direct callers) reads it now."""
     result = {
         "extractor": name,
         "model": None,
         "prompt_version": None,
         **meta,
+        "request_sha": run_request_sha(name, meta.get("model")),
         "split": split,
         "timestamp": stamp,
-        "git": git_info(),
+        "git": git_info() if git is None else git,
         "scoring": SCORING_NOTE,
+        "scoring_version": SCORING_VERSION,
+        # Which output check this run applied (raw_check below), kept so a rescore after the next
+        # prompt change still applies it (run_raw_check).
+        "raw_check": "strict" if raw_check(name) else "legacy",
         "repeat": {"index": index, "of": of},
         "cache_enabled": cache is not None,
     }
@@ -597,6 +866,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     ap.add_argument("--repeats", type=int, default=1, help="run each extractor N times, then summarize")
     ap.add_argument("--no-cache", action="store_true", help="bypass the raw-output cache entirely")
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="replay cached outputs written by earlier invocations (e.g. to finish an interrupted run); "
+        "by default every call is fresh and only written to the cache",
+    )
     ap.add_argument("--results-dir", type=Path, help=f"where results are written (default {RESULTS_DIR})")
     ap.add_argument("--cache-dir", type=Path, help=f"raw-output cache directory (default {CACHE_DIR})")
     args = ap.parse_args(argv)
@@ -611,7 +886,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.compare:
         a_path, b_path = args.compare
-        print(format_comparison(compare_results(load_run(a_path), load_run(b_path)), str(a_path), str(b_path)))
+        cmp = compare_results(load_run(a_path), load_run(b_path), str(a_path), str(b_path))
+        print(format_comparison(cmp, str(a_path), str(b_path)))
         return
 
     if args.rescore:
@@ -621,12 +897,18 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     names = ["regex", "claude"] if args.extractor == "all" else [args.extractor]
+    if args.extractor == "claude" and not config.load_settings().has_api_key:
+        # Explicitly asked for Claude: substituting regex would write results nobody asked for and
+        # exit 0, so a missing key looks like a finished run. Only the default 'all' falls back.
+        print("error: --extractor claude needs ANTHROPIC_API_KEY, which is not set", file=sys.stderr)
+        raise SystemExit(2)
     if "claude" in names and not config.load_settings().has_api_key:
         print(
             "NOTE: ANTHROPIC_API_KEY is not set, so the Claude extractor was skipped. "
             "Running the regex baseline only.\n"
         )
         names = ["regex"]
+    git = git_info()  # once, before anything is written, so later repeats can't see earlier output
     for name in names:
         extractor, meta = make_extractor(name)
         # One cache instance per extractor per invocation, shared by every repeat (see RawCache.get).
@@ -639,12 +921,13 @@ def main(argv: list[str] | None = None) -> None:
                 meta["model"],
                 meta["prompt_version"],
                 source_sha256(extractor),
+                resume=args.resume,
             )
         )
         stamp = timestamp()
         results = []
         for k in range(1, args.repeats + 1):
-            result = run_once(name, extractor, meta, args.split, cache, stamp, k, args.repeats)
+            result = run_once(name, extractor, meta, args.split, cache, stamp, k, args.repeats, git)
             path = save(result, results_dir)
             print(markdown(result), f"\nsaved {path}", sep="\n")
             results.append(result)

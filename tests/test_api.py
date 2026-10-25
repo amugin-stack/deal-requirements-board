@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from deal_board import api
 from deal_board import brokers as broker_store
-from deal_board.brokers import Broker, load_brokers
+from deal_board.brokers import Broker, LicenseType, load_brokers
 from deal_board.extractors import ExtractionError
 from deal_board.schema import DealRequirement, PropertyType, Timeline, TransactionType
 
@@ -75,7 +75,9 @@ class FakeMatcher:
         return MatchResult(matches=self.matches, excluded_for_licensing=self.excluded)
 
 
-def make_broker(broker_id: str, name: str, license_number: str, license_type: str = "Broker Individual") -> Broker:
+def make_broker(
+    broker_id: str, name: str, license_number: str, license_type: LicenseType = "Broker Individual"
+) -> Broker:
     return Broker(
         broker_id=broker_id,
         name=name,
@@ -479,7 +481,12 @@ def test_claude_client_has_bounded_timeout_and_retries(
     api.get_extractor()
 
     assert fresh_extractor_cache == [
-        {"api_key": "test-key", "timeout": api.CLAUDE_TIMEOUT_SECONDS, "max_retries": api.CLAUDE_MAX_RETRIES}
+        {
+            "api_key": "test-key",
+            "timeout": api.CLAUDE_TIMEOUT_SECONDS,
+            "max_retries": api.CLAUDE_MAX_RETRIES,
+            "open_telemetry": False,
+        }
     ]  # built once, with bounds, and the key passed explicitly from deal_board.config
 
 
@@ -502,21 +509,78 @@ def test_brokers_are_loaded_once(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- integration with the real matcher ---------------------------------------
 
 
-def test_real_matcher_only_returns_brokers_licensed_in_the_deal_state(client: TestClient) -> None:
+def reference_licensed(broker: Broker, state: str, as_of: date) -> bool:
+    """The licensing rule restated here, not imported, so a weakened `matcher.is_licensed` shows."""
+    return (
+        broker.license_state == state
+        and broker.license_status == "Active"
+        and broker.license_expiration is not None
+        and broker.license_expiration >= as_of
+    )
+
+
+def licensing_violations(body: dict[str, object], brokers: list[Broker], state: str) -> list[str]:
+    """Every way a /match body breaks the licensing contract for a deal in `state` (empty: none).
+
+    Why each check: a non-Active, out-of-state or expired match is a direct leak; an empty match
+    list would make the per-match checks vacuous; and the excluded count catches a gate that lets
+    through brokers that happen not to rank in the top 5 (compliance-security/C-13).
+    """
+    by_id = {b.broker_id: b for b in brokers}
+    expected_excluded = sum(not reference_licensed(b, state, AS_OF) for b in brokers)
+    problems: list[str] = []
+    matches = body["matches"]
+    assert isinstance(matches, list)
+    if not matches:
+        problems.append("no matches: the per-match checks would be vacuous")
+    for m in matches:
+        assert isinstance(m, dict) and set(m) == MATCH_KEYS
+        broker = by_id[m["broker_id"]]
+        if broker.license_state != state:
+            problems.append(f"{broker.broker_id}: licensed in {broker.license_state}, not {state}")
+        if broker.license_status != "Active":
+            problems.append(f"{broker.broker_id}: license_status {broker.license_status!r}")
+        # brokers.py: an unknown expiration counts as not licensed.
+        if broker.license_expiration is None or broker.license_expiration < AS_OF:
+            problems.append(f"{broker.broker_id}: expiration {broker.license_expiration}")
+    if body["excluded_for_licensing"] != expected_excluded:
+        problems.append(f"excluded_for_licensing {body['excluded_for_licensing']} != reference {expected_excluded}")
+    return problems
+
+
+def post_real_matcher_tx_deal(client: TestClient) -> dict[str, object]:
+    """POST the TX deal with the real get_matcher and get_brokers; only extractor and clock pinned."""
     pytest.importorskip("deal_board.matcher")
-    # Real get_matcher and get_brokers; only the extractor and the clock are pinned.
     api.app.dependency_overrides[api.get_extractor] = lambda: FakeExtractor(FULL_TX_DEAL)
     api.app.dependency_overrides[api.get_as_of] = lambda: AS_OF
-    by_id = {b.broker_id: b for b in load_brokers()}
-
     resp = client.post("/match", json={"text": POST})
-
     assert resp.status_code == 200
     body = resp.json()
-    assert body["excluded_for_licensing"] >= 0
-    for m in body["matches"]:
-        assert set(m) == MATCH_KEYS
-        broker = by_id[m["broker_id"]]
-        assert broker.license_state == "TX", m["broker_id"]
-        # brokers.py: an unknown expiration counts as not licensed.
-        assert broker.license_expiration is not None and broker.license_expiration >= AS_OF, m["broker_id"]
+    assert isinstance(body, dict)
+    return body
+
+
+def test_real_matcher_only_returns_brokers_licensed_in_the_deal_state(client: TestClient) -> None:
+    """compliance-security/C-13: in-state, Active, unexpired matches only, and the exact excluded count."""
+    body = post_real_matcher_tx_deal(client)
+
+    assert licensing_violations(body, load_brokers(), "TX") == []
+
+
+def test_real_matcher_api_rejects_non_active_status(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """compliance-security/C-13: the check above fails when the gate ignores license_status."""
+    from deal_board import matcher as real_matcher
+
+    def status_blind(broker: Broker, state: str | None, as_of: date) -> bool:
+        return (
+            state is not None
+            and broker.license_state == state
+            and broker.license_expiration is not None
+            and broker.license_expiration >= as_of
+        )
+
+    monkeypatch.setattr(real_matcher, "is_licensed", status_blind)
+
+    body = post_real_matcher_tx_deal(client)
+
+    assert licensing_violations(body, load_brokers(), "TX") != []

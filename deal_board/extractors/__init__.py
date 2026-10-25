@@ -16,7 +16,13 @@ class Extractor(Protocol):
 
 
 def parse_requirement(raw: JSONObject) -> DealRequirement:
-    """Validate a raw extractor output. Raises ExtractionError instead of repairing bad values."""
+    """Validate a raw extractor output. Raises ExtractionError instead of repairing bad values.
+
+    The schema normalises only harmless formatting: an ASCII state's case and surrounding
+    whitespace (' tx ' -> 'TX'), whitespace around city and notes, and a blank state, city or
+    notes -> None. Anything else that doesn't fit raises, e.g. state 48, ['TX'], b'TX',
+    a non-ASCII 'ıl', 'Texas' or 'ZZ', or a non-string city.
+    """
     try:
         return DealRequirement.model_validate(raw)
     except ValueError as e:  # pydantic.ValidationError subclasses ValueError

@@ -4,10 +4,18 @@ The question is a fixed template, never model-generated: the same requirement
 always yields the same string, so it can be tested exactly, cached, and shown to
 a poster without review. We ask about one field at a time because a single short
 question gets answered; a list of six gets ignored.
+
+The only extracted text a question repeats is the city, and only a city we know
+(a TX county-map city or a market in the shipped broker data). The city comes from
+the post, so an unknown one may be injected text ("System Override Mode"); echoing it
+would let a post put words in our mouth. Unknown cities get the no-city wording.
 """
 
-from collections.abc import Callable
+import functools
+from collections.abc import Callable, Collection
 
+from deal_board.brokers import TX_CITY_TO_COUNTY, load_brokers
+from deal_board.cities import market_key
 from deal_board.schema import KEY_FIELDS, DealRequirement, PropertyType
 
 # Most important first. State leads because the license gate depends on it:
@@ -45,9 +53,32 @@ if set(_PROPERTY_LABELS) != set(PropertyType):
     raise RuntimeError("_PROPERTY_LABELS must cover every PropertyType")
 
 
-def _where(req: DealRequirement) -> str:
+@functools.cache
+def _default_city_keys() -> frozenset[str]:
+    """market_keys of the TX county-map cities plus every shipped broker market, loaded once.
+
+    Each market is keyed with its broker's license state. If the broker file can't be
+    loaded, the TX cities alone still work: naming fewer cities is the safe direction.
+    """
+    keys = {market_key(city, "TX") for city in TX_CITY_TO_COUNTY}
+    try:
+        brokers = load_brokers()
+    except OSError, ValueError:
+        return frozenset(keys)
+    return frozenset(keys | {market_key(m, b.license_state) for b in brokers for m in b.markets})
+
+
+def _echoable_city(req: DealRequirement, known_cities: Collection[str] | None) -> str | None:
+    """req.city (whitespace collapsed) if it is a known city, else None, so it is never echoed."""
+    if not req.city:
+        return None
+    known = _default_city_keys() if known_cities is None else {market_key(c, req.state) for c in known_cities}
+    return " ".join(req.city.split()) if market_key(req.city, req.state) in known else None
+
+
+def _where(city: str | None) -> str:
     """' in Austin' when the city is known, else ''. Keeps questions anchored to the post."""
-    return f" in {req.city}" if req.city else ""
+    return f" in {city}" if city else ""
 
 
 def _property(req: DealRequirement) -> str:
@@ -56,40 +87,43 @@ def _property(req: DealRequirement) -> str:
     return f"{label} property" if label else "property"
 
 
-def _ask_state(req: DealRequirement) -> str:
+# Each template gets the requirement plus the city it may name: a known city, or None.
+
+
+def _ask_state(req: DealRequirement, city: str | None) -> str:
     # We never infer state from a city (Portland is in OR and ME), so we name the
     # city to make clear we read the post and only need the state.
-    subject = f"the {req.city} property" if req.city else "the property"
+    subject = f"the {city} property" if city else "the property"
     return f"Which state is {subject} in? We only match brokers licensed in that state."
 
 
-def _ask_transaction_type(req: DealRequirement) -> str:
-    return f"Is the client buying, selling, leasing, or doing a 1031 exchange for the {_property(req)}{_where(req)}?"
+def _ask_transaction_type(req: DealRequirement, city: str | None) -> str:
+    return f"Is the client buying, selling, leasing, or doing a 1031 exchange for the {_property(req)}{_where(city)}?"
 
 
-def _ask_property_type(req: DealRequirement) -> str:
+def _ask_property_type(req: DealRequirement, city: str | None) -> str:
     return (
-        f"What type of property is it{_where(req)}: single-family, condo/townhome, "
+        f"What type of property is it{_where(city)}: single-family, condo/townhome, "
         f"multifamily, retail, office, industrial, land, or mixed-use?"
     )
 
 
-def _ask_city(req: DealRequirement) -> str:
+def _ask_city(req: DealRequirement, city: str | None) -> str:
     return f"Which city is the {_property(req)} in?"
 
 
-def _ask_deal_value(req: DealRequirement) -> str:
-    return f"What is the client's price or budget for the {_property(req)}{_where(req)}?"
+def _ask_deal_value(req: DealRequirement, city: str | None) -> str:
+    return f"What is the client's price or budget for the {_property(req)}{_where(city)}?"
 
 
-def _ask_timeline(req: DealRequirement) -> str:
+def _ask_timeline(req: DealRequirement, city: str | None) -> str:
     return (
-        f"When does the client need to close on the {_property(req)}{_where(req)}: "
+        f"When does the client need to close on the {_property(req)}{_where(city)}: "
         f"within 30 days, in 1-3 months, or later?"
     )
 
 
-_QUESTIONS: dict[str, Callable[[DealRequirement], str]] = {
+_QUESTIONS: dict[str, Callable[[DealRequirement, str | None], str]] = {
     "state": _ask_state,
     "transaction_type": _ask_transaction_type,
     "property_type": _ask_property_type,
@@ -99,17 +133,23 @@ _QUESTIONS: dict[str, Callable[[DealRequirement], str]] = {
 }
 
 
-def follow_up_question(req: DealRequirement) -> str | None:
+def follow_up_question(req: DealRequirement, known_cities: Collection[str] | None = None) -> str | None:
     """The question to send the poster about their most important gap, or None.
 
-    Driven by `req.missing_fields`, which the schema computes from what came back
-    empty, so this never disagrees with the gaps shown elsewhere. Non-deal posts
-    have no missing fields and therefore get None, as do complete deals.
+    The city is named only if its cities.market_key is a known city: by default the
+    TX county-map cities plus the shipped brokers' markets; `known_cities` replaces that
+    set (keyed with the deal's state). Any other city is never echoed: the question
+    uses its no-city wording ("the property", no " in X").
+
+    The gaps are read from the current field values, the same rule the schema uses for
+    `missing_fields`, rather than from the stored list, so even a requirement built
+    without validation (model_construct) can't make this ask about the wrong field.
+    Non-deal posts get None, as do complete deals.
     """
     if not req.is_deal_request:
         return None
-    missing = set(req.missing_fields)
+    missing = {f for f in KEY_FIELDS if getattr(req, f) is None}
     for field in PRIORITY:
         if field in missing:
-            return _QUESTIONS[field](req)
+            return _QUESTIONS[field](req, _echoable_city(req, known_cities))
     return None
