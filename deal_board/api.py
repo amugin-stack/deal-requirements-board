@@ -22,6 +22,7 @@ import hmac
 import logging
 import secrets
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from typing import Annotated, Any, Final, Literal, Protocol, cast
@@ -32,12 +33,12 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, WithJsonSchema
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from deal_board import brokers as broker_store
 from deal_board.brokers import Broker
-from deal_board.config import FORCE_CLAUDE, FORCE_REGEX, load_settings
+from deal_board.config import FORCE_CLAUDE, FORCE_REGEX, Settings, load_settings
 from deal_board.extractors import ExtractionError, Extractor
 from deal_board.followup import follow_up_question
 from deal_board.schema import DealRequirement
@@ -187,7 +188,9 @@ def get_extractor() -> Extractor:
 
     Settings are read on every call so the choice follows the current config, but the
     Claude extractor itself is cached: it owns an HTTP client with a connection pool, and
-    building one per request would throw that pool away each time.
+    building one per request would throw that pool away each time. The cache is keyed on the
+    current key's fingerprint and model, so a rotated key or a new DEAL_MODEL builds a fresh
+    client instead of the process keeping the first one it saw.
     """
     try:
         settings = load_settings()
@@ -195,7 +198,7 @@ def get_extractor() -> Extractor:
         logger.error("invalid extractor configuration: %s", type(e).__name__)
         raise ExtractorUnavailable from e
     if settings.use_claude:
-        return _claude_extractor()
+        return _claude_extractor(_ClaudeKey.of(settings), settings.deal_model)
     if settings.deal_extractor == FORCE_CLAUDE:
         logger.error("DEAL_EXTRACTOR=claude but no ANTHROPIC_API_KEY is set")
         raise ExtractorUnavailable
@@ -212,22 +215,42 @@ def _warn_auto_fell_back_to_regex() -> None:
     )
 
 
+@dataclass(frozen=True)
+class _ClaudeKey:
+    """An API key as a cache key: equality and hash use only `fingerprint`.
+
+    `secret` rides along (the client needs it) but takes no part in comparisons, so the cache
+    looks keys up by an HMAC fingerprint under the per-process key, never by the raw key, and
+    `repr` shows neither.
+    """
+
+    fingerprint: str = field(repr=False)
+    secret: SecretStr = field(compare=False, repr=False)
+
+    @classmethod
+    def of(cls, settings: Settings) -> _ClaudeKey:
+        """The current settings' key. Call only when `settings.use_claude` (so a key is set)."""
+        secret = SecretStr(settings.api_key_value() or "")
+        digest = hmac.new(_POST_ID_KEY, b"api-key\0" + secret.get_secret_value().encode(), hashlib.sha256)
+        return cls(fingerprint=digest.hexdigest(), secret=secret)
+
+
 @lru_cache(maxsize=1)
-def _claude_extractor() -> Extractor:
+def _claude_extractor(key: _ClaudeKey, model: str) -> Extractor:
+    """The Claude extractor for `key` and `model`; maxsize 1, so a change replaces the old one."""
     # Imported here so the regex-only path never constructs an Anthropic client.
     from deal_board.extractors.claude import ClaudeExtractor
 
-    settings = load_settings()
     # open_telemetry=False: with the default (None) the SDK reads ANTHROPIC_OPEN_TELEMETRY_* env
     # vars, and ..._TRACES_CONTENT_MODE=content would export the full post text in span
     # attributes. False disables the client's spans outright, whatever the environment says.
     client = anthropic.Anthropic(
-        api_key=settings.api_key_value(),
+        api_key=key.secret.get_secret_value(),
         timeout=CLAUDE_TIMEOUT_SECONDS,
         max_retries=CLAUDE_MAX_RETRIES,
         open_telemetry=False,
     )
-    return ClaudeExtractor(client=client)
+    return ClaudeExtractor(client=client, model=model)
 
 
 @lru_cache(maxsize=1)
@@ -439,7 +462,7 @@ def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     )
 
 
-# Key for `_post_id`. Random per process and never logged or read from the environment, so an id
+# Key for `_post_id` (and `_ClaudeKey` fingerprints). Random per process and never logged or read from the environment, so an id
 # can't be recomputed from a candidate post outside this process (an unkeyed hash could be).
 _POST_ID_KEY: bytes = secrets.token_bytes(32)
 

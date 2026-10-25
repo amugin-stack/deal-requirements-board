@@ -21,8 +21,8 @@ plaintext, and it exists to hand the key to the Anthropic client.
 
 Why read at call time: nothing here touches the environment at import time. `load_settings()`
 reads `os.environ` each time it is called, so tests see the current values and importing the
-package never depends on the environment. (The API still builds its Claude client once per
-process, so a running server keeps the key and model it started with.)
+package never depends on the environment. (The API caches its Claude client keyed on a
+fingerprint of the current key and the model, so a changed key or DEAL_MODEL builds a new one.)
 
 The Anthropic SDK reads a few `ANTHROPIC_*` variables of its own (for example
 `ANTHROPIC_BASE_URL`). This package never relies on its key lookup: clients always get
