@@ -55,3 +55,23 @@ marking it confirmed or rejected. No network, no key, no repo edits.
   lone surrogate → 422 before `_post_id`; NUL byte fine; Unicode spaces stripped consistently;
   Cyrillic/fullwidth state lookalikes fail closed; responses not amplified; `extractor`/`source`
   expose nothing internal; tests write nothing outside tmp_path (suite run in a scratch copy).
+
+## Round 4
+
+- candidates: 1 (compliance 0; security_data 1: S-11)
+- confirmed: 0
+- rejected: 1 — S-11 (eval `markdown()` embeds model output unescaped, so a city with a backtick
+  and blank lines can inject markdown into results/*.md): mechanics reproduced, but the only
+  inputs are owner-curated datasets, so no untrusted text reaches the sink; committed reports
+  render fine.
+- new_confirmed: 0
+- Surfaces checked and clean: whole-suite mutation runs in a scratch copy — `.upper()` state
+  compare, `.strip()`/`.lower()`/`startswith`/`in` status checks, deny-list statuses, 30-day
+  grace, day=1 and (year, month) expiry, None expiry allowed, `state is None` allowed,
+  non-deal early return removed, wrong excluded count, sales note removed: every one turns the
+  suite red. Two survivors (`state in license_state`, `"Sales" in license_type`) are equivalent on
+  validated data. Sales note only on gated brokers; README `excluded_for_licensing` examples
+  match the live API; RawCache keys cover full post + prompt + extractor source; slow-body
+  clients hold ≤ 64 KiB and no worker thread.
+
+**Converged after 4 rounds** (last round confirmed nothing new).
