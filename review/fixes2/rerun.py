@@ -125,6 +125,11 @@ def run_one(key: str, diff: str, copy: Path) -> dict[str, Any]:
     finally:
         for f in files:
             shutil.copy2(ROOT / f, copy / f)
+        # A mutated run could write into the copy's tests or data; reset both so nothing it left
+        # behind can fail (and falsely "kill") the next mutant run on this copy.
+        for p in ("tests", "data"):
+            shutil.rmtree(copy / p)
+            shutil.copytree(ROOT / p, copy / p, ignore=HELPERS.COPY_IGNORE)
     entry["killed_by_count"] = len(entry["failed"])
     return entry
 
