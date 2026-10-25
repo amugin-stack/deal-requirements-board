@@ -10,6 +10,7 @@ from datetime import date
 from pydantic import BaseModel
 
 from deal_board.brokers import TX_CITY_TO_COUNTY, Broker
+from deal_board.cities import market_key
 from deal_board.schema import DealRequirement
 
 
@@ -28,6 +29,9 @@ class MatchResult(BaseModel):
 Point = tuple[int, str]
 
 SALES_AGENT_NOTE = "Referral fee must be paid through sponsoring broker"
+
+# The county map keyed the same way as the deal's city, so "Ft Worth" finds Tarrant.
+_TX_COUNTY_BY_KEY = {market_key(city, "TX"): county for city, county in TX_CITY_TO_COUNTY.items()}
 
 
 def is_licensed(broker: Broker, state: str | None, as_of: date) -> bool:
@@ -63,13 +67,17 @@ def _market_point(req: DealRequirement, broker: Broker) -> Point | None:
 
     The county map is Texas-only, so it is consulted only for TX deals, and a city
     missing from the map must not "match" a broker whose county is also unknown.
+    Both sides go through cities.market_key, so "Austin, TX", "Ft. Lauderdale" or a
+    non-breaking space still match, and any city the eval scores correct can earn the
+    point. A market written "City, ST" counts only when ST is the deal's state, so a NY
+    broker listing "Hoboken, NJ" gets no local-fit point on a deal routed to NY.
     """
     if req.city is None:
         return None
-    city = req.city.strip().lower()
-    if city in {m.strip().lower() for m in broker.markets}:
+    city = market_key(req.city, req.state)
+    if city in {market_key(m, req.state) for m in broker.markets}:
         return 2, f"+2 serves {req.city}"
-    county = TX_CITY_TO_COUNTY.get(city) if req.state == "TX" else None
+    county = _TX_COUNTY_BY_KEY.get(city) if req.state == "TX" else None
     if county is not None and county == broker.county:
         return 2, f"+2 based in {county} County, which covers {req.city}"
     return None
