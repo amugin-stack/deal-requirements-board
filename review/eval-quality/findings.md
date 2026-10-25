@@ -1,6 +1,8 @@
 # Eval method + code quality review: findings
 
-Branch `review-eval-quality`. 24 confirmed, 4 rejected (eval_method 13/2, code_quality 11/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
+Branch `review-eval-quality`. 27 confirmed, 4 rejected (eval_method 13/2, code_quality 14/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
+
+**Loop status: not converged.** Four rounds (the cap) confirmed 13, 9, 2 and 3 new findings. In round 4 the eval-method reviewer found nothing new; the 3 confirmations were code-quality test gaps found by mutation testing. `check_success.py` check (c) therefore fails by design; see `LOG.md`.
 
 ## Confirmed findings (by severity)
 
@@ -10,6 +12,7 @@ Branch `review-eval-quality`. 24 confirmed, 4 rejected (eval_method 13/2, code_q
 | CQ-3 | medium | code_quality | Run identity (PROMPT_VERSION) ignores model and request parameters; check_success pools and matches runs on it alone | `extractors/claude.py:76` |
 | CQ-31 | medium | code_quality | The loop guard only diffs exact protected paths, so new files can change scoring or skip all tests and the gate still passes | `loop/check_success.py:26` |
 | CQ-4 | medium | code_quality | test_check_success leaves the gate's key contracts unpinned: 5 semantic mutants survive the whole suite | `tests/test_check_success.py:45` |
+| CQ-41 | medium | code_quality | No test pins scoring's deal-value tolerance or city normalisation rules: six contract-breaking mutants survive | `scoring.py:88` |
 | EM-1 | medium | eval_method | Cache replays across eval invocations, so the documented '3 separate dev runs' protocol yields one sample repeated 3 times | `scripts/eval.py:126` |
 | EM-21 | medium | eval_method | Dev gate scores only the newest 3 runs of a prompt, so rerunning until 3 good runs come up passes a prompt whose full record fails | `loop/check_success.py:65` |
 | EM-5 | medium | eval_method | loop_runs counts --rescore outputs as fresh runs (dev gate fillable from one sample; a final rescore permanently fails 'one look only') | `loop/check_success.py:133` |
@@ -18,6 +21,8 @@ Branch `review-eval-quality`. 24 confirmed, 4 rejected (eval_method 13/2, code_q
 | CQ-22 | low | code_quality | test_data validates labels through normalising validators, so a blank or non-string label passes and is scored as 'missed' | `tests/test_data.py:33` |
 | CQ-23 | low | code_quality | Back-compat test pins the frozen regex results to current labels, so any label fix breaks it | `tests/test_scoring_stats.py:342` |
 | CQ-24 | low | code_quality | load_run promises exit 2 with no traceback for any non-run file, but non-JSON input raises a raw JSONDecodeError | `scripts/eval.py:466` |
+| CQ-42 | low | code_quality | Dev-vs-full --compare test asserts only header text, so it passes on an empty comparison and misses full-run-first order | `tests/test_eval_compare.py:158` |
+| CQ-43 | low | code_quality | summarize_repeats, the --repeats 'noise floor' summary, is effectively untested | `scripts/eval.py:351` |
 | CQ-5 | low | code_quality | test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested | `tests/test_eval.py:58` |
 | CQ-7 | low | code_quality | Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it | `loop/check_success.py:65` |
 | CQ-8 | low | code_quality | score() hard-codes the good-outcome tuple for its failures list instead of using GOOD_OUTCOMES | `scoring.py:203` |
@@ -34,12 +39,13 @@ Branch `review-eval-quality`. 24 confirmed, 4 rejected (eval_method 13/2, code_q
 ## What I'd fix first
 
 1. **Make the loop's "3 runs" mean 3 independent samples (EM-1, EM-5, EM-21, CQ-2).** Four bugs hit the same gate input: separate invocations replay the cache, `--rescore` outputs count as runs, extra reruns silently push older runs out of the window, and `--repeats` marks its own later runs dirty. One small change set covers the class: `loop_runs` keeps only results with fresh API calls (`usage.cache_hits == 0`, no `rescored_from`), the gate requires exactly 3 such runs per prompt version (or scores all of them), and `git_info()` ignores `results/` and is captured once per invocation. Do this before the loop ever runs again.
-2. **Pin the gate with tests that can fail (CQ-4), and key runs on a real request identity (CQ-3).** The anti-peeking rule (`finals[-1]`) and three other checks have no failing test; add the five distinguishing fixtures. Record model + request fingerprint in results and match on them.
+2. **Close the guard and pin the gate and the scorer with tests that can fail (CQ-31, CQ-4, CQ-41, CQ-3).** Turn the PROTECTED deny-list into an allow-list (a new `scoring/` package or `tests/conftest.py` currently bypasses it). The anti-peeking rule (`finals[-1]`), the ±1% deal-value rule and city normalisation all have surviving mutants; add the distinguishing tests. Record model + request fingerprint in results and match on them.
 3. **Resolve the city/state label conventions before the one look at holdout_v3 (EM-7, EM-8).** v3 is the reserved final look; a "near X" convention that contradicts dev will cost points that are labeling, not model, errors. Decide the rule, write it into `schema.py`, fix the minority labels.
 4. **README honesty fixes (EM-2, EM-3).** State the real keep tolerance, add run-to-run spread and paired p-values to the iteration table, and report the 11 untuned posts. Cheap, and it pre-empts the obvious reviewer question.
 5. **Make the label tests able to fail on bad labels (CQ-22, CQ-23).** Round-trip every label in `test_data.py`, and stop the back-compat test pinning current labels, or the EM-7/EM-8 label fixes will look like regressions.
 6. **Latent provenance, error handling and duplication (EM-6, EM-24, CQ-7, CQ-8, CQ-5, CQ-21, CQ-24).** Store text/label hashes in results, exclude errored posts from hallucination denominators, gate on rescored rather than stored scores, use one good-outcome predicate, reject any `stop_reason` other than `tool_use`, and make `load_run` exit 2 on non-JSON.
-7. **Docs (EM-22, EM-23, EM-25).** Fix the timeline diagnosis before acting on DRAFT backlog item 1, mark `baseline-v1_comparison.json` as old-metric, and refresh the stale README claims.
+7. **Smaller test gaps (CQ-42, CQ-43).** Assert on `--compare` content in both argument orders; unit-test `summarize_repeats`.
+8. **Docs (EM-22, EM-23, EM-25, EM-31).** Reword the holdout-independence claim to what is recorded (h08 repeats s04's sentence), fix the timeline diagnosis before acting on DRAFT backlog item 1, mark `baseline-v1_comparison.json` as old-metric, and refresh the stale README claims.
 
 
 ## Details
@@ -143,6 +149,30 @@ control (one-look check->True): 1 failed, 836 passed
 **Fix.** Distinguishable fixtures and exact failed-set assertions: [newer_v2, older_v1] finals, [bad]+[good]*3 vs [good]*3+[bad] dev runs, an every-field-0.9 dev set failing only 'mean accuracy', final_run(errors=1) and final_run(non_deal_filled=2). Re-cut loop-start afterwards since the file is protected.
 
 **Regression test.** test_final_uses_oldest_run_and_gates_errors_and_hallucinations and test_dev_uses_newest_three_and_gates_mean_alone, asserting exact failed sets (see findings.md).
+
+### CQ-41 (medium, code_quality): No test pins scoring's deal-value tolerance or city normalisation rules: six contract-breaking mutants survive
+
+`scoring.py:88`
+
+```
+        return abs(pred - gold) <= DEAL_VALUE_TOLERANCE * gold
+```
+
+**Claim.** The ±1% deal-value rule and city normalisation (ignore case, periods, commas, extra spaces; no spelling tolerance) are covered by one over-prediction and one comma-free city case (tests/test_eval.py:43-44), and no stored result has a deal_value or city that differs from its label, so rescore/golden tests can't catch changes either. All six mutants pass the full suite: dropping abs() (every under-prediction 'correct': 5_000_000 vs 1), tolerance 0.01->0.02, <= -> <, skipping comma removal, joining city tokens with '', and deleting the missing_fields error count for errored deal posts. Scoring is correct today; the headline metric's rules are simply unpinned.
+
+**Verifier.** Confirmed every mutant survives and no stored record can distinguish them. Medium: a test gap on the headline metric, not a current bug.
+
+**Reproduction output.**
+
+```
+M1_no_abs: 837 passed, 5 xfailed | M2_tol_002: 837 passed | M3_strict_lt: 837 passed | M4_no_comma: 837 passed | M5_join_empty: 837 passed | M6_no_missing_err: 837 passed
+sanity original field_outcome(deal_value_usd, 5M, 1): wrong
+scan of all 43 results files: 388 filled deal values all exactly equal to label, 342 cities all raw-equal (no near-misses)
+```
+
+**Fix.** Leave scoring.py; add parametrised unit tests for values_match/field_outcome/normalize and a score() case with an errored deal post.
+
+**Regression test.** field_outcome('deal_value_usd', 100_000, p): 101_000 and 99_000 correct, 101_001 and 98_999 and 1 wrong; field_outcome('city','St. Louis','st  louis,') correct, 'Stlouis' and 'St Lewis' wrong; score() with one errored deal post -> missing_fields['error'] == 1.
 
 ### EM-1 (medium, eval_method): Cache replays across eval invocations, so the documented '3 separate dev runs' protocol yields one sample repeated 3 times
 
@@ -347,6 +377,58 @@ repo changed: False
 **Fix.** Wrap read+parse in try/except (OSError, json.JSONDecodeError) -> one-line stderr message and SystemExit(2).
 
 **Regression test.** Extend test_summary_file_exits_2 with a Markdown file, an empty file and a missing path for both --rescore and --compare; assert exit 2 and no 'Traceback'.
+
+### CQ-42 (low, code_quality): Dev-vs-full --compare test asserts only header text, so it passes on an empty comparison and misses full-run-first order
+
+`tests/test_eval_compare.py:158`
+
+```
+    assert "McNemar" in capsys.readouterr().out
+```
+
+**Claim.** test_cli_compare_dev_run_with_full_run asserts only that 'McNemar' is in stdout; format_comparison's fixed header always contains it, even when it prints 'No dataset path in common', so the test passes when compare_results returns {}. It runs dev-first only; full runs list holdout before posts, so mutating `continue` to `break` at scripts/eval.py:304 survives the whole suite, and then `--compare <full run> <dev run>` compares nothing while the reverse order still works.
+
+**Verifier.** No other test exercises full-first compare. Test gap only; low.
+
+**Reproduction output.**
+
+```
+compare_results -> {}: test_cli_compare_dev_run_with_full_run 1 passed
+mutant continue->break (eval.py:304 only), full suite: 837 passed, 5 xfailed
+CLI mutant full-first: No dataset path in common: nothing to compare.
+CLI mutant dev-first: ## `data/posts.jsonl`: 24 common posts
+CLI original full-first: ## `data/posts.jsonl`: 24 common posts
+```
+
+**Fix.** Assert on comparison content ('## `data/posts.jsonl`: 24 common posts', and 'No dataset path in common' absent) in both argument orders.
+
+**Regression test.** Parametrise test_cli_compare_dev_run_with_full_run over dev-first and full-first; unit-test compare_results with A = {holdout: unmatched, posts: matched} and assert POSTS_PATH is compared.
+
+### CQ-43 (low, code_quality): summarize_repeats, the --repeats 'noise floor' summary, is effectively untested
+
+`scripts/eval.py:351`
+
+```
+"min": min(accs, default=None), "max": max(accs, default=None),
+```
+
+**Claim.** No test calls summarize_repeats or format_repeat_summary; the one --repeats CLI test checks only for the substrings 'mean' and 'min–max', and its fake client gives identical accuracy every run. So min->max, using only the first run, counting None accuracy as 0%, and counting runs as len(results) all survive the full suite. The docstring calls this 'the run-to-run noise floor that a prompt change has to beat', so a regression would silently mislead keep/revert decisions.
+
+**Verifier.** The rescore_records call-provenance part of the candidate was dropped as a variant of CQ-5. Low.
+
+**Reproduction output.**
+
+```
+BASELINE => 837 passed, 5 xfailed
+M1 min->max => 837 passed
+M2 first run only => 837 passed
+M3 None as 0% => 837 passed
+M4 runs=len(results) => 837 passed
+```
+
+**Fix.** Unit-test summarize_repeats and format_repeat_summary with hand-built results whose per-run accuracies differ.
+
+**Regression test.** Three runs with accuracies 0.5, 0.9, None -> mean 0.7, min 0.5, max 0.9, runs 2; a dataset present in one run -> runs 1; rendering shows '50–90%' and '(2 runs)', and 'n/a' when all runs are None.
 
 ### CQ-5 (low, code_quality): test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested
 
