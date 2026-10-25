@@ -38,6 +38,7 @@ __all__ = [
     "ClaudeExtractor",
     "Usage",
     "check_claude_raw",
+    "request_sha",
 ]
 
 SYSTEM_PROMPT = """You extract deal requirements from posts on a real estate broker referral board.
@@ -100,6 +101,31 @@ TOOL: ToolParam = {
 
 # Changes whenever the prompt or schema changes, so saved eval results say which version ran.
 PROMPT_VERSION = hashlib.sha256((SYSTEM_PROMPT + json.dumps(TOOL, sort_keys=True)).encode()).hexdigest()[:8]
+
+# The rest of the request, as constants extract_raw sends verbatim, so request_sha hashes exactly
+# what goes over the wire and can't drift from it.
+MAX_TOKENS = 1024
+TOOL_CHOICE: ToolChoiceToolParam = {"type": "tool", "name": TOOL["name"]}
+USER_MESSAGE_TEMPLATE = "<post>\n{text}\n</post>"
+
+
+def request_sha(model: str) -> str:
+    """12-hex identity of the whole request: SYSTEM_PROMPT, TOOL, MAX_TOKENS, TOOL_CHOICE, the user
+    message template and the model.
+
+    Why not PROMPT_VERSION: it covers only the prompt and tool (and must stay stable for the saved
+    runs that carry it), so two runs with different models or max_tokens shared one identity and
+    could be pooled as the same experiment. eval writes this into every Claude result.
+    """
+    identity = {
+        "system": SYSTEM_PROMPT,
+        "tool": TOOL,
+        "max_tokens": MAX_TOKENS,
+        "tool_choice": TOOL_CHOICE,
+        "user_message_template": USER_MESSAGE_TEMPLATE,
+        "model": model,
+    }
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
 
 
 @dataclass(frozen=True)
@@ -237,11 +263,11 @@ class ClaudeExtractor:
         self.last_usage = None
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=1024,
+            max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
             tools=[TOOL],
-            tool_choice={"type": "tool", "name": TOOL["name"]},
-            messages=[{"role": "user", "content": f"<post>\n{text}\n</post>"}],
+            tool_choice=TOOL_CHOICE,
+            messages=[{"role": "user", "content": USER_MESSAGE_TEMPLATE.format(text=text)}],
         )
         # Recorded before the stop-reason/tool-call checks: those calls are billed too.
         usage = getattr(response, "usage", None)

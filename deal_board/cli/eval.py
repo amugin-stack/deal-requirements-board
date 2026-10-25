@@ -345,6 +345,7 @@ def rescored_result(saved: JSONObject, source: Path, stamp: str, git: JSONObject
     kept = {k: v for k, v in saved.items() if k not in RUN_ONLY_KEYS}
     return {
         **kept,
+        "request_sha": saved.get("request_sha"),  # the source run's, or None for runs that predate it
         "timestamp": stamp,
         "git": git,
         "scoring_version": SCORING_VERSION,
@@ -604,6 +605,19 @@ def timestamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+def run_request_sha(name: str, model: str | None) -> str | None:
+    """claude.request_sha for a Claude run's recorded model; None for regex, which sends no request.
+
+    Derived here from the model the result records, rather than taken from make_extractor's meta,
+    so every Claude result carries one and it always describes that result's own model.
+    """
+    if name != "claude" or model is None:
+        return None
+    from deal_board.extractors.claude import request_sha
+
+    return request_sha(model)
+
+
 def run_once(
     name: str,
     extractor: Extractor,
@@ -619,6 +633,7 @@ def run_once(
         "model": None,
         "prompt_version": None,
         **meta,
+        "request_sha": run_request_sha(name, meta.get("model")),
         "split": split,
         "timestamp": stamp,
         "git": git_info(),
