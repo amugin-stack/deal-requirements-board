@@ -717,6 +717,11 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     names = ["regex", "claude"] if args.extractor == "all" else [args.extractor]
+    if args.extractor == "claude" and not config.load_settings().has_api_key:
+        # Explicitly asked for Claude: substituting regex would write results nobody asked for and
+        # exit 0, so a missing key looks like a finished run. Only the default 'all' falls back.
+        print("error: --extractor claude needs ANTHROPIC_API_KEY, which is not set", file=sys.stderr)
+        raise SystemExit(2)
     if "claude" in names and not config.load_settings().has_api_key:
         print(
             "NOTE: ANTHROPIC_API_KEY is not set, so the Claude extractor was skipped. "
