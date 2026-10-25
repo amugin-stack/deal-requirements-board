@@ -3005,5 +3005,1076 @@
       "asserts": "Calls the real api.get_as_of() with no dependency override and asserts it equals datetime.date.today(); optionally POSTs /match without the as_of override with an in-state Active broker that expired yesterday and asserts matches == [] and excluded_for_licensing == 1."
     },
     "proposed_fixture": null
+  },
+  {
+    "id": "gate-20",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "get_as_of",
+      "file": "deal_board/api.py"
+    },
+    "description": "get_as_of returns yesterday (off by one day), so a license that expired yesterday passes the gate in production.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -179,7 +179,7 @@\n \n def get_as_of() -> date:\n     \"\"\"The date license expirations are checked against. A dependency so tests can pin it.\"\"\"\n-    return date.today()\n+    return date.fromordinal(date.today().toordinal() - 1)\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.47s",
+    "verified": "differs",
+    "verifier_note": "POST /match via TestClient for a TX deal with one fictional Active TX broker whose license expired yesterday (2026-10-24), clock frozen at 2026-10-25: the original excludes the broker, the mutant (as_of = yesterday) returns it. Every API test overrides get_as_of with a fixed AS_OF and none compares the real get_as_of with date.today().",
+    "demo_output": "orig: clock 2026-10-25 America/Chicago | get_as_of = 2026-10-25 | broker expires 2026-10-24 -> matches [] excluded 1 | mut: get_as_of = 2026-10-24 -> matches ['fx-demo-01'] excluded 0",
+    "severity": "high",
+    "proposed_test": {
+      "name": "test_get_as_of_is_today",
+      "file": "tests/test_api.py",
+      "asserts": "With date.today() patched, api.get_as_of() == date.today(); and POST /match without a get_as_of override excludes a broker whose license_expiration is date.today() - 1 day (matches empty, excluded_for_licensing == 1)."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-21",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "get_as_of",
+      "file": "deal_board/api.py"
+    },
+    "description": "get_as_of uses the UTC calendar date instead of the local date, so for part of each day (US evenings) as_of is tomorrow/yesterday and a license expiring on the boundary day is wrongly accepted or rejected.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -17,7 +17,7 @@\n import hashlib\n import logging\n from collections.abc import Callable, Sequence\n-from datetime import date\n+from datetime import UTC, date, datetime\n from functools import lru_cache\n from typing import Annotated, Literal, Protocol, cast\n \n@@ -179,7 +179,7 @@\n \n def get_as_of() -> date:\n     \"\"\"The date license expirations are checked against. A dependency so tests can pin it.\"\"\"\n-    return date.today()\n+    return datetime.now(UTC).date()\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.47s",
+    "verified": "differs",
+    "verifier_note": "Clock frozen by patching api.date/api.datetime with a fixed local zone, POST /match with one fictional Active TX broker. On a US server in the evening the UTC date is already tomorrow, so a still-valid broker is wrongly excluded; on a server east of UTC the mutant's date lags the local one and a broker that expired yesterday is returned. Tests always override get_as_of and never pin local-vs-UTC. Rated medium assuming a US deployment (only wrong exclusions); it would be high on a server east of UTC.",
+    "demo_output": "America/Chicago, 2026-10-26T01:30Z (20:30 local 10-25), broker expires 2026-10-25: orig get_as_of 2026-10-25 -> ['fx-demo-01'] excluded 0 | mut get_as_of 2026-10-26 -> [] excluded 1. Asia/Tokyo, 2026-10-24T23:30Z (08:30 local 10-25), broker expires 2026-10-24: orig 2026-10-25 -> [] excluded 1 | mut 2026-10-24 -> ['fx-demo-01'] excluded 0",
+    "severity": "medium",
+    "proposed_test": {
+      "name": "test_get_as_of_uses_local_date_not_utc",
+      "file": "tests/test_api.py",
+      "asserts": "With TZ=America/Chicago and the clock frozen at 2026-10-26T01:30Z (20:30 local on 2026-10-25), api.get_as_of() returns date(2026, 10, 25), not the UTC date 2026-10-26."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-22",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "get_as_of",
+      "file": "deal_board/api.py"
+    },
+    "description": "get_as_of returns a frozen constant date (the TREC snapshot date 2026-10-20), so every license expiring after that date but before today keeps passing forever.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -179,7 +179,7 @@\n \n def get_as_of() -> date:\n     \"\"\"The date license expirations are checked against. A dependency so tests can pin it.\"\"\"\n-    return date.today()\n+    return date(2026, 10, 20)\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.47s",
+    "verified": "differs",
+    "verifier_note": "POST /match for a TX deal with one fictional Active TX broker whose license expired 2026-10-22, today 2026-10-25: the original excludes it; the mutant's get_as_of is pinned to 2026-10-20 so the expired broker is returned, and every license expiring after that date stays valid forever. It survived because the constant equals the tests' AS_OF and every test overrides get_as_of anyway.",
+    "demo_output": "orig: clock 2026-10-25 | get_as_of = 2026-10-25 | broker expires 2026-10-22 -> matches [] excluded 1 | mut: get_as_of = 2026-10-20 | broker expires 2026-10-22 -> matches ['fx-demo-01'] excluded 0",
+    "severity": "high",
+    "proposed_test": {
+      "name": "test_get_as_of_follows_the_clock",
+      "file": "tests/test_api.py",
+      "asserts": "With date.today() patched to two different dates (e.g. 2026-10-25 and 2027-01-01), api.get_as_of() returns each patched date in turn, so it is not a constant."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-23",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "get_brokers",
+      "file": "deal_board/api.py"
+    },
+    "description": "get_brokers pre-filters the cache to Active-status records, so excluded_for_licensing undercounts (non-Active brokers silently vanish from the count).",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -174,7 +174,7 @@\n \n     The list is shared across requests, so the matcher must treat it as read-only.\n     \"\"\"\n-    return broker_store.load_brokers()\n+    return [b for b in broker_store.load_brokers() if b.license_status == \"Active\"]\n \n \n def get_as_of() -> date:\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.47s",
+    "verified": "differs",
+    "verifier_note": "Real get_brokers() and real matcher, only the extractor (full TX retail-buy deal) and as_of=2026-10-20 overridden: the original loads 226 records and reports excluded_for_licensing=76, the mutant drops the 50 non-'Active' records first and reports 26. Matches are identical (is_licensed rejects them anyway), so it is a wrong count, not a leak. Every API test overrides get_brokers or stubs load_brokers; the one real-data test only checks excluded_for_licensing >= 0.",
+    "demo_output": "orig: len(get_brokers)=226 excluded=76 matches=['tx-010','tx-069','tx-132','tx-197','tx-002'] | mut: len(get_brokers)=176 excluded=26 matches=same",
+    "severity": "medium",
+    "proposed_test": {
+      "name": "test_real_get_brokers_keeps_every_record_and_counts_exclusions",
+      "file": "tests/test_api.py",
+      "asserts": "After api.get_brokers.cache_clear(), len(api.get_brokers()) == len(load_brokers()) and some broker has license_status != 'Active'; a real-matcher POST /match for FULL_TX_DEAL at AS_OF returns excluded_for_licensing == len(load_brokers()) - sum(is_licensed(b, 'TX', AS_OF) for b in load_brokers())."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-24",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "API passes the requirement to the matcher with a lower-cased state, so the exact-match gate rejects every broker and every deal returns zero matches with all brokers 'excluded'.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -372,7 +372,7 @@\n \n     # Licensing gating, non-deal posts and missing states are the matcher's job; the API only\n     # reshapes what it returns.\n-    result = match(requirement, brokers, as_of)\n+    result = match(requirement.model_copy(update={\"state\": requirement.state.lower() if requirement.state else None}), brokers, as_of)\n     matches = [\n         BrokerMatch(\n             broker_id=m.broker.broker_id,\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[az-expired-broker]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-string-coerced]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[fl-inactive-broker]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[ga-no-expiration-broker]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[huge-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-notes]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-yes-validated]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-empty-despite-nulls]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-missing-fields-empty]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-lowercase]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-whitespace]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+      "tests/test_red_team.py::test_known_regex_state_leaks_are_pinned",
+      "tests/test_red_team.py::test_regex_path_is_not_vacuous",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-01]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-02]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-03]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-04]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-05]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-06]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-07]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-09]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-10]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-11]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-16]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-17]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-18]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-19]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-21]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-22]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-23]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-24]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-25]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-27]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-28]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-30]"
+    ],
+    "suite": "38 failed, 964 passed, 2 skipped, 5 xfailed, 2 warnings in 8.74s"
+  },
+  {
+    "id": "gate-25",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "Broker._blank_to_none",
+      "file": "deal_board/brokers.py"
+    },
+    "description": "Broker validator strips every string field, so a padded status like 'Active ' (or ' Active') is normalised to 'Active' and passes the exact-status gate, breaking the verbatim-status rule.",
+    "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -48,7 +48,7 @@\n     @field_validator(\"*\", mode=\"before\")\n     @classmethod\n     def _blank_to_none(cls, v: object) -> object:\n-        return None if v == \"\" else v\n+        return None if v == \"\" else (v.strip() if isinstance(v, str) else v)\n \n     @field_validator(\"markets\", \"property_types\", \"transaction_types\", mode=\"before\")\n     @classmethod\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 8.27s",
+    "verified": "differs",
+    "verifier_note": "A fictional CSV row with license_status 'Active ' (trailing space) loaded with load_brokers(path), then a FL/Tampa deal through match(): the original keeps the status verbatim, fails closed and excludes the broker; the mutant strips every string field so the broker passes and is returned. Neither shipped CSV has padded values (all 252 rows checked) and no test loads a padded CSV. Verifier rated it medium (a padded 'Active' probably is active; 'Probation - Active ' stays rejected); the lead raised it to high because the suite's own test_status_must_be_exactly_active[Active ] defines that status as not licensed, and this mutant makes match() return such a broker.",
+    "demo_output": "orig: loaded 'Active ' -> is_licensed False | match ids [] excluded 1 | mut: loaded 'Active' -> is_licensed True | match ids ['fx-demo-01'] excluded 0",
+    "severity": "high",
+    "proposed_test": {
+      "name": "test_padded_status_is_kept_verbatim_and_fails_closed",
+      "file": "tests/test_brokers.py",
+      "asserts": "Write a tmp_path CSV with the fictional_brokers header and the proposed fixture row (license_status 'Active '), load it with load_brokers(path), and assert license_status == 'Active ' and that match() for an FL deal returns no matches with excluded_for_licensing == 1."
+    },
+    "proposed_fixture": {
+      "broker_id": "fx-mut-01",
+      "name": "Fictional Broker FL-Padded",
+      "source": "fictional",
+      "license_state": "FL",
+      "license_number": "FICT-FL-9001",
+      "license_type": "Broker Individual",
+      "license_status": "Active ",
+      "license_expiration": "2028-06-30",
+      "county": "",
+      "markets": "Tampa",
+      "property_types": "retail",
+      "transaction_types": "buy",
+      "min_deal_usd": "1000000",
+      "max_deal_usd": "10000000"
+    },
+    "verifier_severity": "medium"
+  },
+  {
+    "id": "gate-26",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "Broker.license_state",
+      "file": "deal_board/brokers.py"
+    },
+    "description": "Broker.license_state widened from the State Literal to str, so malformed broker states ('tx', 'Texas', 'TX ') load without error instead of being rejected at load time.",
+    "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -33,7 +33,7 @@\n     broker_id: str\n     name: str\n     source: str  # \"trec_<date>\" for a real license record, \"fictional\" otherwise\n-    license_state: State\n+    license_state: str\n     license_number: str\n     license_type: str  # \"Broker Individual\" or \"Sales Agent\"\n     license_status: str  # verbatim from the source; never edited\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 8.27s",
+    "verified": "differs",
+    "verifier_note": "A fictional CSV row with license_state 'fl': the original rejects it at load time (State Literal), the mutant loads it as a plain str. Through match() the broker is still excluded because DealRequirement.state is always a valid State; only a direct is_licensed(b, 'fl', ...) returns True. Low: POST /match and match() can never produce the matching state; the visible effect is a malformed file loading silently and inflating excluded_for_licensing.",
+    "demo_output": "orig: load error ValidationError license_state literal_error input 'fl' | mut: loaded 'fl' | is_licensed(b,'FL') False | is_licensed(b,'fl') True",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_invalid_license_state_is_rejected_at_load",
+      "file": "tests/test_brokers.py",
+      "asserts": "Write a tmp_path CSV with the fictional_brokers header and one row whose license_state is 'fl', and assert load_brokers(path) raises pydantic.ValidationError."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-27",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "Broker._split_list",
+      "file": "deal_board/brokers.py"
+    },
+    "description": "_split_list drops already-parsed lists (returns [] for any non-string), so brokers built programmatically lose markets/property/transaction types and their fit points.",
+    "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -53,7 +53,7 @@\n     @field_validator(\"markets\", \"property_types\", \"transaction_types\", mode=\"before\")\n     @classmethod\n     def _split_list(cls, v: object) -> object:\n-        return [x.strip() for x in v.split(\";\") if x.strip()] if isinstance(v, str) else (v or [])\n+        return [x.strip() for x in v.split(\";\") if x.strip()] if isinstance(v, str) else []\n \n     @property\n     def is_fictional(self) -> bool:\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_equal_score_breaks_tie_by_reason_count_desc",
+      "tests/test_matcher.py::test_full_fit_scores_8_with_one_reason_per_rule",
+      "tests/test_matcher.py::test_licensed_score_0_returned_last",
+      "tests/test_matcher.py::test_limit_keeps_the_best_ranked",
+      "tests/test_matcher.py::test_market_match_by_city_scores_2",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[AUSTIN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[aUsTiN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[austin]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive_on_broker_side",
+      "tests/test_matcher.py::test_orders_by_score_desc",
+      "tests/test_matcher.py::test_property_type_match_scores_3",
+      "tests/test_matcher.py::test_reason_count_tie_break_ignores_sales_agent_note",
+      "tests/test_matcher.py::test_sales_agent_gets_exact_referral_note_worth_0_points",
+      "tests/test_matcher.py::test_transaction_type_match_scores_2"
+    ],
+    "suite": "14 failed, 988 passed, 2 skipped, 5 xfailed, 2 warnings in 8.27s"
+  },
+  {
+    "id": "gate-28",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "load_brokers",
+      "file": "deal_board/brokers.py"
+    },
+    "description": "load_brokers reads the CSV with skipinitialspace=True, so a leading-space status like ' Active' is silently normalised to 'Active' and passes the gate.",
+    "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -62,4 +62,4 @@\n \n def load_brokers(path: Path = BROKERS_CSV) -> list[Broker]:\n     with open(path, newline=\"\") as f:\n-        return [Broker.model_validate(row) for row in csv.DictReader(f)]\n+        return [Broker.model_validate(row) for row in csv.DictReader(f, skipinitialspace=True)]\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 8.85s",
+    "verified": "differs",
+    "verifier_note": "A fictional CSV row with license_status ' Active' (leading space after the comma) loaded with load_brokers(path): the original keeps ' Active', is_licensed is False and match() excludes the broker; the mutant's DictReader(skipinitialspace=True) drops the space so the broker passes and is returned. Shipped CSVs have no padded fields and no test loads one. Verifier rated it medium; the lead raised it to high for the same reason as gate-25 (the suite treats a non-exact status as not licensed).",
+    "demo_output": "orig: loaded ' Active' -> is_licensed False | match ids [] excluded 1 | mut: loaded 'Active' -> is_licensed True | match ids ['fx-demo-01'] excluded 0",
+    "severity": "high",
+    "proposed_test": {
+      "name": "test_leading_space_status_is_not_trimmed_on_load",
+      "file": "tests/test_brokers.py",
+      "asserts": "Write a tmp_path CSV with the fictional_brokers header and the proposed fixture row (license_status ' Active', leading space after the comma), load it, and assert license_status == ' Active' and match(DealRequirement(is_deal_request=True, state='FL'), brokers, date(2026,10,25)).matches == []."
+    },
+    "proposed_fixture": {
+      "broker_id": "fx-mut-02",
+      "name": "Fictional Broker FL-LeadingSpace",
+      "source": "fictional",
+      "license_state": "FL",
+      "license_number": "FICT-FL-9002",
+      "license_type": "Broker Individual",
+      "license_status": " Active",
+      "license_expiration": "2028-06-30",
+      "county": "",
+      "markets": "Tampa",
+      "property_types": "retail",
+      "transaction_types": "buy",
+      "min_deal_usd": "1000000",
+      "max_deal_usd": "10000000"
+    },
+    "verifier_severity": "medium"
+  },
+  {
+    "id": "gate-29",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields._upper_state",
+      "file": "deal_board/schema.py"
+    },
+    "description": "_upper_state no longer upper-cases, so a lowercase extracted state like 'tx' fails validation (extraction error) instead of matching TX brokers.",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -140,7 +140,7 @@\n     @field_validator(\"state\", mode=\"before\")\n     @classmethod\n     def _upper_state(cls, v: object) -> str | None:\n-        return v.strip().upper() if isinstance(v, str) and v.strip() else None\n+        return v.strip() if isinstance(v, str) and v.strip() else None\n \n     @field_validator(\"city\", \"notes\", mode=\"before\")\n     @classmethod\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_eval.py::test_eval_scores_fake_claude_outputs",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-lowercase]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-lowercase]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-whitespace]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-01]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-02]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-03]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-04]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-05]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-06]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-07]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-08]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-09]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-10]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-11]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-12]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-13]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-14]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-15]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-16]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-17]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-18]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-19]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-20]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-21]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-22]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-23]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-24]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-25]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-26]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-27]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-28]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-29]",
+      "tests/test_red_team.py::test_hostile_extractor_per_post[rt-30]"
+    ],
+    "suite": "34 failed, 968 passed, 2 skipped, 5 xfailed, 2 warnings in 9.51s"
+  },
+  {
+    "id": "gate-30",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields._upper_state",
+      "file": "deal_board/schema.py"
+    },
+    "description": "_upper_state no longer strips, so a padded state like ' tx ' fails validation instead of normalising to 'TX'.",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -140,7 +140,7 @@\n     @field_validator(\"state\", mode=\"before\")\n     @classmethod\n     def _upper_state(cls, v: object) -> str | None:\n-        return v.strip().upper() if isinstance(v, str) and v.strip() else None\n+        return v.upper() if isinstance(v, str) and v.strip() else None\n \n     @field_validator(\"city\", \"notes\", mode=\"before\")\n     @classmethod\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-whitespace]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-whitespace]"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 8.86s"
+  },
+  {
+    "id": "gate-31",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields._upper_state",
+      "file": "deal_board/schema.py"
+    },
+    "description": "Blank/whitespace state is no longer turned into None, so state '' or '  ' raises a validation error instead of becoming 'missing state'.",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -140,7 +140,7 @@\n     @field_validator(\"state\", mode=\"before\")\n     @classmethod\n     def _upper_state(cls, v: object) -> str | None:\n-        return v.strip().upper() if isinstance(v, str) and v.strip() else None\n+        return v.strip().upper() if isinstance(v, str) else None\n \n     @field_validator(\"city\", \"notes\", mode=\"before\")\n     @classmethod\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.03s",
+    "verified": "differs",
+    "verifier_note": "parse_requirement({'is_deal_request': True, 'state': ''}) (or '   '): the original treats a blank state as missing (state None, 'state' in missing_fields), the mutant raises ExtractionError, which POST /match turns into a 422 instead of a no-state result. Claude's strict schema only allows a State value or null and the regex extractor never emits '', so real entry points can't produce it; no test validates a blank state.",
+    "demo_output": "orig: '' -> state None, 'state' in missing_fields; '   ' -> same | mut: '' -> ExtractionError (validation error for DealRequirement); '   ' -> same",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_blank_state_becomes_none",
+      "file": "tests/test_matcher.py",
+      "asserts": "DealRequirement.model_validate({'is_deal_request': True, 'state': s}) for s in ('', '   ') succeeds with state None and 'state' in missing_fields."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-32",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields.state",
+      "file": "deal_board/schema.py"
+    },
+    "description": "Deal state widened from the State Literal to any string, so 'Texas', 'T' or 'X' are accepted as a deal state (fails closed at the exact gate, but the 2-letter contract and the Claude tool schema enum are lost).",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -105,7 +105,7 @@\n         description=\"True only if the post asks for a broker, agent, buyer, or property for a \"\n         \"specific deal. False for news, hiring, celebrations, CE questions, lender requests.\"\n     )\n-    state: State | None = Field(\n+    state: str | None = Field(\n         None,\n         description=\"Two-letter code of the state where the property is. Only if the post names \"\n         \"the state. Never infer it from a city, neighborhood, or metro name.\",\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_eval.py::test_invalid_output_is_an_error_and_rescore_needs_no_client",
+      "tests/test_packaging_compat.py::test_check_success_prompt_version",
+      "tests/test_packaging_compat.py::test_prompt_version_unchanged",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-not-a-state]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-full-name]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-fullwidth]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-not-a-state]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-nul-suffix]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-spaced-letters]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-tab-inside]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-territory]",
+      "tests/test_scoring_stats.py::test_post_correctness_errored_record_wrong_everywhere",
+      "tests/test_scoring_stats.py::test_post_correctness_values"
+    ],
+    "suite": "13 failed, 990 passed, 2 skipped, 4 xfailed, 2 warnings in 10.00s"
+  },
+  {
+    "id": "gate-33",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "DealRequirement._compute_missing",
+      "file": "deal_board/schema.py"
+    },
+    "description": "missing_fields is computed for non-deal posts too, so news/hiring posts report missing fields (and may trigger follow-up questions).",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -154,5 +154,5 @@\n     @model_validator(mode=\"after\")\n     def _compute_missing(self) -> Self:\n         # A non-deal post has nothing to follow up on.\n-        self.missing_fields = [f for f in KEY_FIELDS if getattr(self, f) is None] if self.is_deal_request else []\n+        self.missing_fields = [f for f in KEY_FIELDS if getattr(self, f) is None]\n         return self\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_non_deal_post_has_no_matches_and_no_follow_up",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[holdout/h08]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[holdout/h11]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[holdout/h12]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[holdout/h13]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s05]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s06]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s16]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s20]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s28]",
+      "tests/test_baseline_golden.py::test_baseline_output_matches_golden[posts/s35]",
+      "tests/test_scoring_stats.py::test_score_preexisting_keys_unchanged[holdout]"
+    ],
+    "suite": "12 failed, 990 passed, 2 skipped, 5 xfailed, 2 warnings in 9.87s"
+  },
+  {
+    "id": "gate-34",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "ExtractedFields.is_deal_request",
+      "file": "deal_board/schema.py"
+    },
+    "description": "is_deal_request gets a default of True, so a payload missing the flag is treated as a deal request instead of failing validation (and the Claude tool schema no longer requires it).",
+    "diff": "--- a/deal_board/schema.py\n+++ b/deal_board/schema.py\n@@ -102,6 +102,7 @@\n \n class ExtractedFields(BaseModel):\n     is_deal_request: bool = Field(\n+        True,\n         description=\"True only if the post asks for a broker, agent, buyer, or property for a \"\n         \"specific deal. False for news, hiring, celebrations, CE questions, lender requests.\"\n     )\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.91s",
+    "verified": "differs",
+    "verifier_note": "parse_requirement({'state': 'TX'}) with no is_deal_request: the original raises ExtractionError (422), the mutant silently treats the post as a deal request. Claude's INPUT_SCHEMA is unchanged (_strict_schema drops defaults and marks every property required), so real strict-mode output always carries the flag; only raw input real extractors never produce shows it.",
+    "demo_output": "orig: ExtractedFields required ['is_deal_request']; raw without is_deal_request -> ExtractionError | mut: required None; raw without is_deal_request -> is_deal_request True",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_missing_is_deal_request_is_rejected",
+      "file": "tests/test_claude_strict.py",
+      "asserts": "parse_requirement({'state': 'TX'}) raises ExtractionError, and 'is_deal_request' is in ExtractedFields.model_json_schema()['required'] with no default."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "gate-35",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "is_licensed",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "State checked by substring (state in license_state), so a deal state '' / 'T' / 'X' matches TX brokers.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -39,7 +39,7 @@\n     \"\"\"\n     return (\n         state is not None\n-        and broker.license_state == state\n+        and state in broker.license_state\n         and broker.license_status == \"Active\"\n         and broker.license_expiration is not None\n         and broker.license_expiration >= as_of\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.89s",
+    "verified": "differs",
+    "verifier_note": "With a deal state of '' or a single letter of the broker's code ('T'/'X'), the original refuses an Active TX broker and the mutant licenses it, returning it from match() and POST /match (via a model_construct requirement). DealRequirement validation turns ''/whitespace into None and rejects 'T', and parse_requirement validates every real extractor's output, so only a direct is_licensed call or a model_construct requirement reaches it. Verifier rated it low under the reachability rule; the lead raised it to medium because it is a gate bypass through the public is_licensed(state: str | None) signature, with no test that is_licensed itself rejects partial states.",
+    "demo_output": "orig: is_licensed(TX broker) for TX/''/T/X/TXX -> [True, False, False, False, False]; match(model_construct state='T') -> [] excluded 1; POST /match (fake extractor, model_construct state='T') -> 200 [] excluded 1 | mut: is_licensed -> [True, True, True, True, False]; match -> ['fx-demo-01'] excluded 0; POST /match -> 200 ['fx-demo-01'] excluded 0",
+    "severity": "medium",
+    "proposed_test": {
+      "name": "test_is_licensed_rejects_partial_or_empty_state",
+      "file": "tests/test_matcher.py",
+      "asserts": "For an Active, unexpired TX broker, is_licensed returns False for state '', 'T', 'X' and 'TXX' and True only for 'TX'; match() on DealRequirement.model_construct(is_deal_request=True, state='T', ...) returns no matches with excluded_for_licensing == 1."
+    },
+    "proposed_fixture": null,
+    "verifier_severity": "low"
+  },
+  {
+    "id": "gate-36",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "is_licensed",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Status compared after .strip(), so padded statuses like 'Active ' or ' Active' pass the exact-'Active' gate.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -40,7 +40,7 @@\n     return (\n         state is not None\n         and broker.license_state == state\n-        and broker.license_status == \"Active\"\n+        and broker.license_status.strip() == \"Active\"\n         and broker.license_expiration is not None\n         and broker.license_expiration >= as_of\n     )\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_compliance.py::test_status_must_be_exactly_active[ Active]",
+      "tests/test_compliance.py::test_status_must_be_exactly_active[Active ]"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 13.30s"
+  },
+  {
+    "id": "gate-37",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "is_licensed",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Expiration compared as US-format MM/DD/YYYY strings, so e.g. a license that expired 12/01/2025 sorts after 10/20/2026 and passes, while valid January expirations are rejected.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -42,7 +42,7 @@\n         and broker.license_state == state\n         and broker.license_status == \"Active\"\n         and broker.license_expiration is not None\n-        and broker.license_expiration >= as_of\n+        and broker.license_expiration.strftime(\"%m/%d/%Y\") >= as_of.strftime(\"%m/%d/%Y\")\n     )\n \n \n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_compliance.py::test_as_of_is_respected_not_the_clock",
+      "tests/test_compliance.py::test_duplicate_broker_id_returns_only_the_licensed_record",
+      "tests/test_compliance.py::test_is_licensed_agrees_with_oracle[OK-tx-049~wrong-state]",
+      "tests/test_compliance.py::test_is_licensed_agrees_with_oracle[OK-tx-086~wrong-state]",
+      "tests/test_compliance.py::test_is_licensed_agrees_with_oracle[TX-tx-038]",
+      "tests/test_compliance.py::test_is_licensed_agrees_with_oracle[TX-tx-075]",
+      "tests/test_compliance.py::test_is_licensed_agrees_with_oracle[TX-tx-149]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h01]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h03]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h06]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h07]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h08]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h10]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h14]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s01]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s03]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s04]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s07]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s08]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s09]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s13]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s15]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s18]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s19]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s21]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s23]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s24]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s25]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s27]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s30]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s31]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s32]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s33]",
+      "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s34]",
+      "tests/test_compliance.py::test_state_must_match_exactly",
+      "tests/test_matcher.py::test_arlington_va_does_not_return_tarrant_county_tx_brokers",
+      "tests/test_matcher.py::test_broker_individual_gets_no_referral_note",
+      "tests/test_matcher.py::test_county_fallback_does_not_apply_outside_tx",
+      "tests/test_matcher.py::test_deal_value_inside_inclusive_bounds_scores_1[1000000]",
+      "tests/test_matcher.py::test_deal_value_inside_inclusive_bounds_scores_1[500000]",
+      "tests/test_matcher.py::test_deal_value_inside_inclusive_bounds_scores_1[750000]",
+      "tests/test_matcher.py::test_deal_value_outside_bounds_scores_0[1000001]",
+      "tests/test_matcher.py::test_deal_value_outside_bounds_scores_0[499999]",
+      "tests/test_matcher.py::test_deal_value_with_unknown_bound_scores_0[500000-None]",
+      "tests/test_matcher.py::test_deal_value_with_unknown_bound_scores_0[None-1000000]",
+      "tests/test_matcher.py::test_deal_value_with_unknown_bound_scores_0[None-None]",
+      "tests/test_matcher.py::test_equal_score_and_reasons_breaks_tie_by_broker_id_asc",
+      "tests/test_matcher.py::test_equal_score_breaks_tie_by_reason_count_desc",
+      "tests/test_matcher.py::test_every_point_reason_starts_with_its_amount",
+      "tests/test_matcher.py::test_excluded_count_is_not_limited_by_limit",
+      "tests/test_matcher.py::test_excluded_counts_each_unlicensed_broker",
+      "tests/test_matcher.py::test_fields_absent_in_requirement_give_no_points",
+      "tests/test_matcher.py::test_full_fit_scores_8_with_one_reason_per_rule",
+      "tests/test_matcher.py::test_licensed_score_0_returned_last",
+      "tests/test_matcher.py::test_limit_caps_matches",
+      "tests/test_matcher.py::test_limit_keeps_the_best_ranked",
+      "tests/test_matcher.py::test_market_and_county_together_award_market_points_once",
+      "tests/test_matcher.py::test_market_match_by_city_scores_2",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[AUSTIN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[aUsTiN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[austin]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive_on_broker_side",
+      "tests/test_matcher.py::test_market_match_is_exact_not_substring",
+      "tests/test_matcher.py::test_orders_by_score_desc",
+      "tests/test_matcher.py::test_property_type_match_scores_3",
+      "tests/test_matcher.py::test_property_type_mismatch_scores_0",
+      "tests/test_matcher.py::test_reason_count_tie_break_ignores_sales_agent_note",
+      "tests/test_matcher.py::test_sales_agent_gets_exact_referral_note_worth_0_points",
+      "tests/test_matcher.py::test_sales_agent_with_score_0_still_returned_with_note",
+      "tests/test_matcher.py::test_transaction_type_match_scores_2",
+      "tests/test_matcher.py::test_trap_fx03_inactive_perfect_fit_excluded",
+      "tests/test_matcher.py::test_trap_fx05_active_but_expired_excluded",
+      "tests/test_matcher.py::test_trap_fx07_active_unknown_expiration_excluded",
+      "tests/test_matcher.py::test_trap_fx25_suspended_excluded_and_kansas_city_wrong_state",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[arlington-Tarrant]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[austin-Travis]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[dallas-Dallas]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[el paso-El Paso]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[fort worth-Tarrant]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[houston-Harris]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[plano-Collin]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[san antonio-Bexar]",
+      "tests/test_matcher.py::test_tx_county_fallback_unknown_city_scores_0",
+      "tests/test_matcher.py::test_tx_county_fallback_wrong_county_scores_0",
+      "tests/test_matcher.py::test_tx_unknown_city_does_not_match_broker_with_unknown_county",
+      "tests/test_matcher.py::test_wrong_state_portland_me_vs_or",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[az-expired-broker]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-string-coerced]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[fl-inactive-broker]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[ga-no-expiration-broker]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[huge-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-notes]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-yes-validated]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-empty-despite-nulls]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-missing-fields-empty]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-lowercase]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-whitespace]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+      "tests/test_red_team.py::test_known_regex_state_leaks_are_pinned",
+      "tests/test_red_team.py::test_regex_path_is_not_vacuous",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-01]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-02]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-03]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-04]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-05]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-06]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-07]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-09]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-10]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-11]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-16]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-17]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-18]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-19]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-21]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-22]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-23]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-24]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-25]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-27]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-28]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-30]"
+    ],
+    "suite": "123 failed, 879 passed, 2 skipped, 5 xfailed, 2 warnings in 14.10s"
+  },
+  {
+    "id": "gate-38",
+    "round": 2,
+    "author": "gate-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "API forces is_deal_request=True before matching, so non-deal posts (news, hiring) with a state return licensed brokers and nonzero excluded counts.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -372,7 +372,7 @@\n \n     # Licensing gating, non-deal posts and missing states are the matcher's job; the API only\n     # reshapes what it returns.\n-    result = match(requirement, brokers, as_of)\n+    result = match(requirement.model_copy(update={\"is_deal_request\": True}), brokers, as_of)\n     matches = [\n         BrokerMatch(\n             broker_id=m.broker.broker_id,\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_non_deal_post_has_no_matches_and_no_follow_up",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[non-deal-with-full-requirement]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-is-deal-request-zero]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-non-deal-with-missing-fields]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-29]"
+    ],
+    "suite": "5 failed, 997 passed, 2 skipped, 5 xfailed, 2 warnings in 12.82s"
+  },
+  {
+    "id": "match-22",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_market_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "County fallback applied to non-TX deals, so an Arlington VA deal gives +2 to a Tarrant County TX broker (same-state licensing still gates, but ranking is wrong).",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -69,7 +69,7 @@\n     city = req.city.strip().lower()\n     if city in {m.strip().lower() for m in broker.markets}:\n         return 2, f\"+2 serves {req.city}\"\n-    county = TX_CITY_TO_COUNTY.get(city) if req.state == \"TX\" else None\n+    county = TX_CITY_TO_COUNTY.get(city)\n     if county is not None and county == broker.county:\n         return 2, f\"+2 based in {county} County, which covers {req.city}\"\n     return None\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_county_fallback_does_not_apply_outside_tx"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 12.77s"
+  },
+  {
+    "id": "match-23",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_market_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Drops the county-is-not-None guard, so a city missing from the map 'matches' any broker whose county is also unknown (None == None) and gets +2.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -70,7 +70,7 @@\n     if city in {m.strip().lower() for m in broker.markets}:\n         return 2, f\"+2 serves {req.city}\"\n     county = TX_CITY_TO_COUNTY.get(city) if req.state == \"TX\" else None\n-    if county is not None and county == broker.county:\n+    if county == broker.county:\n         return 2, f\"+2 based in {county} County, which covers {req.city}\"\n     return None\n \n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_market_match_is_exact_not_substring",
+      "tests/test_matcher.py::test_tx_unknown_city_does_not_match_broker_with_unknown_county"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 10.73s"
+  },
+  {
+    "id": "match-24",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_market_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "City compared case-sensitively against raw market strings, so 'austin' or 'Austin ' no longer match a broker listing 'Austin'.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -67,7 +67,7 @@\n     if req.city is None:\n         return None\n     city = req.city.strip().lower()\n-    if city in {m.strip().lower() for m in broker.markets}:\n+    if req.city in set(broker.markets):\n         return 2, f\"+2 serves {req.city}\"\n     county = TX_CITY_TO_COUNTY.get(city) if req.state == \"TX\" else None\n     if county is not None and county == broker.county:\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[AUSTIN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[aUsTiN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[austin]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive_on_broker_side"
+    ],
+    "suite": "4 failed, 998 passed, 2 skipped, 5 xfailed, 2 warnings in 10.73s"
+  },
+  {
+    "id": "match-25",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_deal_size_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Deal-size bounds made exclusive, so a deal exactly at a broker's min or max no longer earns the +1.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -78,7 +78,7 @@\n def _deal_size_point(req: DealRequirement, broker: Broker) -> Point | None:\n     \"\"\"Only a fully known range counts; an open-ended range says nothing about fit.\"\"\"\n     lo, hi, value = broker.min_deal_usd, broker.max_deal_usd, req.deal_value_usd\n-    if value is None or lo is None or hi is None or not lo <= value <= hi:\n+    if value is None or lo is None or hi is None or not lo < value < hi:\n         return None\n     return 1, f\"+1 deal size ${value:,} is within their ${lo:,}\\u2013${hi:,} range\"\n \n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_deal_value_inside_inclusive_bounds_scores_1[1000000]",
+      "tests/test_matcher.py::test_deal_value_inside_inclusive_bounds_scores_1[500000]"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 10.58s"
+  },
+  {
+    "id": "match-26",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_deal_size_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Open-ended ranges are filled with 0 / 10**12, so a broker with an unknown min or max gets +1 for any deal size.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -77,7 +77,7 @@\n \n def _deal_size_point(req: DealRequirement, broker: Broker) -> Point | None:\n     \"\"\"Only a fully known range counts; an open-ended range says nothing about fit.\"\"\"\n-    lo, hi, value = broker.min_deal_usd, broker.max_deal_usd, req.deal_value_usd\n+    lo, hi, value = broker.min_deal_usd or 0, broker.max_deal_usd or 10**12, req.deal_value_usd\n     if value is None or lo is None or hi is None or not lo <= value <= hi:\n         return None\n     return 1, f\"+1 deal size ${value:,} is within their ${lo:,}\\u2013${hi:,} range\"\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_deal_value_with_unknown_bound_scores_0[500000-None]",
+      "tests/test_matcher.py::test_deal_value_with_unknown_bound_scores_0[None-1000000]",
+      "tests/test_matcher.py::test_deal_value_with_unknown_bound_scores_0[None-None]",
+      "tests/test_matcher.py::test_equal_score_breaks_tie_by_reason_count_desc",
+      "tests/test_matcher.py::test_real_tx_rows_earn_county_point_for_austin",
+      "tests/test_matcher.py::test_reason_count_tie_break_ignores_sales_agent_note"
+    ],
+    "suite": "6 failed, 996 passed, 2 skipped, 5 xfailed, 2 warnings in 10.40s"
+  },
+  {
+    "id": "match-27",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_property_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Property match scores 2 points while the reason still says +3, so score and reasons disagree and property ties with transaction/market.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -48,7 +48,7 @@\n \n def _property_point(req: DealRequirement, broker: Broker) -> Point | None:\n     if req.property_type is not None and req.property_type in broker.property_types:\n-        return 3, f\"+3 specializes in {req.property_type.value}\"\n+        return 2, f\"+3 specializes in {req.property_type.value}\"\n     return None\n \n \n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_equal_score_breaks_tie_by_reason_count_desc",
+      "tests/test_matcher.py::test_full_fit_scores_8_with_one_reason_per_rule",
+      "tests/test_matcher.py::test_fx19_sales_agent_in_real_data_gets_note",
+      "tests/test_matcher.py::test_orders_by_score_desc",
+      "tests/test_matcher.py::test_property_type_match_scores_3",
+      "tests/test_matcher.py::test_reason_count_tie_break_ignores_sales_agent_note",
+      "tests/test_matcher.py::test_sales_agent_gets_exact_referral_note_worth_0_points"
+    ],
+    "suite": "7 failed, 995 passed, 2 skipped, 5 xfailed, 2 warnings in 9.93s"
+  },
+  {
+    "id": "match-28",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_transaction_point",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Transaction reason drops the transaction type ('+2 handles deals'), so the explanation no longer says which deal type matched.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -54,7 +54,7 @@\n \n def _transaction_point(req: DealRequirement, broker: Broker) -> Point | None:\n     if req.transaction_type is not None and req.transaction_type in broker.transaction_types:\n-        return 2, f\"+2 handles {req.transaction_type.value} deals\"\n+        return 2, f\"+2 handles deals\"\n     return None\n \n \n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.91s",
+    "verified": "differs",
+    "verifier_note": "One synthetic TX broker (fx-demo-01) with transaction_types=[lease] and a TX lease deal: the original reason reads '+2 handles lease deals', the mutant '+2 handles deals'. Score and '+2' prefix are unchanged and the reason goes to clients in POST /match. Tests only parse the leading '+N' (point_amounts/point_total), never the transaction reason text.",
+    "demo_output": "orig: ['+2 handles lease deals'] | mut: ['+2 handles deals']",
+    "severity": "medium",
+    "proposed_test": {
+      "name": "test_transaction_reason_names_the_transaction_type",
+      "file": "tests/test_matcher.py",
+      "asserts": "For a TX broker with transaction_types=[lease] and a lease deal, reasons == ['+2 handles lease deals']; parametrized over every TransactionType, its .value appears in the reason."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "match-29",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_score",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Sales Agent detection checks license_type != 'Broker', so 'Broker Individual' licensees also get the sponsoring-broker referral note.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -90,7 +90,7 @@\n     \"\"\"Return the match and how many rules earned points (the first tie-breaker).\"\"\"\n     points = [p for rule in RULES if (p := rule(req, broker)) is not None]\n     reasons = [text for _, text in points]\n-    if broker.license_type == \"Sales Agent\":\n+    if broker.license_type != \"Broker\":\n         reasons.append(SALES_AGENT_NOTE)\n     return Match(broker=broker, score=sum(n for n, _ in points), reasons=reasons), len(points)\n \n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_broker_individual_gets_no_referral_note",
+      "tests/test_matcher.py::test_tx_unknown_city_does_not_match_broker_with_unknown_county"
+    ],
+    "suite": "2 failed, 1000 passed, 2 skipped, 5 xfailed, 2 warnings in 9.90s"
+  },
+  {
+    "id": "match-30",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Final tie-break uses broker name instead of broker_id, so equal-score ties order by name and are not deterministic for duplicate names.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -107,7 +107,7 @@\n     licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n     scored = sorted(\n         (_score(req, b) for b in licensed),\n-        key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n+        key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.name),\n     )\n     return MatchResult(\n         matches=[m for m, _ in scored[: max(limit, 0)]],\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.77s",
+    "verified": "differs",
+    "verifier_note": "Two synthetic TX retail brokers with equal score and reason count whose ids and names sort opposite ways: the original ranks by id (fx-demo-01 first), the mutant by name (fx-demo-02 first). In the shipped data names and ids sort the same within every license_state (and only same-state brokers can tie), so POST /match can't show it today; make_broker names brokers 'Fictional Broker {id}', so the existing tie-break test's names sort like its ids.",
+    "demo_output": "orig: [('fx-demo-01','Fictional Zeta Realty',3), ('fx-demo-02','Fictional Alpha Realty',3)] | mut: [('fx-demo-02','Fictional Alpha Realty',3), ('fx-demo-01','Fictional Zeta Realty',3)]",
+    "severity": "medium",
+    "proposed_test": {
+      "name": "test_tie_break_uses_broker_id_not_name",
+      "file": "tests/test_matcher.py",
+      "asserts": "Two equally scored TX retail brokers, make_broker('b-1', name='Fictional Zeta') and make_broker('b-2', name='Fictional Alpha'), come back as ['b-1', 'b-2'] whichever order they are passed in."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "match-31",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Limit applied before ranking: only the first `limit` licensed brokers (in input order) are scored, so better-fit brokers later in the list are dropped.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -106,10 +106,10 @@\n         return MatchResult(matches=[], excluded_for_licensing=0)\n     licensed = [b for b in brokers if is_licensed(b, req.state, as_of)]\n     scored = sorted(\n-        (_score(req, b) for b in licensed),\n+        (_score(req, b) for b in licensed[: max(limit, 0)]),\n         key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n     )\n     return MatchResult(\n-        matches=[m for m, _ in scored[: max(limit, 0)]],\n+        matches=[m for m, _ in scored],\n         excluded_for_licensing=len(brokers) - len(licensed),\n     )\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_limit_keeps_the_best_ranked"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 10.19s"
+  },
+  {
+    "id": "match-32",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Limit floor is 1 instead of 0, so limit=0 (or negative) still returns the top broker.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -110,6 +110,6 @@\n         key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n     )\n     return MatchResult(\n-        matches=[m for m, _ in scored[: max(limit, 0)]],\n+        matches=[m for m, _ in scored[: max(limit, 1)]],\n         excluded_for_licensing=len(brokers) - len(licensed),\n     )\n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 10.26s",
+    "verified": "differs",
+    "verifier_note": "Two licensed synthetic TX brokers, match(..., limit=0) and limit=-1: original [] , mutant one (licensed) broker, breaking 'at most limit'. POST /match never passes a limit (default 5), so only a direct call shows it; the smallest limit any test uses is 1.",
+    "demo_output": "orig: limit=0 -> [], limit=-1 -> [] | mut: limit=0 -> ['fx-demo-01'], limit=-1 -> ['fx-demo-01']",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_limit_zero_or_negative_returns_no_matches",
+      "file": "tests/test_matcher.py",
+      "asserts": "With three licensed TX brokers, match(req, brokers, AS_OF, limit=0).matches == [] and limit=-1 also gives [], with excluded_for_licensing == 0."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "match-33",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Default limit changed from 5 to 10, so callers that rely on the default (the API) get up to 10 matches.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -95,7 +95,7 @@\n     return Match(broker=broker, score=sum(n for n, _ in points), reasons=reasons), len(points)\n \n \n-def match(req: DealRequirement, brokers: list[Broker], as_of: date, limit: int = 5) -> MatchResult:\n+def match(req: DealRequirement, brokers: list[Broker], as_of: date, limit: int = 10) -> MatchResult:\n     \"\"\"Gate on licensing first, then rank; licensed brokers with no fit still appear, last.\n \n     A non-deal post isn't checked against anyone, so nobody counts as excluded. A deal\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_limit_caps_matches",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[huge-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-notes]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-yes-validated]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-empty-despite-nulls]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-missing-fields-empty]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-01]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-04]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-21]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-28]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-30]"
+    ],
+    "suite": "13 failed, 989 passed, 2 skipped, 5 xfailed, 2 warnings in 10.39s"
+  },
+  {
+    "id": "match-34",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "_score",
+      "file": "deal_board/matcher.py"
+    },
+    "description": "Score counts rules matched instead of summing their points, so every matching rule is worth 1 and property/transaction weighting is lost.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -92,7 +92,7 @@\n     reasons = [text for _, text in points]\n     if broker.license_type == \"Sales Agent\":\n         reasons.append(SALES_AGENT_NOTE)\n-    return Match(broker=broker, score=sum(n for n, _ in points), reasons=reasons), len(points)\n+    return Match(broker=broker, score=len(points), reasons=reasons), len(points)\n \n \n def match(req: DealRequirement, brokers: list[Broker], as_of: date, limit: int = 5) -> MatchResult:\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_matcher.py::test_all_matches_reasons_sum_to_score_on_real_data",
+      "tests/test_matcher.py::test_equal_score_breaks_tie_by_reason_count_desc",
+      "tests/test_matcher.py::test_full_fit_scores_8_with_one_reason_per_rule",
+      "tests/test_matcher.py::test_fx19_sales_agent_in_real_data_gets_note",
+      "tests/test_matcher.py::test_market_and_county_together_award_market_points_once",
+      "tests/test_matcher.py::test_market_match_by_city_scores_2",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[AUSTIN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[aUsTiN]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive[austin]",
+      "tests/test_matcher.py::test_market_match_is_case_insensitive_on_broker_side",
+      "tests/test_matcher.py::test_orders_by_score_desc",
+      "tests/test_matcher.py::test_property_type_match_scores_3",
+      "tests/test_matcher.py::test_real_tx_rows_earn_county_point_for_austin",
+      "tests/test_matcher.py::test_reason_count_tie_break_ignores_sales_agent_note",
+      "tests/test_matcher.py::test_sales_agent_gets_exact_referral_note_worth_0_points",
+      "tests/test_matcher.py::test_transaction_type_match_scores_2",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[arlington-Tarrant]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[austin-Travis]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[dallas-Dallas]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[el paso-El Paso]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[fort worth-Tarrant]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[houston-Harris]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[plano-Collin]",
+      "tests/test_matcher.py::test_tx_county_fallback_scores_2[san antonio-Bexar]"
+    ],
+    "suite": "24 failed, 978 passed, 2 skipped, 5 xfailed, 2 warnings in 10.29s"
+  },
+  {
+    "id": "api-11",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "MatchResponse",
+      "file": "deal_board/api.py"
+    },
+    "description": "Field(ge=0) removed from excluded_for_licensing, so a negative count from a buggy matcher is returned instead of failing validation.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -96,7 +96,7 @@\n     extractor: Literal[\"claude\", \"regex\"]\n     requirement: DealRequirement\n     matches: list[BrokerMatch]\n-    excluded_for_licensing: int = Field(ge=0)\n+    excluded_for_licensing: int\n     follow_up_question: str | None\n \n \n",
+    "status": "survived",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 10.01s",
+    "verified": "differs",
+    "verifier_note": "An overridden get_matcher returning excluded_for_licensing=-1: the original fails MatchResponse validation (500), the mutant returns 200 with the negative count. The real matcher's len(brokers) - len(licensed) is never negative, so only a fake matcher or a direct MatchResponse(...) shows it; no test feeds a negative count.",
+    "demo_output": "orig: 500 Internal Server Error | mut: 200 {...excluded_for_licensing: -1...}",
+    "severity": "low",
+    "proposed_test": {
+      "name": "test_match_response_rejects_negative_excluded_count",
+      "file": "tests/test_api.py",
+      "asserts": "MatchResponse(extractor='regex', requirement=FULL_TX_DEAL, matches=[], excluded_for_licensing=-1, follow_up_question=None) raises pydantic.ValidationError; with a fake matcher returning excluded=-1, POST /match via TestClient(raise_server_exceptions=False) does not return 200."
+    },
+    "proposed_fixture": null
+  },
+  {
+    "id": "api-12",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "follow_up_question always None, so posts missing state or other key fields never get the follow-up question.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -402,5 +402,5 @@\n         requirement=requirement,\n         matches=matches,\n         excluded_for_licensing=result.excluded_for_licensing,\n-        follow_up_question=follow_up_question(requirement),\n+        follow_up_question=None,\n     )\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_follow_up_targets_remaining_gap_when_state_is_known",
+      "tests/test_api.py::test_missing_state_excludes_everyone_and_asks_for_state",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-no-state]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-with-follow-up]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-20]"
+    ],
+    "suite": "5 failed, 1000 passed, 2 skipped, 2 xfailed, 2 warnings in 10.01s"
+  },
+  {
+    "id": "api-13",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Response requirement has missing_fields cleared, so the client is told nothing is missing even when state/city are null.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -399,7 +399,7 @@\n         # Extractor.name is a plain str; MatchResponse validates it against the Literal at runtime\n         # (an unknown name fails validation, as before), so the cast only informs the type checker.\n         extractor=cast(Literal[\"claude\", \"regex\"], extractor.name),\n-        requirement=requirement,\n+        requirement=requirement.model_copy(update={\"missing_fields\": []}),\n         matches=matches,\n         excluded_for_licensing=result.excluded_for_licensing,\n         follow_up_question=follow_up_question(requirement),\n",
+    "status": "equivalent",
+    "killed_by": [],
+    "suite": "1002 passed, 2 skipped, 5 xfailed, 2 warnings in 9.99s",
+    "verified": "equivalent",
+    "verifier_note": "Equivalent: building MatchResponse re-runs DealRequirement's after-validator _compute_missing on the passed instance (pydantic 2.14.1), so missing_fields is recomputed from the unchanged other fields; follow_up_question uses the original object in both versions. No client-visible difference on POST /match or a direct match_post call.",
+    "demo_output": "orig: http and direct missing_fields=['city','property_type','transaction_type','deal_value_usd','timeline'] | mut: identical on both paths"
+  },
+  {
+    "id": "api-14",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "API reshapes only the first 3 matches, silently truncating the matcher's ranked list.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -383,7 +383,7 @@\n             score=m.score,\n             reasons=list(m.reasons),\n         )\n-        for m in result.matches\n+        for m in result.matches[:3]\n     ]\n \n     logger.info(\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[huge-deal-value]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-notes]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-yes-validated]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-empty-despite-nulls]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-missing-fields-empty]",
+      "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-01]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-04]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-21]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-28]",
+      "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-30]"
+    ],
+    "suite": "12 failed, 990 passed, 2 skipped, 5 xfailed, 2 warnings in 10.14s"
+  },
+  {
+    "id": "api-15",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "BrokerMatch.score is len(reasons) instead of the matcher's score, so reported scores are wrong (and inflated by the Sales Agent note).",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -380,7 +380,7 @@\n             source=m.broker.source,\n             license_number=m.broker.license_number,\n             license_type=m.broker.license_type,\n-            score=m.score,\n+            score=len(m.reasons),\n             reasons=list(m.reasons),\n         )\n         for m in result.matches\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 8.87s"
+  },
+  {
+    "id": "api-16",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Reasons are sorted alphabetically, so the Sales Agent compliance note and point lines lose their order.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -381,7 +381,7 @@\n             license_number=m.broker.license_number,\n             license_type=m.broker.license_type,\n             score=m.score,\n-            reasons=list(m.reasons),\n+            reasons=sorted(m.reasons),\n         )\n         for m in result.matches\n     ]\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 8.76s"
+  },
+  {
+    "id": "api-17",
+    "round": 2,
+    "author": "match-api-writer",
+    "target": {
+      "function": "match_post",
+      "file": "deal_board/api.py"
+    },
+    "description": "Extractor name hardcoded to 'regex', so Claude-extracted responses are mislabeled.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -398,7 +398,7 @@\n     return MatchResponse(\n         # Extractor.name is a plain str; MatchResponse validates it against the Literal at runtime\n         # (an unknown name fails validation, as before), so the cast only informs the type checker.\n-        extractor=cast(Literal[\"claude\", \"regex\"], extractor.name),\n+        extractor=\"regex\",\n         requirement=requirement,\n         matches=matches,\n         excluded_for_licensing=result.excluded_for_licensing,\n",
+    "status": "killed",
+    "killed_by": [
+      "tests/test_api.py::test_full_deal_returns_matches_in_matcher_order"
+    ],
+    "suite": "1 failed, 1001 passed, 2 skipped, 5 xfailed, 2 warnings in 8.77s"
   }
 ]
