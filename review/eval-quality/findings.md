@@ -1,8 +1,8 @@
 # Eval method + code quality review: findings
 
-Branch `review-eval-quality`. 27 confirmed, 4 rejected (eval_method 13/2, code_quality 14/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
+Branch `review-eval-quality`. 29 confirmed, 4 rejected (eval_method 13/2, code_quality 16/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
 
-**Loop status: not converged.** Four rounds (the cap) confirmed 13, 9, 2 and 3 new findings. In round 4 the eval-method reviewer found nothing new; the 3 confirmations were code-quality test gaps found by mutation testing. `check_success.py` check (c) therefore fails by design; see `LOG.md`.
+**Loop status: in progress.** Rounds 1-5 confirmed 13, 9, 2, 3 and 2 new findings; round 6 is pending. The eval-method reviewer found nothing new in rounds 4 and 5. See `LOG.md`.
 
 ## Confirmed findings (by severity)
 
@@ -24,6 +24,8 @@ Branch `review-eval-quality`. 27 confirmed, 4 rejected (eval_method 13/2, code_q
 | CQ-42 | low | code_quality | Dev-vs-full --compare test asserts only header text, so it passes on an empty comparison and misses full-run-first order | `tests/test_eval_compare.py:158` |
 | CQ-43 | low | code_quality | summarize_repeats, the --repeats 'noise floor' summary, is effectively untested | `scripts/eval.py:351` |
 | CQ-5 | low | code_quality | test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested | `tests/test_eval.py:58` |
+| CQ-51 | low | code_quality | Scorer and matcher define city equality differently, so the eval counts cities as correct that the matcher can't use | `scoring.py:81` |
+| CQ-52 | low | code_quality | Explicit --extractor claude with no API key silently runs regex instead, writes regex results and exits 0 | `scripts/eval.py:532` |
 | CQ-7 | low | code_quality | Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it | `loop/check_success.py:65` |
 | CQ-8 | low | code_quality | score() hard-codes the good-outcome tuple for its failures list instead of using GOOD_OUTCOMES | `scoring.py:203` |
 | EM-2 | low | eval_method | README overstates the loop's keep rule: iteration 2 was kept with state and city each down 3.5 pts | `README.md:72` |
@@ -44,7 +46,7 @@ Branch `review-eval-quality`. 27 confirmed, 4 rejected (eval_method 13/2, code_q
 4. **README honesty fixes (EM-2, EM-3).** State the real keep tolerance, add run-to-run spread and paired p-values to the iteration table, and report the 11 untuned posts. Cheap, and it pre-empts the obvious reviewer question.
 5. **Make the label tests able to fail on bad labels (CQ-22, CQ-23).** Round-trip every label in `test_data.py`, and stop the back-compat test pinning current labels, or the EM-7/EM-8 label fixes will look like regressions.
 6. **Latent provenance, error handling and duplication (EM-6, EM-24, CQ-7, CQ-8, CQ-5, CQ-21, CQ-24).** Store text/label hashes in results, exclude errored posts from hallucination denominators, gate on rescored rather than stored scores, use one good-outcome predicate, reject any `stop_reason` other than `tool_use`, and make `load_run` exit 2 on non-JSON.
-7. **Smaller test gaps (CQ-42, CQ-43).** Assert on `--compare` content in both argument orders; unit-test `summarize_repeats`.
+7. **Smaller test gaps and CLI/matcher drift (CQ-42, CQ-43, CQ-51, CQ-52).** Assert on `--compare` content in both argument orders; unit-test `summarize_repeats`; share one city normaliser between scorer and matcher; make an explicit `--extractor claude` without a key fail instead of running regex.
 8. **Docs (EM-22, EM-23, EM-25, EM-31).** Reword the holdout-independence claim to what is recorded (h08 repeats s04's sentence), fix the timeline diagnosis before acting on DRAFT backlog item 1, mark `baseline-v1_comparison.json` as old-metric, and refresh the stale README claims.
 
 
@@ -454,6 +456,58 @@ results/*.json: 0 records with raw=None
 **Fix.** Call ev.rescore_records in test_eval.py:58 and add a refusal record to the rescore tests.
 
 **Regression test.** test_rescore_records_keeps_refusal_error: rescore_records({'t1': {'raw': None, 'prediction': None, 'error': 'refused'}}) keeps error 'refused' and score() counts is_deal_request error == 1.
+
+### CQ-51 (low, code_quality): Scorer and matcher define city equality differently, so the eval counts cities as correct that the matcher can't use
+
+`scoring.py:81`
+
+```
+    if field == "city":  # "St. Louis," == "st  louis"; no spelling tolerance
+```
+
+**Claim.** scoring.normalize('city') drops periods and commas, collapses whitespace and lowercases; matcher._market_point compares req.city.strip().lower() with broker markets that are only stripped and lowercased, and uses that key for the Texas county lookup. So 'St Louis', 'st. louis,' or 'St.  Louis' for gold 'St. Louis' score 'correct' but lose the +2 market point against fx-24 (8 -> 6), and 'San  Antonio'/'San Antonio,' in TX score 'correct' but miss the Bexar county point (tx-056: 2 -> 0). The eval's city accuracy is looser than what the product can use, and the two private normalisations can drift further. tests/test_eval.py:34/41 pin the looser rule. Latent: no current post depends on it.
+
+**Verifier.** Neither the schema validator nor Broker._split_list normalises punctuation; nothing documents the looser scorer rule as deliberate. Distinct from CQ-41 (untested rules): here two rules already disagree. Latent, low.
+
+**Reproduction output.**
+
+```
+pred='St. Louis' scorer=correct fx-24 score=8 (+2 serves St. Louis)
+pred='St Louis' scorer=correct fx-24 score=6
+pred='st. louis,' scorer=correct fx-24 score=6
+pred='San Antonio' TX scorer=correct tx-056 score=2 (+2 Bexar County)
+pred='San  Antonio' scorer=correct tx-056 score=0
+pred='San Antonio,' scorer=correct tx-056 score=0
+```
+
+**Fix.** One normalize_city() used by scoring.normalize, matcher._market_point (both sides) and the TX county lookup — or canonicalise in the DealRequirement validator and Broker._split_list.
+
+**Regression test.** For each variant in ('St Louis','st. louis,','St.  Louis'): scorer says correct AND matcher gives fx-24 the '+2 serves' reason; TX 'San  Antonio' gets tx-056's Bexar point.
+
+### CQ-52 (low, code_quality): Explicit --extractor claude with no API key silently runs regex instead, writes regex results and exits 0
+
+`scripts/eval.py:532`
+
+```
+    if "claude" in names and not os.environ.get("ANTHROPIC_API_KEY"):
+```
+
+**Claim.** The missing-key fallback meant for the default `--extractor all` also applies to an explicit `--extractor claude`: it swaps in the regex baseline, writes regex_*.json/.md per repeat, prints only a NOTE and exits 0, contradicting the docstring's `--extractor claude --repeats 3  # run-to-run variance`. In the loop's Measure step (`--extractor claude --split dev` x3, results committed) a missing key looks like success: unrequested regex files land in the permanent results/ log and the iteration is wasted. check_success ignores regex_* files, so its dev gate does later fail with 'need 3 dev runs'.
+
+**Verifier.** load_dotenv runs only under __main__, so the in-process run could not pick up a key. Low because the gate fails loudly later.
+
+**Reproduction output.**
+
+```
+exit: 0
+NOTE: ANTHROPIC_API_KEY is not set, so the Claude extractor was skipped. Running the regex baseline only.
+files: regex_..._r1/_r2/_r3 .json and .md
+cache files: []
+```
+
+**Fix.** Keep the fallback for `--extractor all` only; for an explicit `--extractor claude` without a key, exit non-zero before writing anything.
+
+**Regression test.** With ANTHROPIC_API_KEY unset, ev.main(['--extractor','claude','--split','dev','--results-dir',tmp,'--cache-dir',tmp/'c']) raises SystemExit with a non-zero code and writes no files.
 
 ### CQ-7 (low, code_quality): Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it
 

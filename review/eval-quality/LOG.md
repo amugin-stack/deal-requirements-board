@@ -43,9 +43,18 @@ are embedded verbatim in `findings.json`.
 - rejected: 0 (CQ-43's rescore_records call-provenance part dropped as a variant of CQ-5)
 - new_confirmed: 3
 
-## Outcome: not converged
+## Outcome after round 4: not converged (superseded)
 
 The loop stopped at the 4-round cap with new_confirmed per round 13, 9, 2, 3. Round 4's eval_method reviewer found
 nothing new; all three round-4 confirmations are code_quality test gaps found by mutation testing (one medium, two
 low), not new measurement defects. Because the last round is not 0, `check_success.py` check (c) fails by design.
-A fifth round would need the orchestrator's go-ahead.
+A fifth round would need the orchestrator's go-ahead. The orchestrator then asked for up to two more rounds (5 and 6), with the rule that a missing-test finding for a contract an existing finding already covers is folded into that finding rather than counted as new.
+
+## Round 5
+
+- reviewers given all 31 findings, the clean-surface notes, and the orchestrator's folding rule for test-gap findings
+- reviewers: eval_method returned 0 candidates (checked: README regex-bug claims vs golden and stored predictions, 'fields guessed' definition, HANDOFF final-look procedure vs git history, every label vs its label_note across three sets, docs/agent-graphs vs code, SYSTEM_PROMPT has no holdout-derived phrasing); code_quality returned 2
+- candidates: 2 — CQ-51, CQ-52
+- confirmed: 2 — CQ-51, CQ-52
+- rejected: 0
+- new_confirmed: 2
