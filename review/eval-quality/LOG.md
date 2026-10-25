@@ -23,3 +23,13 @@ are embedded verbatim in `findings.json`.
 - severity changes by verifiers: CQ-21 medium->low (truncation implausible at max_tokens 1024)
 - checked clean this round: holdout_v3 kappa/agreement numbers recomputed from labels; cost table price and cache-hit exclusion; LESSONS.md/state.json vs results; README error-analysis post lists; compare pairing with errored records; RawCache atomic put; save() exclusive create
 - new_confirmed: 9
+
+## Round 3
+
+- reviewers given all 26 prior findings (confirmed and rejected) and pointed at untried surfaces: holdout provenance and prompt-change lineage, gate thresholds' timing, single-look count, README compliance numbers, cross-set label conventions, guard/PROTECTED design, golden and compliance tests via mutation
+- candidates: 2 — EM-31, CQ-31
+- confirmed: 2 — EM-31, CQ-31
+- rejected: 0
+- severity changes by verifiers: EM-31 medium->low (overlapping posts don't drive the gain), CQ-31 high->medium (needs a deliberately adversarial agent)
+- checked clean this round: DEV_MIN_MEAN fixed at loop-start before any dev run; exactly one split=all Claude run after loop-start; README '44 tests fail' and 'excluded_for_licensing 225/226' reproduce; deal_value/property_type/is_deal conventions agree between posts.jsonl and holdout.jsonl; fixed_sections guard fails closed; 15 of 19 matcher/followup mutants killed (4 equivalent)
+- new_confirmed: 2

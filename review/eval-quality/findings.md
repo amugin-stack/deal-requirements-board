@@ -1,6 +1,6 @@
 # Eval method + code quality review: findings
 
-Branch `review-eval-quality`. 22 confirmed, 4 rejected (eval_method 12/2, code_quality 10/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
+Branch `review-eval-quality`. 24 confirmed, 4 rejected (eval_method 13/2, code_quality 11/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
 
 ## Confirmed findings (by severity)
 
@@ -8,6 +8,7 @@ Branch `review-eval-quality`. 22 confirmed, 4 rejected (eval_method 12/2, code_q
 |---|---|---|---|---|
 | CQ-2 | medium | code_quality | git_info 'dirty' counts eval's own results/ output, so --repeats 2..N (and any run after an uncommitted result) are dirty and get dropped | `scripts/eval.py:394` |
 | CQ-3 | medium | code_quality | Run identity (PROMPT_VERSION) ignores model and request parameters; check_success pools and matches runs on it alone | `extractors/claude.py:76` |
+| CQ-31 | medium | code_quality | The loop guard only diffs exact protected paths, so new files can change scoring or skip all tests and the gate still passes | `loop/check_success.py:26` |
 | CQ-4 | medium | code_quality | test_check_success leaves the gate's key contracts unpinned: 5 semantic mutants survive the whole suite | `tests/test_check_success.py:45` |
 | EM-1 | medium | eval_method | Cache replays across eval invocations, so the documented '3 separate dev runs' protocol yields one sample repeated 3 times | `scripts/eval.py:126` |
 | EM-21 | medium | eval_method | Dev gate scores only the newest 3 runs of a prompt, so rerunning until 3 good runs come up passes a prompt whose full record fails | `loop/check_success.py:65` |
@@ -26,6 +27,7 @@ Branch `review-eval-quality`. 22 confirmed, 4 rejected (eval_method 12/2, code_q
 | EM-24 | low | eval_method | Hallucination rates count errored posts as clean: an all-errored run reports 0% hallucination | `scoring.py:224` |
 | EM-25 | low | eval_method | README test count, 'next steps' and holdout status are out of date versus the code and data | `README.md:113` |
 | EM-3 | low | eval_method | Iteration table reports 'kept' prompt changes without noise or significance, and omits the drop on the 11 untuned posts | `README.md:80` |
+| EM-31 | low | eval_method | Text overlap contradicts the README's claim that the holdout was written blind to the other posts, and no brief was recorded | `README.md:49` |
 | EM-6 | low | eval_method | Rescore/compare join old raw outputs to current labels by post id only, with no text or label hash | `scripts/eval.py:274` |
 | EM-8 | low | eval_method | s14 state label NJ can only be reached by inferring from city names, which the schema forbids | `data/posts.jsonl:14` |
 
@@ -89,6 +91,30 @@ final_checks 'prompt passed dev first' with other model: True
 **Fix.** One request identity in claude.py (hash of SYSTEM_PROMPT, TOOL, max_tokens, tool_choice, message template, model — or the source sha eval.py already computes), recorded in every results file; check_success matches on (model, identity).
 
 **Regression test.** tests/test_check_success.py: runs with equal prompt_version but different model/request_sha are excluded by dev_runs_for and fail 'prompt passed dev first'; a claude.py test asserts the identity changes when max_tokens or the template changes.
+
+### CQ-31 (medium, code_quality): The loop guard only diffs exact protected paths, so new files can change scoring or skip all tests and the gate still passes
+
+`loop/check_success.py:26`
+
+```
+    "loop/check_success.py", "scoring.py", "schema.py", "scripts/eval.py", "data/",
+```
+
+**Claim.** guard_checks runs `git diff --quiet loop-start -- *PROTECTED`, which only sees the listed paths. A committed scoring/__init__.py shadows scoring.py (eval.py and check_success put ROOT first on sys.path, and a package beats a same-named module there) and can rewrite the scoring rules while 'protected files unchanged' passes: on the regex dev split, with no extractor change, state .895->.947, property_type .947->1.0, transaction_type .895->1.0. Separately, a new tests/conftest.py (the agent spec allows 'add new test files under tests/') can skip every test, so pytest exits 0 and 'tests pass' passes even with a failing test present. pytest.ini is unprotected too.
+
+**Verifier.** The scoring/ shadow breaks the agent spec ('Edit only extractors/claude.py ...') but only the guard enforces the spec, and it misses it; the conftest route fits the spec's literal wording. Lowered high->medium: both need an agent that sets out to game the gate, and the extra files would show in a human diff of the recorded commit.
+
+**Reproduction output.**
+
+```
+no shadow: state 0.895 property_type 0.947 transaction_type 0.895
+with committed scoring/__init__.py: scoring resolved to .../clone/scoring/__init__.py; protected unchanged rc==0: True; state 0.947 property_type 1.0 transaction_type 1.0
+conftest branch: all four guard checks passed=True, 'tests pass' detail '20 skipped in 0.65s' (control without conftest: '1 failed, 19 passed')
+```
+
+**Fix.** Turn the guard into an allow-list over `git diff --name-status loop-start` plus untracked files: only extractors/claude.py, loop/DRAFT.md (non-FIXED), loop/LESSONS.md, loop/state.json, new results/claude_*.{json,md} and new tests/test_*.py. Reject any added conftest.py, pytest.ini, setup.cfg, pyproject.toml, sitecustomize.py, top-level module/package or directory named like a protected module. Make 'tests pass' require zero skipped/deselected and at least the loop-start pass count.
+
+**Regression test.** tests/test_check_success.py with a tmp git repo tagged loop-start: (1) committing scoring/__init__.py fails the protected check; (2) committing a skip-all tests/conftest.py fails 'tests pass'; (3) committing only extractors/claude.py plus a new tests/test_new.py passes every guard check.
 
 ### CQ-4 (medium, code_quality): test_check_success leaves the gate's key contracts unpinned: 5 semantic mutants survive the whole suite
 
@@ -539,6 +565,32 @@ holdout.jsonl first 0.8048 final 0.9524; final-only cells all h01/h02/h12, p=0.0
 **Fix.** Add per-run min-max and a paired McNemar p vs the previous kept prompt to the iteration table; say iterations 2 and 4 are within run-to-run noise on dev; report first vs final on the 11 untuned posts; attribute the holdout gain to strict mode (h01/h02) and the lender rule (h12).
 
 **Regression test.** Test that recomputes each kept iteration's paired_comparison from loop/state.json + results/ and asserts the README iteration table's p/spread column matches within rounding.
+
+### EM-31 (low, eval_method): Text overlap contradicts the README's claim that the holdout was written blind to the other posts, and no brief was recorded
+
+`README.md:49`
+
+```
+seeing only `schema.py`, never the extractors or the other posts.
+```
+
+**Claim.** README lines 49 and 103 say data/holdout.jsonl was written by a separate agent that saw only schema.py, never the other posts. No brief is recorded (commit 45bd556 message, HANDOFF.md, DRAFT.md), posts.jsonl was in the tree at that commit, and the text contradicts the claim: h08 contains dev s04's full sentence '45-day ID clock started last week.' verbatim; h13 opens 'Just closed a $2.1M' like s06 (posts-holdout split); h14 repeats dev s13's 'BOV came in at $X ... wants $Y'. None of these phrases are in schema.py. The copied posts did not drive the 0.805->0.952 gain (h08 fails 3 fields in both runs; h13/h14 never fail; the gain is h12 and h01), but README line 90 cites h08 and s04 as independent timeline failures.
+
+**Verifier.** Not proven leakage ('Just closed a' and 'BOV came in at' are common shorthand), but a verbatim 6-word sentence is strong evidence and the blindness claim is unrecorded. Lowered medium->low because the overlapping posts contribute nothing to the measured gain. Corrected the reviewer's 's06 is dev' to posts-holdout split.
+
+**Reproduction output.**
+
+```
+h05 ~ s05 [4-gram] 'anyone know a good' in_schema=False
+h08 ~ s04 [6-gram] '45-day id clock started last week' in_schema=False
+h13 ~ s06 [4-gram] 'just closed a $2.1m' in_schema=False
+h14 ~ s13 [4-gram] 'bov came in at' in_schema=False
+per-post failures first->final: h01 1/0 | h02 1/1 | h06 0/1 | h08 3/3 | h12 6/0 | total 11 -> 5
+```
+
+**Fix.** Reword README lines 49/103 to what is recorded and list the overlapping pairs, or replace h08/h13/h14; note in the error analysis that h08 and s04 share wording; point to holdout_v3 (recorded blind brief) as the stronger independent set.
+
+**Regression test.** tests/test_data.py::test_holdout_has_no_shared_ngrams_with_posts: no holdout text shares a normalised word 6-gram with any posts.jsonl text, outside a documented allowlist.
 
 ### EM-6 (low, eval_method): Rescore/compare join old raw outputs to current labels by post id only, with no text or label hash
 
