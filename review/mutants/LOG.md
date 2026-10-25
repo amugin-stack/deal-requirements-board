@@ -155,3 +155,78 @@ Gaps found:
 | api-15 | `match_post` | killed | 1 | test_api.py (1) |  |
 | api-16 | `match_post` | killed | 1 | test_api.py (1) |  |
 | api-17 | `match_post` | killed | 1 | test_api.py (1) |  |
+
+## Round 3
+
+Writers got the round-2 kill list (`kill_list_r2.json`) and were told not to write more variants
+of gaps already recorded (any `get_as_of` change, loader whitespace trimming, `get_brokers`
+pre-filtering, `limit <= 0`, substring state, reason wording, name-vs-id tie-break,
+`model_construct`, `ge=0`, in-place sort), so this round measures new gaps only. The gate writer
+took the data pipeline that produces what the gate reads: `deal_board/cli/build_brokers.py`
+(builds `data/brokers.csv` from the raw TREC download), the `Broker` field types,
+`load_brokers` and `paths.py`. The match/API writer took the county table, market
+normalisation, `Match` model types, the non-deal early return, `get_matcher`'s import fallback,
+`match_post`'s exception mapping and the response fields.
+`api-29` (inverted extractor choice) was proposed and dropped before running: it could make the
+suite build a real Claude client, and the owner's rule is no API calls.
+
+- mutants: 36 (gate-41..57, match-41..50, api-21..28, api-30)
+- killed: 16
+- survived: 20, all verified `differs`; none equivalent
+- new survivors by severity:
+  high 6 (`gate-41`, `gate-42`, `gate-43`, `gate-44`, `gate-45`, `api-21`),
+  medium 8 (`gate-47`, `gate-48`, `gate-49`, `gate-50`, `gate-53`, `api-28`, `match-41`, `match-43`),
+  low 6 (`gate-46`, `gate-55`, `match-44`, `match-45`, `match-46`, `match-48`)
+- new_high_medium_survivors: 14
+
+Gaps found:
+1. The builder that produces `data/brokers.csv` has no tests. Ten of its ten mutants survived. Five
+   would make an unlicensed row look licensed in a rebuilt CSV: day/month swap, unknown expiry
+   becoming 2099 or the snapshot date, `%Y-%d-%m` output, and "Probation - Active" mapped to
+   "Active". Today's committed CSV is fine (the data tests check it), but a rebuild would not be
+   checked.
+2. The matcher-unavailable path is never exercised. With `api-21`, a failed matcher import serves
+   every broker, expired ones included, with a 200 instead of a 503.
+3. `TX_CITY_TO_COUNTY` is only tested against itself (the county test reads its cases from the
+   table), so a wrong or added entry survives.
+4. `load_brokers` is never fed duplicate ids (the duplicate-id compliance test builds its pool in
+   memory).
+
+| id | target | status | killed_by | killing test files | severity |
+|---|---|---|---|---|---|
+| gate-41 | `parse_date` | survived | 0 | - | high |
+| gate-42 | `parse_date` | survived | 0 | - | high |
+| gate-43 | `sample_trec` | survived | 0 | - | high |
+| gate-44 | `sample_trec` | survived | 0 | - | high |
+| gate-45 | `sample_trec` | survived | 0 | - | high |
+| gate-46 | `sample_trec` | survived | 0 | - | low |
+| gate-47 | `is_valid` | survived | 0 | - | medium |
+| gate-48 | `main` | survived | 0 | - | medium |
+| gate-49 | `sample_trec` | survived | 0 | - | medium |
+| gate-50 | `sample_trec` | survived | 0 | - | medium |
+| gate-51 | `Broker.license_expiration` | killed | 141 | test_api.py (1), test_brokers.py (1), test_compliance.py (42), test_matcher.py (58), test_packaging_compat.py (1), test_red_team.py (38) |  |
+| gate-52 | `Broker.license_expiration` | killed | 1 | test_api.py (1) |  |
+| gate-53 | `load_brokers` | survived | 0 | - | medium |
+| gate-54 | `load_brokers` | killed | 1 | test_brokers.py (1) |  |
+| gate-55 | `Broker.is_fictional` | survived | 0 | - | low |
+| gate-56 | `BROKERS_CSV` | killed | 6 | test_brokers.py (1), test_compliance.py (1), test_matcher.py (1), test_red_team.py (3) |  |
+| gate-57 | `DATA_DIR` | killed | 4 | test_brokers.py (1), test_compliance.py (1), test_matcher.py (1), test_red_team.py (1) |  |
+| match-41 | `TX_CITY_TO_COUNTY` | survived | 0 | - | medium |
+| match-42 | `TX_CITY_TO_COUNTY` | killed | 1 | test_matcher.py (1) |  |
+| match-43 | `TX_CITY_TO_COUNTY` | survived | 0 | - | medium |
+| match-44 | `_market_point` | survived | 0 | - | low |
+| match-45 | `_market_point` | survived | 0 | - | low |
+| match-46 | `_score` | survived | 0 | - | low |
+| match-47 | `_score` | killed | 1 | test_matcher.py (1) |  |
+| match-48 | `Match` | survived | 0 | - | low |
+| match-49 | `Match` | killed | 1 | test_matcher.py (1) |  |
+| match-50 | `match` | killed | 17 | test_compliance.py (9), test_matcher.py (2), test_red_team.py (6) |  |
+| api-21 | `get_matcher` | survived | 0 | - | high |
+| api-22 | `match_post` | killed | 15 | test_api.py (2), test_red_team.py (13) |  |
+| api-23 | `match_post` | killed | 3 | test_api.py (2), test_red_team.py (1) |  |
+| api-24 | `BrokerMatch` | killed | 37 | test_api.py (2), test_red_team.py (35) |  |
+| api-25 | `match_post` | killed | 21 | test_api.py (1), test_red_team.py (20) |  |
+| api-26 | `match_post` | killed | 2 | test_api.py (2) |  |
+| api-27 | `match_post` | killed | 81 | test_api.py (2), test_red_team.py (79) |  |
+| api-28 | `get_matcher` | survived | 0 | - | medium |
+| api-30 | `match_post` | killed | 1 | test_api.py (1) |  |
