@@ -1,8 +1,8 @@
 # Eval method + code quality review: findings
 
-Branch `review-eval-quality`. 29 confirmed, 4 rejected (eval_method 13/2, code_quality 16/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
+Branch `review-eval-quality`. 31 confirmed, 4 rejected (eval_method 14/2, code_quality 17/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
 
-**Loop status: in progress.** Rounds 1-5 confirmed 13, 9, 2, 3 and 2 new findings; round 6 is pending. The eval-method reviewer found nothing new in rounds 4 and 5. See `LOG.md`.
+**Loop status: not converged.** Six rounds (4 from the brief, 2 more at the orchestrator's request) confirmed 13, 9, 2, 3, 2 and 2 new findings. Rounds 4-6 found nothing rated high; the eval-method reviewer came up empty in rounds 4 and 5. `check_success.py` check (c) therefore fails by design; see `LOG.md`.
 
 ## Confirmed findings (by severity)
 
@@ -26,6 +26,7 @@ Branch `review-eval-quality`. 29 confirmed, 4 rejected (eval_method 13/2, code_q
 | CQ-5 | low | code_quality | test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested | `tests/test_eval.py:58` |
 | CQ-51 | low | code_quality | Scorer and matcher define city equality differently, so the eval counts cities as correct that the matcher can't use | `scoring.py:81` |
 | CQ-52 | low | code_quality | Explicit --extractor claude with no API key silently runs regex instead, writes regex results and exits 0 | `scripts/eval.py:532` |
+| CQ-61 | low | code_quality | --rescore copies the source run's 'scoring' note into the new JSON while its .md shows the current rules | `scripts/eval.py:287` |
 | CQ-7 | low | code_quality | Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it | `loop/check_success.py:65` |
 | CQ-8 | low | code_quality | score() hard-codes the good-outcome tuple for its failures list instead of using GOOD_OUTCOMES | `scoring.py:203` |
 | EM-2 | low | eval_method | README overstates the loop's keep rule: iteration 2 was kept with state and city each down 3.5 pts | `README.md:72` |
@@ -36,6 +37,7 @@ Branch `review-eval-quality`. 29 confirmed, 4 rejected (eval_method 13/2, code_q
 | EM-3 | low | eval_method | Iteration table reports 'kept' prompt changes without noise or significance, and omits the drop on the 11 untuned posts | `README.md:80` |
 | EM-31 | low | eval_method | Text overlap contradicts the README's claim that the holdout was written blind to the other posts, and no brief was recorded | `README.md:49` |
 | EM-6 | low | eval_method | Rescore/compare join old raw outputs to current labels by post id only, with no text or label hash | `scripts/eval.py:274` |
+| EM-61 | low | eval_method | Per-field hallucination rate divides by all deal posts instead of posts whose label is empty, so guessing looks rare when the sets barely test it | `scoring.py:120` |
 | EM-8 | low | eval_method | s14 state label NJ can only be reached by inferring from city names, which the schema forbids | `data/posts.jsonl:14` |
 
 ## What I'd fix first
@@ -45,7 +47,7 @@ Branch `review-eval-quality`. 29 confirmed, 4 rejected (eval_method 13/2, code_q
 3. **Resolve the city/state label conventions before the one look at holdout_v3 (EM-7, EM-8).** v3 is the reserved final look; a "near X" convention that contradicts dev will cost points that are labeling, not model, errors. Decide the rule, write it into `schema.py`, fix the minority labels.
 4. **README honesty fixes (EM-2, EM-3).** State the real keep tolerance, add run-to-run spread and paired p-values to the iteration table, and report the 11 untuned posts. Cheap, and it pre-empts the obvious reviewer question.
 5. **Make the label tests able to fail on bad labels (CQ-22, CQ-23).** Round-trip every label in `test_data.py`, and stop the back-compat test pinning current labels, or the EM-7/EM-8 label fixes will look like regressions.
-6. **Latent provenance, error handling and duplication (EM-6, EM-24, CQ-7, CQ-8, CQ-5, CQ-21, CQ-24).** Store text/label hashes in results, exclude errored posts from hallucination denominators, gate on rescored rather than stored scores, use one good-outcome predicate, reject any `stop_reason` other than `tool_use`, and make `load_run` exit 2 on non-JSON.
+6. **Latent provenance, error handling and duplication (EM-6, EM-24, EM-61, CQ-7, CQ-8, CQ-5, CQ-21, CQ-24, CQ-61).** Store text/label hashes in results, compute hallucination rates over null-gold, non-errored posts only, stamp the current scoring note on rescores, gate on rescored rather than stored scores, use one good-outcome predicate, reject any `stop_reason` other than `tool_use`, and make `load_run` exit 2 on non-JSON.
 7. **Smaller test gaps and CLI/matcher drift (CQ-42, CQ-43, CQ-51, CQ-52).** Assert on `--compare` content in both argument orders; unit-test `summarize_repeats`; share one city normaliser between scorer and matcher; make an explicit `--extractor claude` without a key fail instead of running regex.
 8. **Docs (EM-22, EM-23, EM-25, EM-31).** Reword the holdout-independence claim to what is recorded (h08 repeats s04's sentence), fix the timeline diagnosis before acting on DRAFT backlog item 1, mark `baseline-v1_comparison.json` as old-metric, and refresh the stale README claims.
 
@@ -509,6 +511,30 @@ cache files: []
 
 **Regression test.** With ANTHROPIC_API_KEY unset, ev.main(['--extractor','claude','--split','dev','--results-dir',tmp,'--cache-dir',tmp/'c']) raises SystemExit with a non-zero code and writes no files.
 
+### CQ-61 (low, code_quality): --rescore copies the source run's 'scoring' note into the new JSON while its .md shows the current rules
+
+`scripts/eval.py:287`
+
+```
+    kept = {k: v for k, v in saved.items() if k not in RUN_ONLY_KEYS}
+```
+
+**Claim.** rescored_result drops only usage/repeat/cache_enabled, so the source's 'scoring' string is copied into the rescored JSON even though rescore() computes scores under the current rules and markdown() prints the live SCORING_NOTE. One rescore output then describes two rule sets: with the tolerance changed to 5%, the JSON says ±1% and the .md says ±5%. It already happens: all 21 stored run notes lack the Wilson sentence, so every rescored JSON's note omits ci95 while its scores include them. Distinct from EM-23 (whose stamp-a-version fix would be copied forward the same way) and EM-6.
+
+**Verifier.** Neither the rescored_result docstring nor the P6 doc says the note is kept as source provenance ('rescored_from' carries that). Low.
+
+**Reproduction output.**
+
+```
+A: run files=21 scoring!=SCORING_NOTE: 21; missing 'Wilson': 21
+A: in-memory rescore note has Wilson=False, scores have ci95=True
+B (tolerance 0.05 in copy): JSON scoring says ±1%: True, ±5%: False | MD says ±1%: False, ±5%: True
+```
+
+**Fix.** Set 'scoring': SCORING_NOTE in rescored_result (optionally keep the old one as 'source_scoring'); build run and rescore provenance through one helper.
+
+**Regression test.** rescored_result on a run whose 'scoring' is 'OLD NOTE' -> result['scoring'] == ev.SCORING_NOTE and markdown(result) contains it.
+
 ### CQ-7 (low, code_quality): Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it
 
 `loop/check_success.py:65`
@@ -753,6 +779,31 @@ compare n_common_posts holdout: 14 of 15
 **Fix.** Store text_sha256 (and a label hash) per record and file_sha256 per dataset in every results file; in rescore/compare, flag or exclude drifted, missing or new ids and print a one-line warning for legacy files without hashes.
 
 **Regression test.** Save a fake-extractor run over a 2-post tmp dataset, rewrite post 1 under the same id, point eval.ROOT at tmp, and assert rescore() reports drift for post 1 (capsys or a 'drift' list) instead of scoring it; delete post 2 and assert it is reported missing.
+
+### EM-61 (low, eval_method): Per-field hallucination rate divides by all deal posts instead of posts whose label is empty, so guessing looks rare when the sets barely test it
+
+`scoring.py:120`
+
+```
+"hallucination_rate": _rate(cell["hallucinated"], n_deal),
+```
+
+**Claim.** A field can only be 'hallucinated' on a deal post whose gold value is None, yet hallucination_rate and its Wilson ci95 divide by every deal post. The holdout offers 11 guessing chances across 72 field cells (1 each for state, city, property_type, transaction_type). On the final run, holdout property_type shows 8% [1-35] although the model guessed on its only chance (1/1, [21-100]); state shows 0% [0-24] from one chance ([0-79]); posts.jsonl state shows 7% [2-22] although the model guessed a state on 2 of 6 stateless posts (33%, [10-70]), the compliance-critical behaviour. Dev has no null property_type labels, so tuning never tested property_type guessing. Distinct from EM-24 (errored posts). The README row and check_success use raw counts, so only JSON scores and future .md 'halluc. rate' columns carry the misleading rate.
+
+**Verifier.** Round 1's reviewer had mentioned this denominator in passing as definitional and did not report it, so it was never verified or rejected. The P6 spec fixes the definition but gives no rationale; the docstring's 'so runs of different size compare' holds equally for a per-null-label denominator. Lowered medium->low: no README number or gate uses the rate.
+
+**Reproduction output.**
+
+```
+holdout n_deal=12: state hall=0 null_opps=1 reported 0% [0-24] per-opportunity 0% [0-79]
+holdout property_type hall=1 null_opps=1 reported 8% [1-35] per-opportunity 100% [21-100]
+posts n_deal=29: state hall=2 null_opps=6 reported 7% [2-22] per-opportunity 33% [10-70]
+dev deal posts null labels: state 5, city 4, property_type 0, transaction_type 1, deal_value 3, timeline 7
+```
+
+**Fix.** Count null-gold deal posts per field; report hallucination_rate = hallucinated / n_null with Wilson over n_null (None when 0) and expose n_null; give the README 'Fields guessed' row a denominator; update the P6 spec and docstring.
+
+**Regression test.** Four deal posts, one with gold property_type None and a guessed value: hallucination_rate == 1.0, ci95 == wilson_interval(1, 1), and a field with no null golds has rate None; update test_score_hallucination_rate_and_ci, which pins hallucinated/3.
 
 ### EM-8 (low, eval_method): s14 state label NJ can only be reached by inferring from city names, which the schema forbids
 

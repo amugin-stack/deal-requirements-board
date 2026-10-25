@@ -58,3 +58,19 @@ A fifth round would need the orchestrator's go-ahead. The orchestrator then aske
 - confirmed: 2 — CQ-51, CQ-52
 - rejected: 0
 - new_confirmed: 2
+
+## Round 6
+
+- final round allowed by the orchestrator; reviewers given all 33 findings, the clean-surface notes and the folding rule
+- reviewers: eval_method returned 1 (EM-61); code_quality returned 1 (CQ-61)
+- candidates: 2 — EM-61, CQ-61
+- confirmed: 2 — EM-61, CQ-61 (EM-61 lowered medium->low: no README number or gate uses the rate)
+- rejected: 0
+- checked clean this round: correct_missing on posts called non-deal, duplicate ids/texts across sets, accuracy ci95 denominators, McNemar/Wilson edge cases, RawCache with duplicate texts, request fingerprint vs schema edits, tests never write fakes into the repo cache, fixed_sections heading levels, followup import-time guards
+- new_confirmed: 2
+
+## Final outcome: not converged
+
+Six rounds (the brief's 4 plus the orchestrator's 2) confirmed 13, 9, 2, 3, 2, 2 new findings. Since round 3 every
+round has found one to three low/medium items; rounds 4-6 produced no high finding and the eval-method reviewer came
+up empty in rounds 4 and 5. Stopped as instructed; `check_success.py` check (c) fails by design.
