@@ -31,7 +31,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, WithJsonSchema
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from deal_board import brokers as broker_store
@@ -64,6 +64,26 @@ CLAUDE_MAX_RETRIES = 1
 
 # --- Request / response models -----------------------------------------------------------------
 
+# One character the server does not strip. The class lists exactly the characters
+# `StringConstraints(strip_whitespace=True)` strips (pydantic-core trims Unicode White_Space,
+# which is not quite `str.isspace()` or JSON Schema's `\s`), so "contains a match" in the
+# published schema means "non-empty after stripping" on the server.
+NON_WHITESPACE_PATTERN = r"[^\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"
+
+# The published schema for `MatchRequest.text`. It replaces the generated one, whose raw
+# minLength/maxLength disagree with the server both ways: the bounds apply after stripping, so
+# 10 spaces + 4000 chars is accepted and "   \n" is rejected. The raw size bound is the 64 KiB
+# body cap (413), not a string length.
+_TEXT_JSON_SCHEMA: dict[str, str] = {
+    "type": "string",
+    "title": "Text",
+    "pattern": NON_WHITESPACE_PATTERN,
+    "description": (
+        f"The deal post. Surrounding whitespace is stripped first; the stripped text must be "
+        f"1-{MAX_POST_CHARS} characters, so it needs at least one non-whitespace character."
+    ),
+}
+
 
 class MatchRequest(BaseModel):
     """A broker's free-text deal post.
@@ -72,7 +92,11 @@ class MatchRequest(BaseModel):
     rather than sent to the extractor. The upper bound caps model cost and latency per request.
     """
 
-    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS)]
+    text: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_POST_CHARS),
+        WithJsonSchema(_TEXT_JSON_SCHEMA),
+    ]
 
 
 class BrokerMatch(BaseModel):
