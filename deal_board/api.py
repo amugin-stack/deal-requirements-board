@@ -25,7 +25,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from functools import lru_cache
-from typing import Annotated, Any, Final, Literal, Protocol, cast
+from typing import Annotated, Any, Final, Literal, Protocol, cast, get_args
 from zoneinfo import ZoneInfo
 
 import anthropic
@@ -33,7 +33,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, ValidationError, WithJsonSchema
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from deal_board import brokers as broker_store
@@ -41,7 +41,7 @@ from deal_board.brokers import Broker
 from deal_board.config import FORCE_CLAUDE, FORCE_REGEX, Settings, load_settings
 from deal_board.extractors import ExtractionError, Extractor
 from deal_board.followup import follow_up_question
-from deal_board.schema import DealRequirement
+from deal_board.schema import DealRequirement, ExtractedFields, State
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,38 @@ class ErrorDetail(BaseModel):
     """The body of every non-validation error. `detail` is always a fixed, safe message."""
 
     detail: str
+
+
+# --- Re-validating extractor output ------------------------------------------------------------
+
+# The two-letter codes `schema.State` allows.
+STATE_CODES: Final = frozenset(get_args(State))
+
+
+def revalidate_requirement(extracted: DealRequirement) -> DealRequirement:
+    """A freshly validated copy of an extractor's output, failing closed on the gate's inputs.
+
+    The `Extractor` protocol promises a validated `DealRequirement`, but nothing enforces it: a
+    buggy extractor can hand back a `model_construct`ed one whose fields were never checked.
+    The matcher and the response would then trust a state like "ZZ" (a 200 body that breaks its
+    own schema) or a truthy `is_deal_request="no"` (matches for a non-deal). So the API checks
+    again, before matching:
+
+    - `state` is kept only if it is a str that is exactly a State code. Anything else, including
+      "fl" or " AZ " that validation would normalize, becomes None: no state, so nobody is
+      licensed and the follow-up asks for it. Normalizing would trust a value the extractor
+      should never have produced.
+    - `is_deal_request` counts only if it `is True`; anything else is a non-deal (no matches).
+    - every other field goes through `DealRequirement.model_validate`, which also recomputes
+      `missing_fields`; an invalid value raises `pydantic.ValidationError` (the route's 422).
+
+    Pure. A real extractor's output comes back equal to what went in.
+    """
+    fields: dict[str, Any] = {name: getattr(extracted, name, None) for name in ExtractedFields.model_fields}
+    state = fields["state"]
+    fields["state"] = state if isinstance(state, str) and state in STATE_CODES else None
+    fields["is_deal_request"] = fields["is_deal_request"] is True
+    return DealRequirement.model_validate(fields)
 
 
 # --- Matcher contract ---------------------------------------------------------------------------
@@ -506,7 +538,7 @@ def match_post(
     post_id = _post_id(text)
 
     try:
-        requirement = extractor.extract(text)
+        extracted = extractor.extract(text)
     except ExtractionError as e:
         logger.warning("extraction failed post=%s extractor=%s error=%s", post_id, extractor.name, type(e).__name__)
         raise HTTPException(
@@ -535,18 +567,35 @@ def match_post(
             detail="extraction failed unexpectedly",
         ) from None
 
+    # The matcher, the follow-up and the response all get the re-validated requirement, never
+    # the extractor's own object. An invalid field is the same failure as an ExtractionError.
+    try:
+        requirement = revalidate_requirement(extracted)
+    except ValidationError as e:
+        logger.warning("extraction failed post=%s extractor=%s error=%s", post_id, extractor.name, type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="could not extract a deal requirement from this post",
+        ) from None
+    except Exception as e:
+        raise _matching_failed(post_id, extractor.name, e) from None
+
     try:
         return _respond(requirement, extractor.name, brokers, as_of, match, post_id=post_id, chars=len(text))
     except Exception as e:
-        # A bug after extraction: the matcher, the reshaping, the follow-up or the response model
-        # (e.g. an extractor name outside the Literal). Mapped like the extractor crash above, so
-        # the documented JSON 500 and the post-id log line hold instead of Starlette's text/plain
-        # 500, and no exception text (which might quote the requirement) is logged or returned.
-        logger.error("matching failed post=%s extractor=%s error=%s", post_id, extractor.name, type(e).__name__)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="matching failed unexpectedly",
-        ) from None
+        raise _matching_failed(post_id, extractor.name, e) from None
+
+
+def _matching_failed(post_id: str, extractor_name: str, error: Exception) -> HTTPException:
+    """Log a bug after extraction and return the fixed 500 for it.
+
+    Covers re-validation, the matcher, the reshaping, the follow-up and the response model (e.g.
+    an extractor name outside the Literal). Mapped like the extractor crash, so the documented
+    JSON 500 and the post-id log line hold instead of Starlette's text/plain 500, and no
+    exception text (which might quote the requirement) is logged or returned.
+    """
+    logger.error("matching failed post=%s extractor=%s error=%s", post_id, extractor_name, type(error).__name__)
+    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="matching failed unexpectedly")
 
 
 def _respond(
