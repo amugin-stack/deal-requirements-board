@@ -5,7 +5,7 @@ across reviews), plus extras `RT-1..5` (the red-team strict xfails) and `P10-1..
 At triage every entry is `planned`, `wontfix` or `deferred`; `note` is the one-line plan (the contract the
 implementer and the blind test-writer both work from).
 
-Counts at triage: 59 review findings -> 47 planned, 1 wontfix, 11 deferred; extras 10 planned.
+Counts at triage: 59 review findings -> 46 planned, 1 wontfix, 12 deferred; extras 10 planned.
 
 ## Disjoint file sets
 

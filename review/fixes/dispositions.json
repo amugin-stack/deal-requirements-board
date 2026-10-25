@@ -5,8 +5,10 @@
     "severity": "low",
     "title": "extract_raw returns a tool call truncated at max_tokens as a valid extraction",
     "set": "C",
-    "disposition": "planned",
-    "note": "Same fix as compliance-security/C-10 and eval-quality/CQ-21: extract_raw raises ExtractionError unless stop_reason == 'tool_use' (last_usage still recorded)."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Same fix as compliance-security/C-10 and eval-quality/CQ-21: extract_raw raises ExtractionError unless stop_reason == 'tool_use' (last_usage still recorded).",
+    "commit": "5cfd3fa85d1e",
+    "regression_test": "tests/test_fix_set_c1.py::test_claude_extractor_rejects_max_tokens_truncated_tool_call"
   },
   {
     "review": "correctness-api",
@@ -14,8 +16,10 @@
     "severity": "low",
     "title": "missing_fields goes stale after model_copy(update=...) or attribute assignment",
     "set": "A",
-    "disposition": "planned",
-    "note": "missing_fields can't go stale: DealRequirement re-validates on model_copy(update=...) and on attribute assignment, and follow_up_question derives gaps from the current field values rather than the stored list."
+    "disposition": "fixed",
+    "note": "Fixed as planned: missing_fields can't go stale: DealRequirement re-validates on model_copy(update=...) and on attribute assignment, and follow_up_question derives gaps from the current field values rather than the stored list.",
+    "commit": "d76354c3a9e2",
+    "regression_test": "tests/test_fix_set_a.py::test_corr_c4_model_copy_update_recomputes_missing_fields"
   },
   {
     "review": "correctness-api",
@@ -32,8 +36,10 @@
     "severity": "low",
     "title": "Market matching only strips and lowercases the city, so 'Austin, TX', 'Ft. Lauderdale' or a NBSP lose the +2",
     "set": "A",
-    "disposition": "planned",
-    "note": "New deal_board/cities.py: market_key(city, state) canonicalises (NFKC, casefold, drop '.' and ',', collapse whitespace, drop a trailing code equal to the deal state, expand 'ft'->'fort', 'st'->'saint', 'mt'->'mount'); matcher uses it on both sides of the market comparison and for the TX county lookup."
+    "disposition": "fixed",
+    "note": "Fixed as planned: New deal_board/cities.py: market_key(city, state) canonicalises (NFKC, casefold, drop '.' and ',', collapse whitespace, drop a trailing code equal to the deal state, expand 'ft'->'fort', 'st'->'saint', 'mt'->'mount'); matcher uses it on both sides of the market comparison and for the TX county lookup.",
+    "commit": "eb2e195824b9",
+    "regression_test": "tests/test_fix_set_a.py::test_corr_c6_tx_city_variant_earns_county_point"
   },
   {
     "review": "correctness-api",
@@ -41,8 +47,10 @@
     "severity": "low",
     "title": "load_brokers fails on a UTF-8 BOM or an all-blank row, aborting the whole load with no row context",
     "set": "A",
-    "disposition": "planned",
-    "note": "load_brokers opens the CSV as utf-8-sig, skips rows whose values are all blank, and re-raises a bad row as ValueError naming the CSV line number and broker_id."
+    "disposition": "fixed",
+    "note": "Fixed as planned: load_brokers opens the CSV as utf-8-sig, skips rows whose values are all blank, and re-raises a bad row as ValueError naming the CSV line number and broker_id.",
+    "commit": "65331ec3c7f4",
+    "regression_test": "tests/test_fix_set_a.py::test_corr_c7_bom_csv_loads"
   },
   {
     "review": "correctness-api",
@@ -50,8 +58,10 @@
     "severity": "low",
     "title": "Extraction-failure 422 body is {detail: str}, but OpenAPI documents 422 only as HTTPValidationError (detail: array)",
     "set": "B",
-    "disposition": "planned",
-    "note": "POST /match documents its 422 as anyOf HTTPValidationError | ErrorDetail, so both 422 bodies (request validation, extraction failure) match the published schema."
+    "disposition": "fixed",
+    "note": "Fixed as planned: POST /match documents its 422 as anyOf HTTPValidationError | ErrorDetail, so both 422 bodies (request validation, extraction failure) match the published schema.",
+    "commit": "82c014095057",
+    "regression_test": "tests/test_fix_set_b.py::test_extraction_422_body_matches_openapi_schema"
   },
   {
     "review": "correctness-api",
@@ -59,8 +69,10 @@
     "severity": "low",
     "title": "Errors after extraction (match, reshaping, follow-up) give a text/plain 500, not the documented JSON ErrorDetail",
     "set": "B",
-    "disposition": "planned",
-    "note": "Everything after extraction (match, reshaping, follow-up, response) is wrapped: any exception gives a fixed JSON 500 {'detail': 'matching failed unexpectedly'} and one log line with post=<id> and the exception type only; the documented 500 covers it."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Everything after extraction (match, reshaping, follow-up, response) is wrapped: any exception gives a fixed JSON 500 {'detail': 'matching failed unexpectedly'} and one log line with post=<id> and the exception type only; the documented 500 covers it.",
+    "commit": "45b6026789f8",
+    "regression_test": "tests/test_fix_set_b.py::test_matcher_crash_returns_fixed_json_500"
   },
   {
     "review": "correctness-api",
@@ -68,8 +80,10 @@
     "severity": "low",
     "title": "OpenAPI publishes minLength 1 / maxLength 4000 on the raw text, but the server applies them after stripping",
     "set": "B",
-    "disposition": "planned",
-    "note": "MatchRequest.text's JSON schema drops the raw minLength/maxLength (the server strips first), states the 1-4000-after-stripping rule in its description and requires a non-whitespace character via pattern."
+    "disposition": "fixed",
+    "note": "Fixed as planned: MatchRequest.text's JSON schema drops the raw minLength/maxLength (the server strips first), states the 1-4000-after-stripping rule in its description and requires a non-whitespace character via pattern.",
+    "commit": "590d6c6e4d4a",
+    "regression_test": "tests/test_fix_set_b.py::test_openapi_text_constraints_match_stripping_semantics"
   },
   {
     "review": "compliance-security",
@@ -77,8 +91,10 @@
     "severity": "low",
     "title": "The gate has no snapshot age limit: as_of moves forward with the clock, but license status stays as it was in the Oct 20, 2026 TREC download",
     "set": "A",
-    "disposition": "planned",
-    "note": "is_licensed fails closed for real-record rows (source 'trec_<YYYY-MM-DD>') when as_of is more than MAX_SNAPSHOT_AGE_DAYS (90) after the snapshot date, or the date can't be parsed; fictional rows are unaffected."
+    "disposition": "fixed",
+    "note": "Fixed as planned: is_licensed fails closed for real-record rows (source 'trec_<YYYY-MM-DD>') when as_of is more than MAX_SNAPSHOT_AGE_DAYS (90) after the snapshot date, or the date can't be parsed; fictional rows are unaffected. Cutoff 90 days (not the finding's 30): the red-team suite pins AS_OF 2026-11-30 against the 2026-10-20 snapshot; owner may tighten. Visible effect: from 2027-01-19 no TREC row passes until the data is refreshed.",
+    "commit": "27431c6ef6fd",
+    "regression_test": "tests/test_fix_set_a.py::test_comp_c2_stale_snapshot_fails_closed"
   },
   {
     "review": "compliance-security",
@@ -86,8 +102,10 @@
     "severity": "low",
     "title": "get_as_of uses the server's local date, not the deal state's date, so a license that expired yesterday (Texas time) can pass",
     "set": "B",
-    "disposition": "planned",
-    "note": "get_as_of returns today's date in America/New_York, the easternmost zone of any US licensing authority, so the gate's date is never behind any state's local date whatever the server TZ (fail closed)."
+    "disposition": "fixed",
+    "note": "Fixed as planned: get_as_of returns today's date in America/New_York, the easternmost zone of any US licensing authority, so the gate's date is never behind any state's local date whatever the server TZ (fail closed).",
+    "commit": "eea25460c3d1",
+    "regression_test": "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
   },
   {
     "review": "compliance-security",
@@ -95,8 +113,10 @@
     "severity": "low",
     "title": "The sales-agent referral note needs an exact 'Sales Agent' string; the loader accepts any license_type, so other spellings get no note",
     "set": "A",
-    "disposition": "planned",
-    "note": "Broker.license_type is Literal['Broker Individual', 'Sales Agent'] via a shared LICENSE_TYPES constant that cli/build_brokers reuses; padded, lower-case or unknown types fail at load."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Broker.license_type is Literal['Broker Individual', 'Sales Agent'] via a shared LICENSE_TYPES constant that cli/build_brokers reuses; padded, lower-case or unknown types fail at load.",
+    "commit": "5dedc83defd0",
+    "regression_test": "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected_at_load"
   },
   {
     "review": "compliance-security",
@@ -104,8 +124,10 @@
     "severity": "low",
     "title": "build_brokers.py: the 'keep every' Active-but-expired comment is really a [:N_INVALID] slice, status is classified on the raw value but written stripped, and the %y pivot is undocumented",
     "set": "A",
-    "disposition": "planned",
-    "note": "build_brokers strips Status/expiration/type once after reading and uses that one value to classify and write; Active-but-expired rows are capped at N_INVALID//2 via rng.sample so other invalid statuses stay represented; parse_date documents the %y pivot and raises on a 4-digit year. No data rebuild."
+    "disposition": "fixed",
+    "note": "Fixed as planned: build_brokers strips Status/expiration/type once after reading and uses that one value to classify and write; Active-but-expired rows are capped at N_INVALID//2 via rng.sample so other invalid statuses stay represented; parse_date documents the %y pivot and raises on a 4-digit year. No data rebuild.",
+    "commit": "ca7189483fba",
+    "regression_test": "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written"
   },
   {
     "review": "compliance-security",
@@ -113,8 +135,10 @@
     "severity": "low",
     "title": "README/docstrings say bad state output is never repaired, but the state validator strips and upper-cases it (Unicode case folds included) and quietly turns non-strings into None",
     "set": "A",
-    "disposition": "planned",
-    "note": "ExtractedFields' state validator: None stays None, blank -> None, any non-str raises, a non-ASCII str raises, an ASCII str is stripped and upper-cased; city/notes non-str raises. parse_requirement then raises ExtractionError for 48, ['TX'], b'TX', 'ıl'. Docstrings say what is normalised."
+    "disposition": "fixed",
+    "note": "Fixed as planned: ExtractedFields' state validator: None stays None, blank -> None, any non-str raises, a non-ASCII str raises, an ASCII str is stripped and upper-cased; city/notes non-str raises. parse_requirement then raises ExtractionError for 48, ['TX'], b'TX', 'ıl'. Docstrings say what is normalised.",
+    "commit": "90c1b1e62e85",
+    "regression_test": "tests/test_fix_set_a.py::test_comp_c6_state_rejects_non_ascii_and_non_string"
   },
   {
     "review": "compliance-security",
@@ -122,8 +146,10 @@
     "severity": "low",
     "title": "DEAL_EXTRACTOR is unvalidated: 'claude' (or any typo) without a key is silently treated as auto and serves the regex baseline",
     "set": "B",
-    "disposition": "planned",
-    "note": "config validates DEAL_EXTRACTOR against {'', 'auto', 'claude', 'regex'} (ValueError otherwise); 'claude' with no key gives /match a fixed JSON 503 instead of serving regex; auto resolving to regex logs one WARNING."
+    "disposition": "fixed",
+    "note": "Fixed as planned: config validates DEAL_EXTRACTOR against {'', 'auto', 'claude', 'regex'} (ValueError otherwise); 'claude' with no key gives /match a fixed JSON 503 instead of serving regex; auto resolving to regex logs one WARNING.",
+    "commit": "e02639d6c1cc",
+    "regression_test": "tests/test_fix_set_b.py::test_deal_extractor_claude_without_key_does_not_fall_back_to_regex"
   },
   {
     "review": "compliance-security",
@@ -132,7 +158,8 @@
     "title": "Regex invents a state for posts that name no state, from a neighbourhood name, a city abbreviation or a CRE abbreviation (Washington Heights->WA, 'CO pending'->CO, LA->LA, NE Portland->NE)",
     "set": "A",
     "disposition": "wontfix",
-    "note": "The regex baseline is frozen by owner rule, so its spurious-token states can't be fixed; the four stateless posts (Washington Heights->WA fx-16, 'CO pending'->CO fx-19, LA, NE Portland) get pinned regex-path tests, and the fake fail-closed Claude path is shown to return no brokers and a state follow-up."
+    "note": "The regex baseline is frozen by owner rule, so its spurious-token states can't be fixed; the four stateless posts (Washington Heights->WA fx-16, 'CO pending'->CO fx-19, LA, NE Portland) get pinned regex-path tests, and the fake fail-closed Claude path is shown to return no brokers and a state follow-up.",
+    "pinned_by": "tests/test_fix_set_a.py::test_comp_c8_regex_matches_pinned"
   },
   {
     "review": "compliance-security",
@@ -140,8 +167,10 @@
     "severity": "low",
     "title": "Fictional NY-only broker fx-12 lists Hoboken (NJ); state-blind _market_point adds '+2 serves Hoboken' when a Hoboken, NJ deal is misrouted to NY",
     "set": "A",
-    "disposition": "planned",
-    "note": "A market written 'City, ST' earns the market point only when ST equals the deal state; a test checks every fictional market lies in its row's license_state except an explicit trap allowlist (fx-12 Hoboken, a data row the owner controls)."
+    "disposition": "fixed",
+    "note": "Fixed as planned: A market written 'City, ST' earns the market point only when ST equals the deal state; a test checks every fictional market lies in its row's license_state except an explicit trap allowlist (fx-12 Hoboken, a data row the owner controls). Same commit as correctness-api/C-6 (market_key drops a trailing code only when it equals the deal state). The fx-12 'Hoboken' data row is unchanged (owner data); it is pinned as a known trap.",
+    "commit": "eb2e195824b9",
+    "regression_test": "tests/test_fix_set_a.py::test_comp_c9_market_with_matching_state_suffix_counts"
   },
   {
     "review": "compliance-security",
@@ -149,8 +178,10 @@
     "severity": "low",
     "title": "Claude output that is truncated, mislabelled or loosely typed is accepted and routed instead of raising",
     "set": "C",
-    "disposition": "planned",
-    "note": "Claude output is checked strictly before routing: extract_raw requires stop_reason 'tool_use' and the tool name record_deal_requirement; the raw tool input must have exactly ExtractedFields' keys with strict JSON types (bool, int not bool/float/str, str or null), else ExtractionError; eval applies the same check to Claude raws on rescore."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Claude output is checked strictly before routing: extract_raw requires stop_reason 'tool_use' and the tool name record_deal_requirement; the raw tool input must have exactly ExtractedFields' keys with strict JSON types (bool, int not bool/float/str, str or null), else ExtractionError; eval applies the same check to Claude raws on rescore.",
+    "commit": "5cfd3fa85d1e",
+    "regression_test": "tests/test_fix_set_c1.py::test_claude_rejects_truncated_or_loose_output"
   },
   {
     "review": "compliance-security",
@@ -167,8 +198,10 @@
     "severity": "low",
     "title": "API integration test 'only returns brokers licensed in the deal state' is status-blind and vacuous (passes with a status-blind gate)",
     "set": "B",
-    "disposition": "planned",
-    "note": "The API integration test asserts license_status == 'Active' for every match, a non-empty match list, and excluded_for_licensing equal to an independent reference count, so a status-blind gate fails it."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The API integration test asserts license_status == 'Active' for every match, a non-empty match list, and excluded_for_licensing equal to an independent reference count, so a status-blind gate fails it. Test-only fix (the strengthened test and its status-blind counter-test).",
+    "commit": "4caebffcf0fb",
+    "regression_test": "tests/test_api.py::test_real_matcher_api_rejects_non_active_status"
   },
   {
     "review": "compliance-security",
@@ -176,8 +209,10 @@
     "severity": "low",
     "title": "Content-Length header with more than 4300 digits crashes BodySizeLimit with a 500 instead of a 413",
     "set": "B",
-    "disposition": "planned",
-    "note": "BodySizeLimit rejects a Content-Length with more digits than str(max_bytes) with the 413 before calling int(), so a 5000-digit header is a 413 JSON, not a 500."
+    "disposition": "fixed",
+    "note": "Fixed as planned: BodySizeLimit rejects a Content-Length with more digits than str(max_bytes) with the 413 before calling int(), so a 5000-digit header is a 413 JSON, not a 500.",
+    "commit": "140b61b7e991",
+    "regression_test": "tests/test_fix_set_b.py::test_huge_digit_content_length_is_413"
   },
   {
     "review": "compliance-security",
@@ -185,8 +220,10 @@
     "severity": "low",
     "title": "Anthropic client is built with SDK tracing defaults, so one env var exports full post text in OTel spans",
     "set": "B",
-    "disposition": "planned",
-    "note": "Every Anthropic client the package builds passes open_telemetry=False (or an explicit metadata-only config), so ANTHROPIC_OPEN_TELEMETRY_* env vars can't put post text into spans."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Every Anthropic client the package builds passes open_telemetry=False (or an explicit metadata-only config), so ANTHROPIC_OPEN_TELEMETRY_* env vars can't put post text into spans. Both clients: api.py (5c0dd83) and claude._default_client (413ba38).",
+    "commit": "5c0dd8375cd4",
+    "regression_test": "tests/test_fix_set_b.py::test_claude_client_tracing_never_records_content"
   },
   {
     "review": "compliance-security",
@@ -194,8 +231,10 @@
     "severity": "low",
     "title": "Log post id is an unsalted SHA-256 prefix plus exact length, so a guessed or templated post can be confirmed or brute-forced offline",
     "set": "B",
-    "disposition": "planned",
-    "note": "_post_id is HMAC-SHA256 under a per-process random key (12 hex chars): stable within a process, not reproducible from the text alone; no env read."
+    "disposition": "fixed",
+    "note": "Fixed as planned: _post_id is HMAC-SHA256 under a per-process random key (12 hex chars): stable within a process, not reproducible from the text alone; no env read.",
+    "commit": "a265f62cfd94",
+    "regression_test": "tests/test_fix_set_b.py::test_post_id_is_keyed"
   },
   {
     "review": "compliance-security",
@@ -203,8 +242,10 @@
     "severity": "low",
     "title": "--rescore writes the caller's path verbatim into committed results (absolute path leaks local username)",
     "set": "C",
-    "disposition": "planned",
-    "note": "rescored_from is stored repo-relative (POSIX) when the source is under the repo, else just the file name, so no absolute path reaches results."
+    "disposition": "fixed",
+    "note": "Fixed as planned: rescored_from is stored repo-relative (POSIX) when the source is under the repo, else just the file name, so no absolute path reaches results.",
+    "commit": "91c4a6b6779a",
+    "regression_test": "tests/test_fix_set_c1.py::test_rescored_from_is_repo_relative"
   },
   {
     "review": "compliance-security",
@@ -221,8 +262,10 @@
     "severity": "low",
     "title": "requirements.txt pins httpx 0.x, which nothing uses at runtime; the HTTP stack that carries the API key (httpx2/httpcore2/truststore) and opentelemetry-api come from unpinned ranges",
     "set": "D",
-    "disposition": "planned",
-    "note": "pyproject pins, with ==, the whole runtime closure of the anthropic SDK's transport (httpx2, httpcore2, truststore, h11, opentelemetry-api, ...) at the installed versions; a test walks importlib.metadata to keep it complete."
+    "disposition": "fixed",
+    "note": "Fixed as planned: pyproject pins, with ==, the whole runtime closure of the anthropic SDK's transport (httpx2, httpcore2, truststore, h11, opentelemetry-api, ...) at the installed versions; a test walks importlib.metadata to keep it complete.",
+    "commit": "732be9af327a",
+    "regression_test": "tests/test_fix_set_d.py::test_s6_anthropic_transport_closure_pinned_exactly"
   },
   {
     "review": "compliance-security",
@@ -230,8 +273,10 @@
     "severity": "low",
     "title": ".gitignore ignores only the exact name `.env`; `.env.local`, `.env.production`, `*.pem`, `*.key` are not ignored",
     "set": "D",
-    "disposition": "planned",
-    "note": ".gitignore covers .env, .env.*, *.pem, *.key and keeps .env.example tracked (!.env.example)."
+    "disposition": "fixed",
+    "note": "Fixed as planned: .gitignore covers .env, .env.*, *.pem, *.key and keeps .env.example tracked (!.env.example).",
+    "commit": "eb480694f40d",
+    "regression_test": "tests/test_fix_set_d.py::test_s7_gitignore_covers_secret_files_but_not_env_example"
   },
   {
     "review": "compliance-security",
@@ -257,8 +302,10 @@
     "severity": "medium",
     "title": "git_info 'dirty' counts eval's own results/ output, so --repeats 2..N (and any run after an uncommitted result) are dirty and get dropped",
     "set": "C",
-    "disposition": "planned",
-    "note": "git_info()['dirty'] ignores changes under results/ and .cache/; main() snapshots git_info once before the repeat loop, so repeats 2..N of a clean tree stay clean."
+    "disposition": "fixed",
+    "note": "Fixed as planned: git_info()['dirty'] ignores changes under results/ and .cache/; main() snapshots git_info once before the repeat loop, so repeats 2..N of a clean tree stay clean.",
+    "commit": "709dc38f78f5",
+    "regression_test": "tests/test_fix_set_c1.py::test_git_dirty_ignores_results_and_cache"
   },
   {
     "review": "eval-quality",
@@ -266,8 +313,10 @@
     "severity": "medium",
     "title": "Run identity (PROMPT_VERSION) ignores model and request parameters; check_success pools and matches runs on it alone",
     "set": "C",
-    "disposition": "planned",
-    "note": "claude.py exposes request_sha(model): a hash of SYSTEM_PROMPT, TOOL, max_tokens, tool_choice, the message template and the model (PROMPT_VERSION unchanged); eval writes 'request_sha' in every Claude result; loop/check_success matches dev and final runs on (prompt_version, model, request_sha), legacy runs without it never match."
+    "disposition": "fixed",
+    "note": "Fixed as planned: claude.py exposes request_sha(model): a hash of SYSTEM_PROMPT, TOOL, max_tokens, tool_choice, the message template and the model (PROMPT_VERSION unchanged); eval writes 'request_sha' in every Claude result; loop/check_success matches dev and final runs on (prompt_version, model, request_sha), legacy runs without it never match. Eval half 67a8a99 (request_sha recorded), gate half 5f435ad (runs match on prompt_version, model, request_sha); PROMPT_VERSION unchanged.",
+    "commit": "67a8a998c707",
+    "regression_test": "tests/test_fix_set_c2.py::test_cq3_dev_gate_does_not_pool_runs_of_another_model_or_request"
   },
   {
     "review": "eval-quality",
@@ -275,8 +324,10 @@
     "severity": "medium",
     "title": "The loop guard only diffs exact protected paths, so new files can change scoring or skip all tests and the gate still passes",
     "set": "C",
-    "disposition": "planned",
-    "note": "The loop guard is an allow-list over git diff --name-status loop-start plus untracked files: only deal_board/extractors/claude.py, loop/DRAFT.md (FIXED sections still checked), loop/LESSONS.md, loop/state.json, added results/claude_*.{json,md} and added tests/test_*.py may change; 'tests pass' also fails on any deselected test or more skips than the one known skip."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The loop guard is an allow-list over git diff --name-status loop-start plus untracked files: only deal_board/extractors/claude.py, loop/DRAFT.md (FIXED sections still checked), loop/LESSONS.md, loop/state.json, added results/claude_*.{json,md} and added tests/test_*.py may change; 'tests pass' also fails on any deselected test or more skips than the one known skip.",
+    "commit": "952ecda30f5e",
+    "regression_test": "tests/test_fix_set_c2.py::test_cq31_changes_outside_the_allow_list_fail_protected"
   },
   {
     "review": "eval-quality",
@@ -284,8 +335,10 @@
     "severity": "medium",
     "title": "test_check_success leaves the gate's key contracts unpinned: 5 semantic mutants survive the whole suite",
     "set": "C",
-    "disposition": "planned",
-    "note": "test_check_success gets distinguishable fixtures and exact failed-set assertions: final uses the oldest run and gates errors and holdout hallucinations; dev gates mean accuracy alone; the five named mutants are killed."
+    "disposition": "fixed",
+    "note": "Fixed as planned: test_check_success gets distinguishable fixtures and exact failed-set assertions: final uses the oldest run and gates errors and holdout hallucinations; dev gates mean accuracy alone; the five named mutants are killed. Test-only fix; adapted to EM-21's contract (exactly REPEATS runs).",
+    "commit": "d70c0500b7b8",
+    "regression_test": "tests/test_check_success.py::test_final_uses_oldest_run_and_gates_errors_and_hallucinations"
   },
   {
     "review": "eval-quality",
@@ -293,8 +346,10 @@
     "severity": "medium",
     "title": "No test pins scoring's deal-value tolerance or city normalisation rules: six contract-breaking mutants survive",
     "set": "C",
-    "disposition": "planned",
-    "note": "Parametrised tests pin the +/-1% deal-value tolerance (abs, <=, 0.01) and city normalisation (case, periods, commas, extra spaces; no spelling tolerance) and the missing_fields error count for an errored deal post. scoring.py unchanged for this one."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Parametrised tests pin the +/-1% deal-value tolerance (abs, <=, 0.01) and city normalisation (case, periods, commas, extra spaces; no spelling tolerance) and the missing_fields error count for an errored deal post. scoring.py unchanged for this one. Test-only fix; scoring.py unchanged for it.",
+    "commit": "e05a0a494078",
+    "regression_test": "tests/test_eval.py::test_deal_value_tolerance_is_one_percent_either_side"
   },
   {
     "review": "eval-quality",
@@ -302,8 +357,10 @@
     "severity": "medium",
     "title": "Cache replays across eval invocations, so the documented '3 separate dev runs' protocol yields one sample repeated 3 times",
     "set": "C",
-    "disposition": "planned",
-    "note": "Replaying cache entries written by an earlier invocation is opt-in (--resume); by default every call is fresh and only written to the cache. loop/check_success fails a dev run with any cached record or usage.cache_hits > 0."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Replaying cache entries written by an earlier invocation is opt-in (--resume); by default every call is fresh and only written to the cache. loop/check_success fails a dev run with any cached record or usage.cache_hits > 0. Eval half e160a8e (--resume), gate half 37fac49 ('fresh runs').",
+    "commit": "e160a8e15251",
+    "regression_test": "tests/test_fix_set_c1.py::test_second_invocation_makes_fresh_calls_unless_resume"
   },
   {
     "review": "eval-quality",
@@ -311,8 +368,10 @@
     "severity": "medium",
     "title": "Dev gate scores only the newest 3 runs of a prompt, so rerunning until 3 good runs come up passes a prompt whose full record fails",
     "set": "C",
-    "disposition": "planned",
-    "note": "The dev gate fails when the current prompt has more than REPEATS clean runs (a rerun needs a new prompt version), and its detail lists the run count and files."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The dev gate fails when the current prompt has more than REPEATS clean runs (a rerun needs a new prompt version), and its detail lists the run count and files.",
+    "commit": "ea700dbfc268",
+    "regression_test": "tests/test_fix_set_c2.py::test_em21_extra_reruns_fail_repeats_even_if_newest_three_are_good"
   },
   {
     "review": "eval-quality",
@@ -320,8 +379,10 @@
     "severity": "medium",
     "title": "loop_runs counts --rescore outputs as fresh runs (dev gate fillable from one sample; a final rescore permanently fails 'one look only')",
     "set": "C",
-    "disposition": "planned",
-    "note": "loop_runs skips results carrying 'rescored_from', so rescores never fill the dev gate or count as a second final look."
+    "disposition": "fixed",
+    "note": "Fixed as planned: loop_runs skips results carrying 'rescored_from', so rescores never fill the dev gate or count as a second final look.",
+    "commit": "423e92169734",
+    "regression_test": "tests/test_fix_set_c2.py::test_em5_rescores_do_not_fill_the_dev_gate"
   },
   {
     "review": "eval-quality",
@@ -338,8 +399,10 @@
     "severity": "low",
     "title": "A truncated tool call (stop_reason max_tokens) is accepted and cached, and its missing keys are scored as correct_missing",
     "set": "C",
-    "disposition": "planned",
-    "note": "Same fix as correctness-api/C-1 and compliance-security/C-10: a max_tokens (or any non-tool_use) response raises ExtractionError, so it is recorded as an error and never cached as a prediction."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Same fix as correctness-api/C-1 and compliance-security/C-10: a max_tokens (or any non-tool_use) response raises ExtractionError, so it is recorded as an error and never cached as a prediction.",
+    "commit": "5cfd3fa85d1e",
+    "regression_test": "tests/test_fix_set_c1.py::test_truncated_call_is_recorded_as_an_error"
   },
   {
     "review": "eval-quality",
@@ -347,8 +410,10 @@
     "severity": "low",
     "title": "test_data validates labels through normalising validators, so a blank or non-string label passes and is scored as 'missed'",
     "set": "A",
-    "disposition": "planned",
-    "note": "test_data asserts every label round-trips unchanged through the schema (as test_holdout_v3 does); with the compliance-security/C-6 validator, blank or non-string labels fail and parse_requirement({'state': 123}) raises."
+    "disposition": "fixed",
+    "note": "Fixed as planned: test_data asserts every label round-trips unchanged through the schema (as test_holdout_v3 does); with the compliance-security/C-6 validator, blank or non-string labels fail and parse_requirement({'state': 123}) raises.",
+    "commit": "90c1b1e62e85",
+    "regression_test": "tests/test_data.py::test_cq22_parse_requirement_rejects_int_state"
   },
   {
     "review": "eval-quality",
@@ -356,8 +421,10 @@
     "severity": "low",
     "title": "Back-compat test pins the frozen regex results to current labels, so any label fix breaks it",
     "set": "C",
-    "disposition": "planned",
-    "note": "The back-compat test checks key-set inclusion against the frozen regex results structurally and compares values against a re-score of the same records under a label snapshot in tests/golden/, so a label fix doesn't break it."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The back-compat test checks key-set inclusion against the frozen regex results structurally and compares values against a re-score of the same records under a label snapshot in tests/golden/, so a label fix doesn't break it. Test-only fix; label snapshot in tests/golden/labels_regex_20261024T224817Z.json.",
+    "commit": "e05a0a494078",
+    "regression_test": "tests/test_scoring_stats.py::test_score_preexisting_keys_unchanged"
   },
   {
     "review": "eval-quality",
@@ -365,8 +432,10 @@
     "severity": "low",
     "title": "load_run promises exit 2 with no traceback for any non-run file, but non-JSON input raises a raw JSONDecodeError",
     "set": "C",
-    "disposition": "planned",
-    "note": "load_run turns a missing, unreadable, empty or non-JSON file into a one-line stderr message and exit 2, no traceback, for --rescore and --compare."
+    "disposition": "fixed",
+    "note": "Fixed as planned: load_run turns a missing, unreadable, empty or non-JSON file into a one-line stderr message and exit 2, no traceback, for --rescore and --compare.",
+    "commit": "253f61abeb2d",
+    "regression_test": "tests/test_fix_set_c1.py::test_non_json_input_exits_2"
   },
   {
     "review": "eval-quality",
@@ -374,8 +443,10 @@
     "severity": "low",
     "title": "Dev-vs-full --compare test asserts only header text, so it passes on an empty comparison and misses full-run-first order",
     "set": "C",
-    "disposition": "planned",
-    "note": "The dev-vs-full --compare test runs in both argument orders and asserts comparison content ('common posts' for data/posts.jsonl, no 'No dataset path in common'); compare_results unit test with holdout unmatched before posts."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The dev-vs-full --compare test runs in both argument orders and asserts comparison content ('common posts' for data/posts.jsonl, no 'No dataset path in common'); compare_results unit test with holdout unmatched before posts. Test-only fix; also parametrises the CLI test over both argument orders.",
+    "commit": "e05a0a494078",
+    "regression_test": "tests/test_eval_compare.py::test_compare_full_run_first_skips_unmatched_holdout"
   },
   {
     "review": "eval-quality",
@@ -383,8 +454,10 @@
     "severity": "low",
     "title": "summarize_repeats, the --repeats 'noise floor' summary, is effectively untested",
     "set": "C",
-    "disposition": "planned",
-    "note": "Unit tests for summarize_repeats/format_repeat_summary with differing per-run accuracies, a None accuracy and a dataset present in one run."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Unit tests for summarize_repeats/format_repeat_summary with differing per-run accuracies, a None accuracy and a dataset present in one run. Test-only fix.",
+    "commit": "e05a0a494078",
+    "regression_test": "tests/test_eval.py::test_summarize_repeats_mean_min_max_and_runs"
   },
   {
     "review": "eval-quality",
@@ -392,8 +465,10 @@
     "severity": "low",
     "title": "test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested",
     "set": "C",
-    "disposition": "planned",
-    "note": "test_eval calls rescore_records itself; a refusal record (raw None, error set) keeps its error through rescore and is counted as an error."
+    "disposition": "fixed",
+    "note": "Fixed as planned: test_eval calls rescore_records itself; a refusal record (raw None, error set) keeps its error through rescore and is counted as an error. Test-only fix.",
+    "commit": "e05a0a494078",
+    "regression_test": "tests/test_eval.py::test_rescore_records_keeps_refusal_error"
   },
   {
     "review": "eval-quality",
@@ -401,8 +476,10 @@
     "severity": "low",
     "title": "Scorer and matcher define city equality differently, so the eval counts cities as correct that the matcher can't use",
     "set": "A",
-    "disposition": "planned",
-    "note": "With correctness-api/C-6, matcher equality is a coarsening of the scorer's city equality (market_key applied on top of scoring's rule), so any city the eval scores correct also earns the matcher's market/county point; a test pins it for St Louis / San Antonio variants."
+    "disposition": "fixed",
+    "note": "Fixed as planned: With correctness-api/C-6, matcher equality is a coarsening of the scorer's city equality (market_key applied on top of scoring's rule), so any city the eval scores correct also earns the matcher's market/county point; a test pins it for St Louis / San Antonio variants.",
+    "commit": "eb2e195824b9",
+    "regression_test": "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_st_louis_earns_market_point"
   },
   {
     "review": "eval-quality",
@@ -410,8 +487,10 @@
     "severity": "low",
     "title": "Explicit --extractor claude with no API key silently runs regex instead, writes regex results and exits 0",
     "set": "C",
-    "disposition": "planned",
-    "note": "An explicit --extractor claude with no API key exits non-zero before writing anything; only --extractor all keeps the regex fallback."
+    "disposition": "fixed",
+    "note": "Fixed as planned: An explicit --extractor claude with no API key exits non-zero before writing anything; only --extractor all keeps the regex fallback.",
+    "commit": "30dc56803528",
+    "regression_test": "tests/test_fix_set_c1.py::test_explicit_claude_without_key_exits_nonzero"
   },
   {
     "review": "eval-quality",
@@ -419,8 +498,10 @@
     "severity": "low",
     "title": "--rescore copies the source run's 'scoring' note into the new JSON while its .md shows the current rules",
     "set": "C",
-    "disposition": "planned",
-    "note": "rescored_result writes the current SCORING_NOTE as 'scoring' (the source's note kept as 'source_scoring'), so the JSON and .md describe the same rules."
+    "disposition": "fixed",
+    "note": "Fixed as planned: rescored_result writes the current SCORING_NOTE as 'scoring' (the source's note kept as 'source_scoring'), so the JSON and .md describe the same rules.",
+    "commit": "bc0e8013ddd9",
+    "regression_test": "tests/test_fix_set_c1.py::test_rescore_writes_current_scoring_note"
   },
   {
     "review": "eval-quality",
@@ -428,8 +509,10 @@
     "severity": "low",
     "title": "Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it",
     "set": "C",
-    "disposition": "planned",
-    "note": "The dev gate re-scores each counted run against current labels (cli.eval.rescore) and fails if the gated metrics differ from the stored scores; the guard also fails if any commit since loop-start touched a protected path, not just the net diff."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The dev gate re-scores each counted run against current labels (cli.eval.rescore) and fails if the gated metrics differ from the stored scores; the guard also fails if any commit since loop-start touched a protected path, not just the net diff.",
+    "commit": "da68717fc0ff",
+    "regression_test": "tests/test_fix_set_c2.py::test_cq7_hand_edited_perfect_scores_block_fails"
   },
   {
     "review": "eval-quality",
@@ -437,8 +520,10 @@
     "severity": "low",
     "title": "score() hard-codes the good-outcome tuple for its failures list instead of using GOOD_OUTCOMES",
     "set": "C",
-    "disposition": "planned",
-    "note": "score() builds its failures list with GOOD_OUTCOMES, the same predicate accuracy uses."
+    "disposition": "fixed",
+    "note": "Fixed as planned: score() builds its failures list with GOOD_OUTCOMES, the same predicate accuracy uses.",
+    "commit": "8e85e466dcab",
+    "regression_test": "tests/test_fix_set_c1.py::test_failures_follow_patched_good_outcomes"
   },
   {
     "review": "eval-quality",
@@ -464,8 +549,10 @@
     "severity": "low",
     "title": "baseline-v1_comparison.json uses the old all-posts metric and disagrees with every reported baseline number, with nothing saying so",
     "set": "C",
-    "disposition": "planned",
-    "note": "Without touching results/: load_run's exit-2 message names a datasets-less JSON as a legacy summary that predates deal-only scoring, and every new or rescored result carries scoring_version; the README/P6-doc note is left to the docs builder."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Without touching results/: load_run's exit-2 message names a datasets-less JSON as a legacy summary that predates deal-only scoring, and every new or rescored result carries scoring_version; the README/P6-doc note is left to the docs builder. The README / P6-doc note is left to the docs builder.",
+    "commit": "15f5357a0398",
+    "regression_test": "tests/test_fix_set_c1.py::test_legacy_summary_named_in_exit_message"
   },
   {
     "review": "eval-quality",
@@ -473,8 +560,10 @@
     "severity": "low",
     "title": "Hallucination rates count errored posts as clean: an all-errored run reports 0% hallucination",
     "set": "C",
-    "disposition": "planned",
-    "note": "Hallucination rates exclude errored posts from their denominators (per-field rate and posts_with_any_rate), None when nothing is left; SCORING_NOTE says so. Changes rescored rates: delta recorded."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Hallucination rates exclude errored posts from their denominators (per-field rate and posts_with_any_rate), None when nothing is left; SCORING_NOTE says so. Changes rescored rates: delta recorded. Shares the EM-61 commit; posts_with_any_rate is unchanged on the final run because no non-deal post errored.",
+    "commit": "31c7f9b13888",
+    "regression_test": "tests/test_fix_set_c1.py::test_all_errored_run_has_no_hallucination_rate"
   },
   {
     "review": "eval-quality",
@@ -509,8 +598,10 @@
     "severity": "low",
     "title": "Rescore/compare join old raw outputs to current labels by post id only, with no text or label hash",
     "set": "C",
-    "disposition": "planned",
-    "note": "New results store text_sha256 and label_sha256 per record; rescore/compare exclude ids whose text or label changed, and report changed/missing/new ids under 'drift' with a one-line warning; legacy files without hashes warn once and score as before."
+    "disposition": "fixed",
+    "note": "Fixed as planned: New results store text_sha256 and label_sha256 per record; rescore/compare exclude ids whose text or label changed, and report changed/missing/new ids under 'drift' with a one-line warning; legacy files without hashes warn once and score as before.",
+    "commit": "99c0a38e4388",
+    "regression_test": "tests/test_fix_set_c1.py::test_rescore_and_compare_report_drift"
   },
   {
     "review": "eval-quality",
@@ -518,8 +609,10 @@
     "severity": "low",
     "title": "Per-field hallucination rate divides by all deal posts instead of posts whose label is empty, so guessing looks rare when the sets barely test it",
     "set": "C",
-    "disposition": "planned",
-    "note": "Per-field hallucination_rate = hallucinated / n_null, where n_null counts non-errored deal posts whose gold value is None; Wilson ci95 over n_null; None when n_null == 0; each field cell exposes n_null. Changes rescored rates: delta recorded."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Per-field hallucination_rate = hallucinated / n_null, where n_null counts non-errored deal posts whose gold value is None; Wilson ci95 over n_null; None when n_null == 0; each field cell exposes n_null. Changes rescored rates: delta recorded. Intended scoring change. Rescore delta on results/claude_20261024T234359Z.json: only hallucination_rate/hallucination_ci95 move and n_null is added (posts: state 0.069 -> 0.333, property_type 0.034 -> 1.0; holdout: property_type 0.083 -> 1.0; other rates stay 0 with wider CIs); every count, accuracy and failure list is identical. Full diff in review/fixes/RESCORE_DIFF.md.",
+    "commit": "31c7f9b13888",
+    "regression_test": "tests/test_fix_set_c1.py::test_hallucination_rate_divides_by_null_labels"
   },
   {
     "review": "eval-quality",
@@ -536,8 +629,10 @@
     "severity": "low",
     "title": "rt-20: the regex path's city 'System Override Mode' is echoed into the follow-up",
     "set": "A",
-    "disposition": "planned",
-    "note": "follow_up_question names a city only if cities' key of it is a known city (TX_CITY_TO_COUNTY keys plus the shipped brokers' markets, loaded lazily); anything else falls back to 'the property', so injected text is never echoed."
+    "disposition": "fixed",
+    "note": "Fixed as planned: follow_up_question names a city only if cities' key of it is a known city (TX_CITY_TO_COUNTY keys plus the shipped brokers' markets, loaded lazily); anything else falls back to 'the property', so injected text is never echoed. xfail removed in cc557d4.",
+    "commit": "aa7afdb97c17",
+    "regression_test": "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-20]"
   },
   {
     "review": "red-team",
@@ -545,8 +640,10 @@
     "severity": "low",
     "title": "smuggled-state-not-a-state: a model_construct'd state 'ZZ' reaches a 200 body",
     "set": "B",
-    "disposition": "planned",
-    "note": "match_post re-validates the extractor's output before matching: state is kept only if it is exactly a State code (else None: fail closed, state follow-up), and the response carries the re-validated requirement."
+    "disposition": "fixed",
+    "note": "Fixed as planned: match_post re-validates the extractor's output before matching: state is kept only if it is exactly a State code (else None: fail closed, state follow-up), and the response carries the re-validated requirement. xfail removed in 5db3a0d; a non-code state is reported as null (fail closed).",
+    "commit": "73d4487e411c",
+    "regression_test": "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-not-a-state]"
   },
   {
     "review": "red-team",
@@ -554,8 +651,10 @@
     "severity": "low",
     "title": "injection-in-city-with-follow-up: injected city echoed in the follow-up",
     "set": "A",
-    "disposition": "planned",
-    "note": "Same fix as RT-1."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Same fix as RT-1. xfail removed in cc557d4.",
+    "commit": "aa7afdb97c17",
+    "regression_test": "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-with-follow-up]"
   },
   {
     "review": "red-team",
@@ -563,8 +662,10 @@
     "severity": "low",
     "title": "injection-in-city-no-state: injected city echoed in the state question",
     "set": "A",
-    "disposition": "planned",
-    "note": "Same fix as RT-1."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Same fix as RT-1. xfail removed in cc557d4.",
+    "commit": "aa7afdb97c17",
+    "regression_test": "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-no-state]"
   },
   {
     "review": "red-team",
@@ -572,8 +673,10 @@
     "severity": "low",
     "title": "smuggled-is-deal-request-no: a truthy non-bool is_deal_request gets matches",
     "set": "B",
-    "disposition": "planned",
-    "note": "Same re-validation as RT-2: is_deal_request counts only if it is exactly True; anything else is a non-deal, so no matches."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Same re-validation as RT-2: is_deal_request counts only if it is exactly True; anything else is a non-deal, so no matches. xfail removed in 5db3a0d.",
+    "commit": "73d4487e411c",
+    "regression_test": "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-is-deal-request-no]"
   },
   {
     "review": "p10",
@@ -581,8 +684,10 @@
     "severity": "low",
     "title": "Non-editable `pip install .` breaks: data/ lives outside the package",
     "set": "D",
-    "disposition": "planned",
-    "note": "deal_board.paths fails at import with a clear message (install editable from a checkout) when data/ isn't next to the package, instead of a confusing FileNotFoundError deep in a request."
+    "disposition": "fixed",
+    "note": "Fixed as planned: deal_board.paths fails at import with a clear message (install editable from a checkout) when data/ isn't next to the package, instead of a confusing FileNotFoundError deep in a request.",
+    "commit": "790515542ee7",
+    "regression_test": "tests/test_fix_set_d.py::test_p10_1_package_without_data_fails_import_with_editable_hint"
   },
   {
     "review": "p10",
@@ -590,8 +695,10 @@
     "severity": "low",
     "title": "RegexExtractor can't be pickled",
     "set": "D",
-    "disposition": "planned",
-    "note": "The typed shim makes RegexExtractor picklable (the frozen class is importable under the module name pickle records); the frozen file is untouched."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The typed shim makes RegexExtractor picklable (the frozen class is importable under the module name pickle records); the frozen file is untouched.",
+    "commit": "4f512c748f63",
+    "regression_test": "tests/test_fix_set_d.py::test_p10_2_regex_extractor_pickles_and_extracts_the_same"
   },
   {
     "review": "p10",
@@ -599,8 +706,10 @@
     "severity": "low",
     "title": "The API caches its first Claude key/model for the process",
     "set": "B",
-    "disposition": "planned",
-    "note": "The cached Claude extractor is keyed on the current settings' key fingerprint and model (maxsize 1), so a changed key or DEAL_MODEL builds a new client."
+    "disposition": "fixed",
+    "note": "Fixed as planned: The cached Claude extractor is keyed on the current settings' key fingerprint and model (maxsize 1), so a changed key or DEAL_MODEL builds a new client.",
+    "commit": "477ad4f48f91",
+    "regression_test": "tests/test_fix_set_b.py::test_claude_extractor_rebuilt_when_key_or_model_changes"
   },
   {
     "review": "p10",
@@ -608,8 +717,10 @@
     "severity": "low",
     "title": "README architecture table shows pre-packaging paths",
     "set": "D",
-    "disposition": "planned",
-    "note": "Update only the README architecture table to deal_board/... paths."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Update only the README architecture table to deal_board/... paths.",
+    "commit": "c6d6c37dc784",
+    "regression_test": "tests/test_fix_set_d.py::test_p10_4_readme_architecture_table_uses_packaged_paths"
   },
   {
     "review": "p10",
@@ -617,7 +728,9 @@
     "severity": "low",
     "title": ".claude/agents/extractor-improver.md shows pre-packaging paths",
     "set": "D",
-    "disposition": "planned",
-    "note": "Path updates only in the agent file (rule wording untouched)."
+    "disposition": "fixed",
+    "note": "Fixed as planned: Path updates only in the agent file (rule wording untouched).",
+    "commit": "b3c38ed47785",
+    "regression_test": "tests/test_fix_set_d.py::test_p10_5_extractor_improver_agent_uses_packaged_paths"
   }
 ]
