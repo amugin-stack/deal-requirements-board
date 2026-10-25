@@ -319,14 +319,24 @@ def test_score_ci95_on_every_accuracy_cell(synthetic: Synthetic) -> None:
 
 
 def test_score_hallucination_rate_and_ci(synthetic: Synthetic) -> None:
-    """fields[f] gains hallucination_rate = hallucinated / n_deal_posts and its Wilson interval."""
+    """fields[f] gains hallucination_rate = hallucinated / n_null (non-errored deal posts whose label
+    for f is empty) and its Wilson interval; None when n_null is 0 (eval-quality/EM-61)."""
     posts, records = synthetic
     s = score(posts, records)
     assert s["fields"]["timeline"]["hallucinated"] == 1
     for field in KEY_FIELDS:
         cell = s["fields"][field]
-        assert cell["hallucination_rate"] == pytest.approx(cell["hallucinated"] / 3)
-        assert list(cell["hallucination_ci95"]) == pytest.approx(_wilson_list(cell["hallucinated"], 3))
+        n_null = sum(
+            1
+            for p in posts
+            if p["label"]["is_deal_request"] and not records[p["id"]]["error"] and p["label"][field] is None
+        )
+        assert cell["n_null"] == n_null
+        if n_null == 0:
+            assert cell["hallucination_rate"] is None and cell["hallucination_ci95"] is None
+            continue
+        assert cell["hallucination_rate"] == pytest.approx(cell["hallucinated"] / n_null)
+        assert list(cell["hallucination_ci95"]) == pytest.approx(_wilson_list(cell["hallucinated"], n_null))
 
 
 def test_score_non_deal_rate_and_ci(synthetic: Synthetic) -> None:

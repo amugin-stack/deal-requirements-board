@@ -15,6 +15,10 @@ Rules:
   Accuracy = (correct + correct_missing) / posts scored. Errored posts stay in the denominator.
 - missing_fields is scored as exact set equality (correct / wrong / error).
 - notes is free text and is not scored.
+- Hallucination rates count only posts where a guess was possible: a field's hallucination_rate is
+  hallucinated / n_null, n_null being the non-errored deal posts whose label for that field is empty;
+  posts_with_any_rate divides by the non-errored non-deal posts. Errored posts can't guess, so
+  counting them would push the rate toward 0. A rate with an empty denominator is None.
 - Every rate carries a 95% Wilson interval (ci95), because at 15-24 posts one post moves accuracy
   by 4-7 points. post_correctness + paired_comparison compare two runs post by post (exact McNemar).
 """
@@ -35,7 +39,8 @@ Z_95: float = 1.96
 # Bumped whenever a rule above changes what a score means, and written into every results file, so a
 # number can always be traced to the rules that produced it. Version 1 is deal-only field scoring with
 # Wilson intervals; results/baseline-v1_comparison.json predates it (key fields scored on all posts).
-SCORING_VERSION = 1
+# Version 2: hallucination rates divide by the posts where a guess was possible (see Rules).
+SCORING_VERSION = 2
 
 
 def wilson_interval(successes: int, n: int, z: float = Z_95) -> tuple[float, float]:
@@ -121,12 +126,18 @@ def _with_accuracy(counts: dict[str, int], n: int) -> JSONObject:
     return {**counts, "accuracy": _rate(good, n), "ci95": _ci95(good, n)}
 
 
-def _with_hallucination_rate(cell: JSONObject, n_deal: int) -> JSONObject:
-    """A key field's hallucinations on deal posts, as a rate so runs of different size compare."""
+def _with_hallucination_rate(cell: JSONObject, n_null: int) -> JSONObject:
+    """A key field's hallucinations on deal posts, as a rate so runs of different size compare.
+
+    The denominator is n_null, the non-errored deal posts whose label for the field is empty: only
+    there can a filled value be a guess. Dividing by every deal post made guessing look rare on
+    sets that barely test it (one chance in twelve posts reads as 8%, even when the model guessed).
+    """
     return {
         **cell,
-        "hallucination_rate": _rate(cell["hallucinated"], n_deal),
-        "hallucination_ci95": _ci95(cell["hallucinated"], n_deal),
+        "n_null": n_null,
+        "hallucination_rate": _rate(cell["hallucinated"], n_null),
+        "hallucination_ci95": _ci95(cell["hallucinated"], n_null),
     }
 
 
@@ -182,6 +193,8 @@ def score(posts: list[JSONObject], records: dict[str, JSONObject]) -> JSONObject
     missing = dict.fromkeys(BINARY_OUTCOMES, 0)
     non_deal_filled = dict.fromkeys(KEY_FIELDS, 0)
     non_deal_posts_with_any = 0
+    n_null = dict.fromkeys(KEY_FIELDS, 0)  # non-errored deal posts with an empty label, per field
+    n_non_deal_scored = 0  # non-errored non-deal posts
     failures: list[JSONObject] = []
 
     def fail(post: JSONObject, field: str, outcome: str, expected: Any = None, got: Any = None) -> None:
@@ -215,6 +228,7 @@ def score(posts: list[JSONObject], records: dict[str, JSONObject]) -> JSONObject
 
         if gold["is_deal_request"]:
             for f in KEY_FIELDS:
+                n_null[f] += gold[f] is None
                 o = field_outcome(f, gold[f], pred[f])
                 fields[f][o] += 1
                 if o not in GOOD_OUTCOMES:
@@ -225,6 +239,7 @@ def score(posts: list[JSONObject], records: dict[str, JSONObject]) -> JSONObject
             if o == "wrong":
                 fail(p, "missing_fields", o, sorted(exp), sorted(got))
         else:
+            n_non_deal_scored += 1
             filled = [f for f in KEY_FIELDS if pred[f] is not None]
             for f in filled:
                 non_deal_filled[f] += 1
@@ -238,14 +253,15 @@ def score(posts: list[JSONObject], records: dict[str, JSONObject]) -> JSONObject
         "n_deal_posts": n_deal,
         "n_non_deal_posts": n_non_deal,
         "is_deal_request": _with_accuracy(is_deal, len(posts)),
-        "fields": {f: _with_hallucination_rate(_with_accuracy(c, n_deal), n_deal) for f, c in fields.items()},
+        "fields": {f: _with_hallucination_rate(_with_accuracy(c, n_deal), n_null[f]) for f, c in fields.items()},
         "missing_fields": _with_accuracy(missing, n_deal),
         "non_deal_hallucinations": {
             "fields_filled": sum(non_deal_filled.values()),
             "posts_with_any": non_deal_posts_with_any,
             "by_field": non_deal_filled,
-            "posts_with_any_rate": _rate(non_deal_posts_with_any, n_non_deal),
-            "posts_with_any_ci95": _ci95(non_deal_posts_with_any, n_non_deal),
+            # Over non-errored non-deal posts only: an errored post can't fill a field.
+            "posts_with_any_rate": _rate(non_deal_posts_with_any, n_non_deal_scored),
+            "posts_with_any_ci95": _ci95(non_deal_posts_with_any, n_non_deal_scored),
         },
         "failures": failures,
     }

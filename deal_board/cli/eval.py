@@ -50,7 +50,9 @@ SCORING_NOTE = (
     "is_deal_request is scored on all posts; the other rows only on posts labeled as deal requests. "
     f"deal_value_usd matches within ±{DEAL_VALUE_TOLERANCE:.0%}. city ignores case, spacing, periods and "
     "commas (no spelling tolerance). missing_fields is exact set equality. notes is free text and NOT "
-    "scored. Errors never count as correct and stay in the denominator. Brackets are 95% Wilson intervals."
+    "scored. Errors never count as correct and stay in the accuracy denominator. A field's hallucination "
+    "rate is guesses / n_null, the non-errored deal posts whose label for that field is empty; the "
+    "non-deal posts-with-any rate divides by the non-errored non-deal posts. Brackets are 95% Wilson intervals."
 )
 
 # Anthropic first-party API list prices for prompts under 100K tokens, from the Claude API reference
