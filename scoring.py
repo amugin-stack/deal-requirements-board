@@ -42,6 +42,8 @@ def wilson_interval(successes: int, n: int, z: float = Z_95) -> tuple[float, flo
     """
     if n < 0 or successes < 0 or successes > n:
         raise ValueError(f"need 0 <= successes <= n, got successes={successes}, n={n}")
+    if z <= 0:  # a non-positive z would silently return an inverted or zero-width interval
+        raise ValueError(f"z must be > 0, got {z}")
     if n == 0:
         return (0.0, 1.0)
     p, z2 = successes / n, z * z

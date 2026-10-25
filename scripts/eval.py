@@ -12,6 +12,7 @@ prediction, scores, token usage and cost) and a matching .md table. Scoring rule
 """
 import argparse
 import hashlib
+import inspect
 import json
 import os
 import subprocess
@@ -73,7 +74,13 @@ def cost_usd(model: str | None, input_tokens: int, output_tokens: int) -> float 
 
 
 def text_sha256(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
+    """sha256 of the text's UTF-8 bytes. surrogatepass, so a lone surrogate (which json.loads can
+    produce from a post) hashes instead of crashing the run; normal text hashes as plain UTF-8."""
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def cache_key(model: str, prompt_version: str, text: str) -> str:
@@ -86,21 +93,32 @@ def cache_key(model: str, prompt_version: str, text: str) -> str:
     return hashlib.sha256(json.dumps([model, prompt_version, text_sha256(text)]).encode()).hexdigest()
 
 
+ENTRY_FIELDS = ("raw", "error", "input_tokens", "output_tokens", "latency_s")
+
+
 class RawCache:
     """Raw extractor outputs on disk, one JSON file per (model, prompt version, post text).
 
     Lets an interrupted Claude run resume without paying again for posts it already did.
+
+    request_fingerprint guards what PROMPT_VERSION doesn't cover: it hashes only the system prompt
+    and tool, not max_tokens, tool_choice or the <post> wrapper. The CLI passes the sha256 of the
+    extractor's source file, so any edit there turns old entries into misses instead of replaying
+    outputs of a request that no longer exists. None means the caller doesn't fingerprint.
     """
 
-    def __init__(self, directory: Path, model: str, prompt_version: str) -> None:
+    def __init__(self, directory: Path, model: str, prompt_version: str,
+                 request_fingerprint: str | None = None) -> None:
         self.directory, self.model, self.prompt_version = Path(directory), model, prompt_version
+        self.request_fingerprint = request_fingerprint
         self._looked_up: set[str] = set()
 
     def _path(self, key: str) -> Path:
         return self.directory / f"{key}.json"
 
     def _identity(self, text: str) -> dict:
-        return {"model": self.model, "prompt_version": self.prompt_version, "text_sha256": text_sha256(text)}
+        return {"model": self.model, "prompt_version": self.prompt_version, "text_sha256": text_sha256(text),
+                "request_sha256": self.request_fingerprint}
 
     def get(self, text: str) -> dict | None:
         """The cached entry for text, or None (a miss).
@@ -109,7 +127,8 @@ class RawCache:
         across all repeats, so run 1 may resume from disk while runs 2..N always call the API:
         repeats stay independent samples instead of replaying run 1's outputs. A file that is
         unreadable, or whose stored identity doesn't match the request, is treated as a miss
-        rather than trusted on the strength of its filename.
+        rather than trusted on the strength of its filename; so is one missing an entry field
+        (hand-edited, or written by an older entry format), which would otherwise crash the run.
         """
         key = cache_key(self.model, self.prompt_version, text)
         if key in self._looked_up:
@@ -122,7 +141,7 @@ class RawCache:
         identity = self._identity(text)
         if not isinstance(entry, dict) or any(entry.get(k) != v for k, v in identity.items()):
             return None
-        return entry
+        return entry if all(k in entry for k in ENTRY_FIELDS) else None
 
     def put(self, text: str, entry: dict) -> None:
         """Store entry for text (latest wins), stamped with the identity that get() verifies.
@@ -258,6 +277,17 @@ def rescore(saved: dict) -> dict:
     return out
 
 
+RUN_ONLY_KEYS = ("usage", "repeat", "cache_enabled")
+
+
+def rescored_result(saved: dict, source: Path, stamp: str, git: dict) -> dict:
+    """A rescore's own results dict. It drops the source run's usage, repeat and cache_enabled:
+    a rescore makes no API calls, and copying them would report the old run's cost (and name the
+    file as a repeat) as if this run had spent it. The source file keeps them."""
+    kept = {k: v for k, v in saved.items() if k not in RUN_ONLY_KEYS}
+    return {**kept, "timestamp": stamp, "git": git, "rescored_from": str(source), "datasets": rescore(saved)}
+
+
 def compare_results(a: dict, b: dict) -> dict:
     """Post-by-post paired comparison of two saved runs, per field.
 
@@ -373,6 +403,8 @@ def markdown(result: dict) -> str:
     meta = {k: result[k] for k in ("model", "prompt_version", "timestamp") if result.get(k)}
     meta["commit"] = result["git"]["commit"][:7] + (" (uncommitted changes)" if result["git"]["dirty"] else "")
     lines += [", ".join(f"{k}: `{v}`" for k, v in meta.items()), ""]
+    if "rescored_from" in result:
+        lines += [f"Re-scored from `{result['rescored_from']}` against the current labels; no API calls.", ""]
     if "usage" in result:
         lines += [usage_line(result["usage"]), ""]
     lines += [f"_{SCORING_NOTE}_", ""]
@@ -491,9 +523,7 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.rescore:
-        saved = load_run(args.rescore)
-        result = {**saved, "timestamp": timestamp(), "git": git_info(),
-                  "rescored_from": str(args.rescore), "datasets": rescore(saved)}
+        result = rescored_result(load_run(args.rescore), args.rescore, timestamp(), git_info())
         path = save(result, results_dir)
         print(markdown(result), f"\nsaved {path}", sep="\n")
         return
@@ -508,7 +538,8 @@ def main(argv: list[str] | None = None) -> None:
         # One cache instance per extractor per invocation, shared by every repeat (see RawCache.get).
         # The regex baseline is deterministic and free, so it is never cached.
         cache = (None if name == "regex" or args.no_cache
-                 else RawCache(args.cache_dir or CACHE_DIR, meta["model"], meta["prompt_version"]))
+                 else RawCache(args.cache_dir or CACHE_DIR, meta["model"], meta["prompt_version"],
+                               file_sha256(Path(inspect.getsourcefile(type(extractor))))))
         stamp = timestamp()
         results = []
         for k in range(1, args.repeats + 1):

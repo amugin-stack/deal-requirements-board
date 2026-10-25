@@ -33,6 +33,13 @@ flowchart TD
 | Test writer | `tests/test_scoring_stats.py`, `tests/test_eval_cache.py`, `tests/test_eval_compare.py` | this contract, `results/*.json`, `data/`, existing tests | Blind to the code |
 | Reviewer | nothing | everything | Hunts for silent statistical and caching errors |
 
+Review outcome: 6 confirmed findings; 5 fixed, each with a test in
+`tests/test_p6_review_regressions.py` (rescore inheriting the source's cost,
+cache key blind to request parameters, partial entry crash, lone-surrogate
+crash, non-positive z). Not fixed: `exact_mcnemar_p` returns 0.0 at n ≈ 2000
+because the true value is below the smallest float; irrelevant at 0–10
+discordant posts.
+
 ## Contract
 
 ### scoring.py
@@ -47,7 +54,7 @@ Wilson score interval for a binomial proportion. Why Wilson and not the normal
 to zero width or leaves [0, 1]; Wilson stays inside [0, 1] and keeps sensible
 width. Rules:
 - `n == 0` returns `(0.0, 1.0)`: with no data every rate is plausible.
-- `successes < 0`, `n < 0` or `successes > n` raise `ValueError`.
+- `successes < 0`, `n < 0`, `successes > n` or `z <= 0` raise `ValueError`.
 - `successes == 0` gives a lower bound of exactly `0.0`; `successes == n`
   gives an upper bound of exactly `1.0` (no float drift such as 0.9999999).
 - Reference values (z = 1.96): `(0, 10) → (0.0, 0.2775)`, `(10, 10) → (0.7225, 1.0)`,
@@ -133,7 +140,8 @@ model is not in the table. It never guesses a price.
 def cache_key(model: str, prompt_version: str, text: str) -> str
 
 class RawCache:
-    def __init__(self, directory: Path, model: str, prompt_version: str) -> None
+    def __init__(self, directory: Path, model: str, prompt_version: str,
+                 request_fingerprint: str | None = None) -> None
     def get(self, text: str) -> dict | None
     def put(self, text: str, entry: dict) -> None
 ```
@@ -144,7 +152,13 @@ class RawCache:
   "error": str | None, "input_tokens": int | None, "output_tokens": int | None,
   "latency_s": float | None}`. `get` returns `None` (a miss) when the file is
   missing, is not valid JSON, or its `model`/`prompt_version`/`text_sha256`
-  don't equal the requested ones. Extraction errors (refusal, no tool call)
+  don't equal the requested ones, or when any entry field is missing.
+  Review fix: the entry also stores `request_sha256` (the `request_fingerprint`,
+  verified on read). `PROMPT_VERSION` hashes only the system prompt and tool,
+  not `max_tokens`, `tool_choice` or the `<post>` wrapper, so the CLI passes
+  the sha256 of the extractor's source file: any edit there makes old entries
+  misses. The key itself stays (model, prompt version, text sha256). Text is
+  hashed as UTF-8 with `surrogatepass`. Extraction errors (refusal, no tool call)
   are cached like successes, so a resumed run replays the same outcomes
   instead of re-rolling only the failures. API/network exceptions are never
   cached (they propagate, as today).
@@ -220,6 +234,8 @@ python scripts/eval.py --extractor claude --no-cache      # bypass the cache ent
 python scripts/eval.py ... --results-dir DIR              # where results are written (default results/)
 python scripts/eval.py ... --cache-dir DIR                # default .cache/extractor/
 ```
+A rescore drops the source run's `usage`, `repeat` and `cache_enabled` (it made
+no API calls) and its markdown says it was re-scored from the source file.
 `--rescore` and `--compare` on a JSON that has no `datasets` key (e.g.
 `results/baseline-v1_comparison.json`, a summary, not an eval run) exit with
 status 2 and a one-line message saying so, instead of a traceback.
