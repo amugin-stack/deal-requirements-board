@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -128,6 +129,34 @@ def run_one(key: str, diff: str, copy: Path) -> dict[str, Any]:
     return entry
 
 
+FROZEN_AT_TAG = "extractors/regex_baseline.py"
+
+
+def init_copy_repo(copy: Path) -> None:
+    """An empty repo for `copy`, plus one commit tagged baseline-v1 holding the real tag's frozen file.
+
+    Two tests need git: the .gitignore check, and test_frozen_baseline_matches_tag, which skips
+    without a repo but fails without the tag. The tag commit is built from the real repo's
+    `baseline-v1` blob through a separate index file, so the copy's working tree and the real
+    repo are never touched. No mutant may edit the frozen file, so this cannot hide a kill.
+    """
+    frozen = git("show", f"baseline-v1:{FROZEN_AT_TAG}").stdout
+    env = {**os.environ, "GIT_INDEX_FILE": str(copy / ".git" / "tag-index")}
+    ident = ["-c", "user.name=rerun", "-c", "user.email=rerun@example.invalid", "-c", "commit.gpgsign=false"]
+
+    def g(*args: str, stdin: str | None = None) -> str:
+        done = subprocess.run(["git", *ident, *args], cwd=copy, env=env, input=stdin, capture_output=True, text=True)
+        if done.returncode != 0:
+            raise RuntimeError(f"git {args[0]} failed in {copy}: {done.stderr.strip()}")
+        return done.stdout.strip()
+
+    g("init", "-q")
+    blob = g("hash-object", "-w", "--stdin", stdin=frozen)
+    g("update-index", "--add", "--cacheinfo", f"100644,{blob},{FROZEN_AT_TAG}")
+    commit = g("commit-tree", g("write-tree"), "-m", "baseline-v1 (frozen file only)")
+    g("tag", "baseline-v1", commit)
+
+
 def run_all(diffs: dict[str, tuple[str, str]], work: Path) -> dict[str, Any]:
     copies = HELPERS.copies(work)
     for c in copies:  # the copies must hold today's tree, not the one `setup` saw
@@ -138,7 +167,7 @@ def run_all(diffs: dict[str, tuple[str, str]], work: Path) -> dict[str, Any]:
         # Copies leave out .git so nothing can touch the real repo, but one test asks git which
         # files .gitignore covers. An empty repo of the copy's own answers that and holds nothing.
         if not (c / ".git").exists():
-            subprocess.run(["git", "init", "-q"], cwd=c, check=True)
+            init_copy_repo(c)
     base = HELPERS.run_suite(copies[0], "baseline")
     print(f"baseline (unpatched copy): {base.note}", flush=True)
     if base.failed:  # a failure here would be counted as a kill for every mutant
