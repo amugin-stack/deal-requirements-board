@@ -864,5 +864,36 @@
     "note": "Fixed: comparisons use pinned commits LOOP_START_REV/BASELINE_REV; git runs with --no-replace-objects (161490e); new 'tags unmoved' check reports a moved tag or any refs/replace entry.",
     "regression_test": "tests/test_fix_postreview2.py::test_r2_eval2_moving_loop_start_does_not_hide_a_protected_commit",
     "commit": "2dcf5561b82b"
+  },
+  {
+    "review": "postreview-3",
+    "id": "R3-EVAL-2",
+    "severity": "medium",
+    "title": "History check missed evil merges and merged-in root commits",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: each commit in loop-start..HEAD is checked both by its own diff (diff-tree --root) and by its whole tree against the pinned start.",
+    "regression_test": "tests/test_fix_postreview3.py::test_r3_eval2_evil_merge_is_seen_in_history",
+    "commit": "e34b609f55fa"
+  },
+  {
+    "review": "postreview-3",
+    "id": "R3-EVAL-3",
+    "severity": "medium",
+    "title": "Round-2 pin inside the protected file made a new loop impossible to set up honestly",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: --loop-start <full sha> supplied by the orchestrator (ref names and short shas refused, exit 2); default is the original pin; docstring documents how to start a new loop.",
+    "regression_test": "tests/test_fix_postreview3.py::test_r3_eval3_loop_start_option_overrides_file_pin",
+    "commit": "31233e046807"
+  },
+  {
+    "review": "postreview-3",
+    "id": "R3-EVAL-1",
+    "severity": "low",
+    "title": "Agent-written claude.py can tamper with the guard process it is imported into",
+    "set": "join",
+    "disposition": "wontfix",
+    "note": "Verified low, not medium/high: needs deliberately malicious extractor code, the same class no in-repo guard can stop (the same claude.py runs inside eval and could return the labels); present on main at c47ee1f. Hardening (identity/rescore from a -I subprocess, guard-side PROMPT_VERSION recompute) left for the owner."
   }
 ]

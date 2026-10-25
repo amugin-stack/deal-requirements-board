@@ -64,3 +64,37 @@ Low observations from round 2 (not fixed, recorded for the owner):
   would turn its records into errors on rescore (schema.py is protected inside the loop).
 - A final look written outside `results/` (`--results-dir`) or deleted can't be counted by any
   file-based guard; a protected look ledger would be needed.
+
+## Round 3
+
+new_medium_or_high: 2
+
+Reviewed at `6a5aafd`, the last round the brief allows. Compliance: no medium/high (nothing since round 2
+touched the product path). Eval-method: 3 candidates, one verifier each.
+
+| id | reviewer | claimed | verified | finding | fix |
+|---|---|---|---|---|---|
+| R3-EVAL-1 | eval | high/medium | **low** | the guard imports agent-editable `claude.py` into its own process, so deliberately malicious extractor code can rebind the guard's functions; same class no in-repo guard can stop (that code also runs inside eval), and already on `main` | wontfix (hardening noted) |
+| R3-EVAL-2 | eval | medium | medium | `commits_since` used plain `diff-tree`, blind to an "evil merge" carrying its own protected edit and to merged-in root commits | `e34b609` |
+| R3-EVAL-3 | eval | medium | medium (regression from round 2) | the loop-start pin lives in the protected file, which can't name the commit containing it, so a new loop could never be set up without failing the guard | `31233e0` (`--loop-start <sha>` from the orchestrator) |
+
+Regression tests: `tests/test_fix_postreview3.py` (12, written blind, 5 red on `6a5aafd`, all green on
+the fix; the brief's literal unrelated-root scenario was already caught, so the writer moved the
+removal into a merge commit to expose the gap). After the fixes: 1341 passed, 1 skipped; ruff, format,
+mypy clean.
+
+**Status after round 3: not converged.** Round 3 found and fixed 2 medium issues in the loop guard
+(`loop/check_success.py`), but the brief caps the loop at 3 rounds, so no round 4 reviewed those fixes.
+Both are confined to the guard of the finished tuning loop; the product path (API, matcher, gate)
+has had no medium/high finding since the adversarial round.
+
+Low observations from round 3 (recorded for the owner):
+- `.git/info/exclude` / `core.excludesFile` and `.gitignore`d paths (e.g. a `.venv` `.pth`) hide files from
+  the allow-list (same class as skip-worktree).
+- Rescore loads labels from each run's own dataset `path`; a fabricated run pointing outside `data/`
+  reproduces itself (fabrication class).
+- `loop/DRAFT.md` is allow-listed per commit, so FIXED sections can be edited and reverted between
+  checks; only the working tree is compared.
+- An allowed new `tests/test_*.py` runs arbitrary code during the guard's pytest step.
+- Two existing tests pin `PROMPT_VERSION == "ac1a145b"` (for the final eval), so resuming the tuning loop
+  would turn pytest red on any honest prompt change.
