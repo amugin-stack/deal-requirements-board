@@ -83,10 +83,7 @@ the fix; the brief's literal unrelated-root scenario was already caught, so the 
 removal into a merge commit to expose the gap). After the fixes: 1341 passed, 1 skipped; ruff, format,
 mypy clean.
 
-**Status after round 3: not converged.** Round 3 found and fixed 2 medium issues in the loop guard
-(`loop/check_success.py`), but the brief caps the loop at 3 rounds, so no round 4 reviewed those fixes.
-Both are confined to the guard of the finished tuning loop; the product path (API, matcher, gate)
-has had no medium/high finding since the adversarial round.
+Status after round 3: not converged (2 medium fixed). The owner asked for a fourth round over these fixes.
 
 Low observations from round 3 (recorded for the owner):
 - `.git/info/exclude` / `core.excludesFile` and `.gitignore`d paths (e.g. a `.venv` `.pth`) hide files from
@@ -98,3 +95,29 @@ Low observations from round 3 (recorded for the owner):
 - An allowed new `tests/test_*.py` runs arbitrary code during the guard's pytest step.
 - Two existing tests pin `PROMPT_VERSION == "ac1a145b"` (for the final eval), so resuming the tuning loop
   would turn pytest red on any honest prompt change.
+
+## Round 4
+
+new_medium_or_high: 1
+
+Run at the owner's request over the round-3 guard fixes, reviewed at `0861b3c`. Compliance: no
+medium/high (nothing touched the product path; `--loop-start` can't inject options or shell). Eval-method:
+2 candidates, one verifier each.
+
+| id | reviewer | claimed | verified | finding | fix |
+|---|---|---|---|---|---|
+| R4-EVAL-1 | eval | medium | medium | `.git/info/grafts` rewrites parentage and `--no-replace-objects` doesn't disable it, so a reverted protected commit dropped out of loop-start..HEAD while its run still counted (the rescore check still catches doctored scoring or labels; doctored eval code writing forged raws slipped through) | `44f850b` |
+| R4-EVAL-2 | eval | medium | low | the round-3 whole-tree view false-failed an honest merge from main into a loop branch (merging isn't in the protocol) | `58bcee4` |
+
+Regression tests: `tests/test_fix_postreview4.py` (6, written blind, 5 red on `0861b3c`, all green on the
+fix). After the fixes: 1347 passed, 1 skipped; ruff, format, mypy clean.
+
+**Status after round 4: not converged (1 medium found and fixed); no round 5 has reviewed `44f850b`.**
+
+Low observations from round 4 (recorded for the owner):
+- `--loop-start` protects the reference point only when the orchestrator supplies it; an agent running the
+  guard itself could pass any commit (documented in the docstring).
+- HANDOFF.md and the agent spec still show `check_success.py --stage ...` without `--loop-start`; a new loop
+  run that way uses the old pin (fails loudly, not a bypass). Docs builder.
+- `commits_since` makes two git calls per commit (about 12 s for 400 commits).
+- `main(--loop-start)` sets a module global, which persists across in-process calls.

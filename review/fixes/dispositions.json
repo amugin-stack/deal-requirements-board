@@ -895,5 +895,27 @@
     "set": "join",
     "disposition": "wontfix",
     "note": "Verified low, not medium/high: needs deliberately malicious extractor code, the same class no in-repo guard can stop (the same claude.py runs inside eval and could return the labels); present on main at c47ee1f. Hardening (identity/rescore from a -I subprocess, guard-side PROMPT_VERSION recompute) left for the owner."
+  },
+  {
+    "review": "postreview-4",
+    "id": "R4-EVAL-1",
+    "severity": "medium",
+    "title": ".git/info/grafts could hide a reverted protected commit from the history check",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Fixed: git children run with a fixed env built by the guard (GIT_GRAFT_FILE=/dev/null; it reads none); new 'history not rewritten' check fails on a grafts file or a shallow repo.",
+    "regression_test": "tests/test_fix_postreview4.py::test_r4_eval1_grafts_do_not_hide_protected_commit",
+    "commit": "44f850bf3b47"
+  },
+  {
+    "review": "postreview-4",
+    "id": "R4-EVAL-2",
+    "severity": "low",
+    "title": "Whole-tree history view false-failed an honest merge from main into a loop branch",
+    "set": "join",
+    "disposition": "fixed",
+    "note": "Verified low (merging isn't in the protocol; fails loudly). Fixed anyway: the whole-tree view runs only on the ancestry path; diff-tree --root still covers every commit.",
+    "regression_test": "tests/test_fix_postreview4.py::test_r4_eval2_honest_merge_from_main_passes_history",
+    "commit": "58bcee43ed8b"
   }
 ]
