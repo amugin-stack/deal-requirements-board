@@ -5,6 +5,7 @@ in the deal's state is never returned, however good the fit. Ranking only orders
 the brokers who pass the gate, and every point comes with a plain-English reason.
 """
 
+import re
 from datetime import date
 
 from pydantic import BaseModel
@@ -34,15 +35,46 @@ SALES_AGENT_NOTE = "Referral fee must be paid through sponsoring broker"
 _TX_COUNTY_BY_KEY = {market_key(city, "TX"): county for city, county in TX_CITY_TO_COUNTY.items()}
 
 
+# A real license record's status is only as current as its download. Past this many days after the
+# snapshot, a suspension or revocation since then could be missed, so the gate stops vouching for
+# the row. 90, not 30: TREC status changes slowly, and the red-team suite pins an as_of of
+# 2026-11-30 against the 2026-10-20 snapshot. Re-download the data to restore the rows.
+MAX_SNAPSHOT_AGE_DAYS = 90
+
+_TREC_PREFIX = "trec_"
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _snapshot_is_fresh(broker: Broker, as_of: date) -> bool:
+    """True unless the row is a 'trec_<YYYY-MM-DD>' record too old, or too garbled, to trust.
+
+    Fictional rows carry no snapshot and are unaffected. An unparseable trec_ date fails
+    closed like any other unknown.
+    """
+    if not broker.source.startswith(_TREC_PREFIX):
+        return True
+    stamp = broker.source.removeprefix(_TREC_PREFIX)
+    if not _ISO_DATE.fullmatch(stamp):
+        return False
+    try:
+        snapshot = date.fromisoformat(stamp)
+    except ValueError:  # e.g. 2026-02-30
+        return False
+    return (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS
+
+
 def is_licensed(broker: Broker, state: str | None, as_of: date) -> bool:
     """Fail closed: any unknown (no state, no expiration) means we can't vouch for the broker.
 
     Status must be exactly "Active" because TREC uses compound statuses such as
     "Probation - Active" that carry restrictions we don't want to route referrals into.
+    A real (trec_) record also needs a snapshot no older than MAX_SNAPSHOT_AGE_DAYS at
+    `as_of`, since its status is frozen at download time while `as_of` moves on.
     `as_of` is passed in so results are reproducible and never depend on the clock.
     """
     return (
-        state is not None
+        _snapshot_is_fresh(broker, as_of)
+        and state is not None
         and broker.license_state == state
         and broker.license_status == "Active"
         and broker.license_expiration is not None
