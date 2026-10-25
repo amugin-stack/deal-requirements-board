@@ -1,6 +1,6 @@
 # Eval method + code quality review: findings
 
-Branch `review-eval-quality`. 13 confirmed, 4 rejected (eval_method 7/2, code_quality 6/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
+Branch `review-eval-quality`. 22 confirmed, 4 rejected (eval_method 12/2, code_quality 10/2 confirmed/rejected). Every confirmed finding was reproduced by a separate adversarial verifier with its own script; the script text is embedded in `findings.json` (`reproduction`). Nothing outside `review/eval-quality/` was changed; no API calls; no extractor ran on `holdout_v3.jsonl`.
 
 ## Confirmed findings (by severity)
 
@@ -10,23 +10,34 @@ Branch `review-eval-quality`. 13 confirmed, 4 rejected (eval_method 7/2, code_qu
 | CQ-3 | medium | code_quality | Run identity (PROMPT_VERSION) ignores model and request parameters; check_success pools and matches runs on it alone | `extractors/claude.py:76` |
 | CQ-4 | medium | code_quality | test_check_success leaves the gate's key contracts unpinned: 5 semantic mutants survive the whole suite | `tests/test_check_success.py:45` |
 | EM-1 | medium | eval_method | Cache replays across eval invocations, so the documented '3 separate dev runs' protocol yields one sample repeated 3 times | `scripts/eval.py:126` |
+| EM-21 | medium | eval_method | Dev gate scores only the newest 3 runs of a prompt, so rerunning until 3 good runs come up passes a prompt whose full record fails | `loop/check_success.py:65` |
 | EM-5 | medium | eval_method | loop_runs counts --rescore outputs as fresh runs (dev gate fillable from one sample; a final rescore permanently fails 'one look only') | `loop/check_success.py:133` |
 | EM-7 | medium | eval_method | Dev and holdout_v3 use opposite city labels for 'near/outside X'; the v3 agreement doc doesn't flag the conflict | `data/posts.jsonl:8` |
+| CQ-21 | low | code_quality | A truncated tool call (stop_reason max_tokens) is accepted and cached, and its missing keys are scored as correct_missing | `extractors/claude.py:121` |
+| CQ-22 | low | code_quality | test_data validates labels through normalising validators, so a blank or non-string label passes and is scored as 'missed' | `tests/test_data.py:33` |
+| CQ-23 | low | code_quality | Back-compat test pins the frozen regex results to current labels, so any label fix breaks it | `tests/test_scoring_stats.py:342` |
+| CQ-24 | low | code_quality | load_run promises exit 2 with no traceback for any non-run file, but non-JSON input raises a raw JSONDecodeError | `scripts/eval.py:466` |
 | CQ-5 | low | code_quality | test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested | `tests/test_eval.py:58` |
 | CQ-7 | low | code_quality | Dev gate trusts stored scores; an edit-label/run/revert sequence passes the guard while --rescore/--compare would fail it | `loop/check_success.py:65` |
 | CQ-8 | low | code_quality | score() hard-codes the good-outcome tuple for its failures list instead of using GOOD_OUTCOMES | `scoring.py:203` |
 | EM-2 | low | eval_method | README overstates the loop's keep rule: iteration 2 was kept with state and city each down 3.5 pts | `README.md:72` |
+| EM-22 | low | eval_method | README timeline error analysis says the model fails to subtract elapsed time, but the 45-day failures come from over-shortening | `README.md:90` |
+| EM-23 | low | eval_method | baseline-v1_comparison.json uses the old all-posts metric and disagrees with every reported baseline number, with nothing saying so | `results/baseline-v1_comparison.json:5` |
+| EM-24 | low | eval_method | Hallucination rates count errored posts as clean: an all-errored run reports 0% hallucination | `scoring.py:224` |
+| EM-25 | low | eval_method | README test count, 'next steps' and holdout status are out of date versus the code and data | `README.md:113` |
 | EM-3 | low | eval_method | Iteration table reports 'kept' prompt changes without noise or significance, and omits the drop on the 11 untuned posts | `README.md:80` |
 | EM-6 | low | eval_method | Rescore/compare join old raw outputs to current labels by post id only, with no text or label hash | `scripts/eval.py:274` |
 | EM-8 | low | eval_method | s14 state label NJ can only be reached by inferring from city names, which the schema forbids | `data/posts.jsonl:14` |
 
 ## What I'd fix first
 
-1. **Make the loop's "3 runs" mean 3 samples (EM-1, EM-5, CQ-2).** Three bugs hit the same gate input: separate invocations replay the cache, `--rescore` outputs count as runs, and `--repeats` marks its own later runs dirty. One small change set covers the class: `loop_runs` keeps only results with fresh API calls (`usage.cache_hits == 0`, no `rescored_from`), and `git_info()` ignores `results/` and is captured once per invocation. Do this before the loop ever runs again.
+1. **Make the loop's "3 runs" mean 3 independent samples (EM-1, EM-5, EM-21, CQ-2).** Four bugs hit the same gate input: separate invocations replay the cache, `--rescore` outputs count as runs, extra reruns silently push older runs out of the window, and `--repeats` marks its own later runs dirty. One small change set covers the class: `loop_runs` keeps only results with fresh API calls (`usage.cache_hits == 0`, no `rescored_from`), the gate requires exactly 3 such runs per prompt version (or scores all of them), and `git_info()` ignores `results/` and is captured once per invocation. Do this before the loop ever runs again.
 2. **Pin the gate with tests that can fail (CQ-4), and key runs on a real request identity (CQ-3).** The anti-peeking rule (`finals[-1]`) and three other checks have no failing test; add the five distinguishing fixtures. Record model + request fingerprint in results and match on them.
 3. **Resolve the city/state label conventions before the one look at holdout_v3 (EM-7, EM-8).** v3 is the reserved final look; a "near X" convention that contradicts dev will cost points that are labeling, not model, errors. Decide the rule, write it into `schema.py`, fix the minority labels.
 4. **README honesty fixes (EM-2, EM-3).** State the real keep tolerance, add run-to-run spread and paired p-values to the iteration table, and report the 11 untuned posts. Cheap, and it pre-empts the obvious reviewer question.
-5. **Latent provenance and duplication (EM-6, CQ-7, CQ-8, CQ-5).** Store text/label hashes in results, gate on rescored rather than stored scores, use one good-outcome predicate, and make the rescore test call `rescore_records`.
+5. **Make the label tests able to fail on bad labels (CQ-22, CQ-23).** Round-trip every label in `test_data.py`, and stop the back-compat test pinning current labels, or the EM-7/EM-8 label fixes will look like regressions.
+6. **Latent provenance, error handling and duplication (EM-6, EM-24, CQ-7, CQ-8, CQ-5, CQ-21, CQ-24).** Store text/label hashes in results, exclude errored posts from hallucination denominators, gate on rescored rather than stored scores, use one good-outcome predicate, reject any `stop_reason` other than `tool_use`, and make `load_run` exit 2 on non-JSON.
+7. **Docs (EM-22, EM-23, EM-25).** Fix the timeline diagnosis before acting on DRAFT backlog item 1, mark `baseline-v1_comparison.json` as old-metric, and refresh the stale README claims.
 
 
 ## Details
@@ -136,6 +147,30 @@ control --no-cache two invocations identical raws: 3 / 24
 
 **Regression test.** tests/test_eval_cache.py: with a nondeterministic fake client, call main() twice with the same tmp cache_dir and no flags; assert the second invocation made N_DEV calls and has 0 cached records (or that only --resume hits). tests/test_check_success.py: dev_checks fails when any run has usage.cache_hits > 0.
 
+### EM-21 (medium, eval_method): Dev gate scores only the newest 3 runs of a prompt, so rerunning until 3 good runs come up passes a prompt whose full record fails
+
+`loop/check_success.py:65`
+
+```
+    scores = [r["datasets"]["posts_dev"]["scores"] for r in runs[:REPEATS]]
+```
+
+**Claim.** dev_runs_for(version) returns every clean dev run of the current prompt, but dev_checks() scores only runs[:REPEATS] and drops the rest without reporting them. The FIXED spec says 'last 3 runs' but gives no reason for letting newer runs supersede older ones, and nothing limits reruns of one PROMPT_VERSION, so the gate admits optional stopping. The reverted prompt b4f9c9ab (non-deal fills [0,1,1]) passes once 2 more clean runs are added, although 2 of its 5 runs hallucinated on non-deal posts. Unused so far (max 3 clean runs per prompt in results/).
+
+**Verifier.** Distinct from CQ-4 (tests), EM-1 (cache) and EM-5 (rescores): the documented window itself is the hole, and dropped runs leave no trace in the gate output. Medium: open but never exercised.
+
+**Reproduction output.**
+
+```
+b4f9c9ab fills [0, 1, 1]; max clean dev runs of any prompt: 3
+b4f9c9ab: own3 fails ['non-deal hallucinations']; +2 lucky reruns -> fails [] (total runs 5)
+b0950301: own3 fails ['mean accuracy']; +2 lucky reruns -> fails ['weakest field']
+```
+
+**Fix.** Fail when a prompt has more than REPEATS clean runs (a rerun needs a new version/commit), or gate on all runs of the prompt; either way list the run count and any ignored files in the Check detail.
+
+**Regression test.** tests/test_check_success.py: 5 runs newest-first where the oldest has non_deal fields_filled=1; assert dev_checks does not all pass.
+
 ### EM-5 (medium, eval_method): loop_runs counts --rescore outputs as fresh runs (dev gate fillable from one sample; a final rescore permanently fails 'one look only')
 
 `loop/check_success.py:133`
@@ -186,6 +221,106 @@ result s08: city missed, expected Savannah, got null
 **Fix.** Pick one convention, write it into schema.py's city description, and relabel s08/s15 or v3-09/v3-16 (or exclude city on all four). Update README error #5 and the agreement doc.
 
 **Regression test.** Data test across posts/holdout/holdout_v3: deal posts matching r'\b(near|outside|just (north|south|east|west) of)\s+[A-Z][a-z]+' (excluding 'near the ...') must all label city the same way, or be in a shared city-excluded set.
+
+### CQ-21 (low, code_quality): A truncated tool call (stop_reason max_tokens) is accepted and cached, and its missing keys are scored as correct_missing
+
+`extractors/claude.py:121`
+
+```
+        if response.stop_reason == "refusal":
+```
+
+**Claim.** extract_raw rejects only stop_reason 'refusal' and responses without a tool call. A 'max_tokens' (or any non-'tool_use') response with a partial tool_use input is returned as-is; parse_requirement fills absent keys with None, run_post records error=None and caches it, and score() credits null-labelled fields as correct_missing. This contradicts the module's 'raise rather than repair, so the eval counts it'. Unlikely in practice: max_tokens 1024 vs ~100-200 output tokens, and strict mode emits keys in schema order, so truncation would almost always cut only the unscored notes. --rescore likewise validates old raws missing keys without checking.
+
+**Verifier.** Unguarded path confirmed; lowered medium->low on realism. 73 pre-strict raws (de789943) lack keys and were scored error=None, consistent with the old schema, not evidence of truncation.
+
+**Reproduction output.**
+
+```
+mid-object truncation -> error: None | prediction: {is_deal_request: True, all others None} | cached files: 1
+notes-only truncation -> scored fields intact
+outcomes vs all-null gold: state/city/timeline correct_missing
+score state: correct_missing 1, error 0, accuracy 1.0
+```
+
+**Fix.** In extract_raw raise ExtractionError when stop_reason != 'tool_use'; optionally require every ExtractedFields key in raw on the Claude path and on rescore.
+
+**Regression test.** Fake client returning stop_reason='max_tokens' with input {'is_deal_request': True}: extract_raw raises ExtractionError and run_posts records error not None, prediction None.
+
+### CQ-22 (low, code_quality): test_data validates labels through normalising validators, so a blank or non-string label passes and is scored as 'missed'
+
+`tests/test_data.py:33`
+
+```
+        ExtractedFields.model_validate(p["label"])  # raises on a bad state code, enum, etc.
+```
+
+**Claim.** ExtractedFields' mode='before' validators (schema.py:88-96) turn '', whitespace and non-string state/city into None instead of rejecting them. test_every_label_matches_schema only checks that validation doesn't raise; unlike tests/test_holdout_v3.py it never checks the label round-trips. Scoring reads the raw label, so city '' gives 'missed' instead of 'correct_missing', expected_missing() omits the field, and a non-string gold state crashes normalize. Latent: all current labels round-trip. Related: parse_requirement({'state': 123}) silently yields None despite its 'Raises ExtractionError instead of repairing bad values' docstring.
+
+**Verifier.** scoring.normalize does not rescue '' because field_outcome checks `gold is None` first. Latent guard gap, low.
+
+**Reproduction output.**
+
+```
+current non-roundtrip labels: 0
+state '' -> None; state 5 -> None; city 7 -> None; state 'ZZ' -> ExtractionError
+field_outcome(city,'',None) = missed; field_outcome(state,5,'TX') raises AttributeError
+parse_requirement {'state':123} -> state None (no error)
+mutated copy: tests/test_data.py 7 passed
+```
+
+**Fix.** Assert a round trip in test_every_label_matches_schema, as test_holdout_v3 does; optionally let non-strings through the before-validators so pydantic rejects them.
+
+**Regression test.** Parametrised labels with city '', city '  ', state 5, state '' each fail a shared label_roundtrips() helper; parse_requirement({'is_deal_request': True, 'state': 123}) raises ExtractionError.
+
+### CQ-23 (low, code_quality): Back-compat test pins the frozen regex results to current labels, so any label fix breaks it
+
+`tests/test_scoring_stats.py:342`
+
+```
+def test_score_preexisting_keys_unchanged(stem: str) -> None:
+```
+
+**Claim.** Documented as a score() output-shape check ('keeps every old key and value; keys are only added'), it re-scores the frozen results/regex_20261024T224817Z.json against current data labels and requires every old count to match. Any legitimate label correction that moves a regex count fails it (the s14 relabel from EM-8 gives fields.state.wrong 1 != 2). results/ can't be edited, so a label fix forces editing this test, which contradicts the P6 design that rescoring uses current labels.
+
+**Verifier.** No document says the test is meant to guard stored results against label drift; docs/agent-graphs/p6-eval-stats.md says the opposite. test_rescore_every_results_file checks only key shape and is fine.
+
+**Reproduction output.**
+
+```
+before: 837 passed, 5 xfailed
+after s14 relabel: FAILED tests/test_scoring_stats.py::test_score_preexisting_keys_unchanged[posts] -- .fields.state.wrong assert 1 == 2
+1 failed, 836 passed, 5 xfailed
+```
+
+**Fix.** Check key-set inclusion against the saved scores structurally; compare values against a re-score of the same records, or against a label snapshot under tests/golden/.
+
+**Regression test.** With s14 relabelled in a tmp copy, the back-compat test passes; with a key removed from score()'s output, it fails.
+
+### CQ-24 (low, code_quality): load_run promises exit 2 with no traceback for any non-run file, but non-JSON input raises a raw JSONDecodeError
+
+`scripts/eval.py:466`
+
+```
+    """Load an eval-run results file, exiting with status 2 (no traceback) for anything else,
+```
+
+**Claim.** Only JSON without 'datasets' takes the exit-2 path; read_text/json.loads run outside it, so passing a run's .md twin (next to every .json) or a missing path to --rescore/--compare gives a JSONDecodeError/FileNotFoundError traceback. test_summary_file_exits_2 covers only the JSON-summary case.
+
+**Verifier.** Error-handling contract mismatch; only a worse error message, no wrong output. Low.
+
+**Reproduction output.**
+
+```
+load_run -> RAISED JSONDecodeError Expecting value: line 1 column 1 (char 0)
+main --rescore -> RAISED JSONDecodeError
+main --compare -> RAISED JSONDecodeError
+repo changed: False
+```
+
+**Fix.** Wrap read+parse in try/except (OSError, json.JSONDecodeError) -> one-line stderr message and SystemExit(2).
+
+**Regression test.** Extend test_summary_file_exits_2 with a Markdown file, an empty file and a missing path for both --rescore and --compare; assert exit 2 and no 'Traceback'.
 
 ### CQ-5 (low, code_quality): test_eval re-implements rescore inline instead of calling it, so rescore_records' refusal path is untested
 
@@ -282,6 +417,102 @@ kept a change only if the mean rose and no field regressed
 **Fix.** README line 72: 'kept a change only if the dev mean rose and no field dropped by more than about one post (~4 points)'; optionally note iteration 2's state/city dip.
 
 **Regression test.** Doc-consistency test: recompute per-field 3-run means for each kept iteration in loop/state.json from results/, assert no field fell more than 0.045 versus the previous kept iteration, and assert README states the same tolerance as HANDOFF.md.
+
+### EM-22 (low, eval_method): README timeline error analysis says the model fails to subtract elapsed time, but the 45-day failures come from over-shortening
+
+`README.md:90`
+
+```
+1. **Timeline arithmetic: the main weakness**
+```
+
+**Claim.** README says the model 'doesn't subtract time already elapsed in a 45-day window'. For h08 and s04 ('45-day ID clock started last week') the label is 31_to_90_days (~38 days left) and the final prompt answered within_30_days; without subtraction it would have answered 31_to_90_days, the label. All 6 cited timeline failures bucket too short. loop/DRAFT.md backlog item 1 prescribes 'subtract elapsed time', which pushes further in the direction the model already errs.
+
+**Verifier.** No cited post supports the README's mechanism. The README's own 'fix next' (compute the bucket in code) remains sound, which limits impact: low.
+
+**Reproduction output.**
+
+```
+h08 label=31_to_90_days pred=within_30_days; s04 label=31_to_90_days pred=within_30_days (also in iteration-4 dev runs 234059/234146/234229)
+h02,h06 over_90->within_30; s17,s25 over_90->31_to_90
+s04 label_note: 'started ~7 days ago, leaving ~38 days.'
+```
+
+**Fix.** Say the model over-shortens (every miss lands in a shorter bucket); replace DRAFT backlog item 1 with a worked example or code-side bucketing.
+
+**Regression test.** Test over the final results file asserting each timeline mismatch is predicted shorter than labelled, or a unit test for a code-side bucket(45, elapsed_days=7) == '31_to_90_days'.
+
+### EM-23 (low, eval_method): baseline-v1_comparison.json uses the old all-posts metric and disagrees with every reported baseline number, with nothing saying so
+
+`results/baseline-v1_comparison.json:5`
+
+```
+    "original (35, author-written)": {
+```
+
+**Claim.** The committed summary scores the 6 key fields on all posts (outcome counts sum to 35/15), so non-deal posts earn correct_missing credit; current scoring.py scores key fields on deal posts only (29/12). It gives the regex baseline 0.951 (35 posts) and 0.810 (holdout) vs 0.941 and 0.764 in README, DRAFT.md, HANDOFF.md and check_success.py. It has no metric note; eval.py and the P6 doc mention it only as 'a summary, not an eval run'.
+
+**Verifier.** Committed in 45bd556, before the scoring rewrite. Not cited as a source for any current number, so reader confusion only: low. Fix must not edit results/.
+
+**Reproduction output.**
+
+```
+SUMMARY original (35): n_posts=35 mean7=0.951 count_sums=[35]
+SUMMARY holdout (15): n_posts=15 mean7=0.810 count_sums=[15]
+RUN holdout: n_deal=12 key-field count_sums=[12] mean7=0.764
+RUN posts: n_deal=29 key-field count_sums=[29] mean7=0.941
+```
+
+**Fix.** Without touching results/: note in eval.py's load_run docstring, the P6 doc and the README that this file predates deal-only scoring and is superseded by regex_20261024T224817Z.json; have eval.py stamp a metric version in new results.
+
+**Regression test.** Test that any results JSON without 'datasets' whose key-field counts sum to n_posts is named as legacy in the docs.
+
+### EM-24 (low, eval_method): Hallucination rates count errored posts as clean: an all-errored run reports 0% hallucination
+
+`scoring.py:224`
+
+```
+        "fields": {f: _with_hallucination_rate(_with_accuracy(c, n_deal), n_deal)
+```
+
+**Claim.** hallucination_rate/ci95 divide by n_deal and posts_with_any_rate/ci95 by n_non_deal, both including errored posts, which can never hallucinate. Errors push both rates and their Wilson intervals toward 0: an all-errored holdout run renders 'halluc. rate 0% [0-24]' and '0 of 3 non-deal posts, 0% [0-56]' in eval.py's markdown. In the real first-prompt run, property_type shows 1/12 instead of 1/10.
+
+**Verifier.** Literally consistent with 'errors stay in the denominator', but for a bad-outcome rate that flatters the run, and neither docstring nor P6 doc discusses errored posts. The error count is printed in the same row and the headline run has 0 errors: low.
+
+**Reproduction output.**
+
+```
+state: hallucinated 0, error 12, hallucination_rate 0.0, ci95 [0.0, 0.2425]
+non_deal: posts_with_any_rate 0.0, ci95 [0.0, 0.5615]
+MD: | state | 0% [0–24] | 0% [0–24] | 0 | 0 | 0 | 0 | 0 | 12 |
+real run holdout: errors 2; property_type 1/12=0.083 [0.015,0.354]
+```
+
+**Fix.** Use non-errored posts as the denominator (None when all errored), or return None when any post errored; document the denominator in SCORING_NOTE.
+
+**Regression test.** All-errored records -> every hallucination_rate and posts_with_any_rate is None; 1 errored of 3 deal posts with 1 hallucination among the other 2 -> rate 1/2.
+
+### EM-25 (low, eval_method): README test count, 'next steps' and holdout status are out of date versus the code and data
+
+`README.md:113`
+
+```
+.venv/bin/pytest -q                                    # 500 tests, offline, no API key needed
+```
+
+**Claim.** README claims 500 tests; the suite collects 842 (837 pass + 5 xfail). Lines 142-143 list Wilson intervals, paired comparison, a resumable cache, token/cost tracking and --repeats as next steps; all exist. Line 103 says a different-model holdout is 'planned' without mentioning that data/holdout_v3.jsonl exists and is unscored; v3 was labelled by Sonnet and Opus, so it is still same-family. A reader can't tell which measurement safeguards exist.
+
+**Verifier.** Stale statements understate rather than overstate the safeguards; documentation only: low.
+
+**Reproduction output.**
+
+```
+837 passed, 5 xfailed | README:113 '# 500 tests' | README:142-143 next steps already implemented | scoring.py:35 wilson_interval, :58 exact_mcnemar_p | eval.py:506 --repeats | agreement doc: Labeler A (Sonnet), Labeler B (Opus) | holdout_v3 refs in README: 0
+```
+
+**Fix.** Drop or update the test count; move implemented features out of Limitations; describe holdout_v3 (exists, same-family, unscored) and keep a non-Claude holdout as the real plan.
+
+**Regression test.** Doc test comparing any README test count with pytest collection, and asserting every data/*.jsonl is listed in the README data table.
 
 ### EM-3 (low, eval_method): Iteration table reports 'kept' prompt changes without noise or significance, and omits the drop on the 11 untuned posts
 
@@ -403,9 +634,9 @@ Recomputed from `results/*.json` (read-only) by the script at the end of this se
 | 12/12 Wilson 95% interval | about 76-100% | 75.7-100% | scoring.wilson_interval | yes |
 | Dev gate bar = baseline dev mean | 0.932 | 0.9323 | regex_20261024T224817Z (posts_dev subset) | yes |
 | Keep rule (prose, not a number) | no field regressed | iteration 2 kept with state -3.5, city -3.5 pts | loop/state.json + iteration 1/2 files | **no** |
-| Test count in 'Running it' (prose) | 500 tests | 837 passed, 5 xfailed | pytest -q | **no** |
+| Test count in Running it (prose, EM-25) | 500 tests | 842 collected: 837 passed, 5 xfailed | pytest -q | **no** |
 
-**Verdict:** every numeric README cell matches `results/*.json` to the printed precision, and re-scoring the cited raw outputs against the current labels reproduces them exactly. Two prose claims do not match: the keep rule (EM-2) and the stale test count ('500 tests'; the suite is 837 passed + 5 xfailed).
+**Verdict:** every numeric README cell matches `results/*.json` to the printed precision, and re-scoring the cited raw outputs against the current labels reproduces them exactly. Two prose claims do not match: the keep rule (EM-2) and the stale test count (EM-25: '500 tests'; the suite collects 842, 837 passed + 5 xfailed).
 
 Audit script (run from the worktree: `PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -I audit.py`; read-only):
 

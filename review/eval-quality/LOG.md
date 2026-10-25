@@ -13,3 +13,13 @@ are embedded verbatim in `findings.json`.
 - severity changes by verifiers: EM-1 high->medium, EM-2/EM-3 medium->low, CQ-5 medium->low; several claims narrowed (see verifier_note)
 - README audit: all 27 numeric cells match results/*.json; prose mismatches: keep rule (EM-2), "500 tests" vs 837
 - new_confirmed: 13
+
+## Round 2
+
+- reviewers were given the round 1 confirmed and rejected lists and told to try new surfaces (label quality, docs vs results, cost/usage, hallucination denominators, RawCache, load_run, schema validators, test design)
+- candidates: 9 — EM-21..EM-25, CQ-21..CQ-24
+- confirmed: 9 — EM-21, EM-22, EM-23, EM-24, EM-25, CQ-21, CQ-22, CQ-23, CQ-24
+- rejected: 0
+- severity changes by verifiers: CQ-21 medium->low (truncation implausible at max_tokens 1024)
+- checked clean this round: holdout_v3 kappa/agreement numbers recomputed from labels; cost table price and cache-hit exclusion; LESSONS.md/state.json vs results; README error-analysis post lists; compare pairing with errored records; RawCache atomic put; save() exclusive create
+- new_confirmed: 9
