@@ -112,7 +112,7 @@ medium/high (nothing touched the product path; `--loop-start` can't inject optio
 Regression tests: `tests/test_fix_postreview4.py` (6, written blind, 5 red on `0861b3c`, all green on the
 fix). After the fixes: 1347 passed, 1 skipped; ruff, format, mypy clean.
 
-**Status after round 4: not converged (1 medium found and fixed); no round 5 has reviewed `44f850b`.**
+Status after round 4: not converged (1 medium found and fixed); reviewed in round 5.
 
 Low observations from round 4 (recorded for the owner):
 - `--loop-start` protects the reference point only when the orchestrator supplies it; an agent running the
@@ -121,3 +121,32 @@ Low observations from round 4 (recorded for the owner):
   run that way uses the old pin (fails loudly, not a bypass). Docs builder.
 - `commits_since` makes two git calls per commit (about 12 s for 400 commits).
 - `main(--loop-start)` sets a module global, which persists across in-process calls.
+
+## Round 5
+
+new_medium_or_high: 0
+
+Run at the owner's request over the round-4 fixes (`44f850b`, `58bcee4`), reviewed at `c138a68`. Neither
+reviewer reported a medium/high candidate, so no verifier was needed and nothing was fixed.
+
+- **Compliance:** nothing since round 4 touched the product path; the guard's fixed child environment reads
+  nothing and stops caller `GIT_DIR` / `GIT_CONFIG_*` / `GIT_EXEC_PATH` from reaching git; secrets hygiene unchanged.
+- **Eval-method:** every guard git call goes through `_run_git`; the stripped environment works on the real
+  checkout (a linked worktree); the ancestry-path restriction opens no hole, because a counted run must sit
+  between loop-start and HEAD, which is exactly the ancestry path (reproduced with an off-path side branch).
+
+**Open caveat:** the eval reviewer started testing whether some other git mechanism, beyond grafts, replace
+objects and shallow clones, can change the history `rev-list` sees. That work was cut off before it reached a
+conclusion, so it is neither a finding nor a clean result. A separate look would settle it.
+
+Low observations from round 5 (recorded for the owner):
+- `shutil.which("git")` follows the caller's PATH: a `git` wrapper in a gitignored `.venv/bin` would win if the
+  guard runs with the venv activated (same class as the accepted `.venv` `.pth` low). Hardening: a fixed absolute
+  path, or refuse a git under ROOT.
+- Repo-local `.git/config` can still run commands (e.g. `core.fsmonitor`); not new. Hardening:
+  `-c core.fsmonitor=false` and `GIT_CONFIG_NOSYSTEM`.
+- Without HOME, a repo trusted only through a global `safe.directory` (e.g. some CI containers) makes every git
+  call fail; the guard then fails loudly, not open.
+- `grafts_file_exists()` / `is_shallow()` read a git failure as "none"; harmless, since the same failure makes the
+  history checks fail.
+- With `GIT_GRAFT_FILE=/dev/null` git 2.39 prints a grafts-deprecation hint to stderr on each call (not parsed).
