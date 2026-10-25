@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, TypeGuard
 
 import anthropic
+from anthropic.types import MessageParam, ToolChoiceToolParam, ToolParam
 
 from deal_board.config import DEFAULT_MODEL, load_settings
 from deal_board.extractors import ExtractionError, parse_requirement
@@ -22,7 +23,7 @@ from deal_board.schema import DealRequirement, ExtractedFields
 
 # DEFAULT_MODEL lives in deal_board.config (with the note on why Haiku); re-exported here for
 # anything that imported it from this module.
-__all__ = ["DEFAULT_MODEL", "PROMPT_VERSION", "SYSTEM_PROMPT", "TOOL", "ClaudeExtractor", "Usage"]
+__all__ = ["DEFAULT_MODEL", "INPUT_SCHEMA", "PROMPT_VERSION", "SYSTEM_PROMPT", "TOOL", "ClaudeExtractor", "Usage"]
 
 SYSTEM_PROMPT = """You extract deal requirements from posts on a real estate broker referral board.
 
@@ -71,10 +72,14 @@ def _strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
-TOOL = {
+# The tool's input schema as plain JSON, kept by name so tests can inspect it (ToolParam types
+# input_schema as a narrow TypedDict that doesn't list strict mode's extra keys).
+INPUT_SCHEMA: dict[str, Any] = _strict_schema(ExtractedFields.model_json_schema())
+
+TOOL: ToolParam = {
     "name": "record_deal_requirement",
     "description": "Record the structured requirement extracted from one post.",
-    "input_schema": _strict_schema(ExtractedFields.model_json_schema()),
+    "input_schema": INPUT_SCHEMA,
     "strict": True,
 }
 
@@ -113,8 +118,18 @@ class _Response(Protocol):
 
 
 class _Messages(Protocol):
-    # (*args: Any, **kwargs: Any) is mypy's "any signature", so the SDK's overloaded create fits.
-    def create(self, *args: Any, **kwargs: Any) -> _Response: ...
+    # Exactly the arguments extract_raw passes, typed with the SDK's own param types, so mypy
+    # checks the call against anthropic's real (overloaded) create and the fakes still fit.
+    def create(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: str,
+        tools: list[ToolParam],
+        tool_choice: ToolChoiceToolParam,
+        messages: list[MessageParam],
+    ) -> _Response: ...
 
 
 class MessagesClient(Protocol):
@@ -128,6 +143,17 @@ def _is_tool_use(block: _ContentBlock) -> TypeGuard[_ToolUseBlock]:
     return block.type == "tool_use"
 
 
+def _default_client(api_key: str | None) -> anthropic.Anthropic:
+    """An Anthropic client using the key from deal_board.config, or a clear error without one.
+
+    Raising here, instead of passing api_key=None, stops the SDK from falling back to its own
+    environment lookup (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN) behind config's back.
+    """
+    if api_key is None:
+        raise RuntimeError("ANTHROPIC_API_KEY is not set; pass a client or set the key to use ClaudeExtractor")
+    return anthropic.Anthropic(api_key=api_key)
+
+
 class ClaudeExtractor:
     name = "claude"
 
@@ -135,7 +161,7 @@ class ClaudeExtractor:
         # A client can be passed in, so tests can use a fake one and run offline. Settings are
         # read once, here: the key (only when no client is given) and the default model.
         settings = load_settings()
-        self.client: MessagesClient = client or anthropic.Anthropic(api_key=settings.api_key_value())
+        self.client: MessagesClient = client or _default_client(settings.api_key_value())
         self.model = model or settings.deal_model
         # Usage of the most recent extract_raw call; None before any call or when the response
         # carries no usage (fake clients). Reset per call, so a stale value is never reported.

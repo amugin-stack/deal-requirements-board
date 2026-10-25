@@ -15,8 +15,13 @@ Why one module: the key is a secret, so every read goes through one place that w
 plaintext, and it exists to hand the key to the Anthropic client.
 
 Why read at call time: nothing here touches the environment at import time. `load_settings()`
-reads `os.environ` each time it is called, so tests (and a long-running server after a config
-change) see the current values, and importing the package never depends on the environment.
+reads `os.environ` each time it is called, so tests see the current values and importing the
+package never depends on the environment. (The API still builds its Claude client once per
+process, so a running server keeps the key and model it started with.)
+
+The Anthropic SDK reads a few `ANTHROPIC_*` variables of its own (for example
+`ANTHROPIC_BASE_URL`). This package never relies on its key lookup: clients always get
+`api_key=` from here, and `ClaudeExtractor` refuses to build a client without a key.
 
 `.env` is loaded only by CLI entry points, via `load_dotenv_file()`. Library code and tests never
 load it, so a test can never pick up a real key from the checkout.
