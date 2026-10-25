@@ -4,13 +4,15 @@ Two models:
 - ExtractedFields: what an extractor is allowed to fill. Its JSON schema is the
   Claude tool's input_schema, so the model sees exactly these fields and rules.
 - DealRequirement: ExtractedFields plus `missing_fields`, which code computes.
-  The model never reports its own gaps; we derive them from what came back empty.
+  The model never reports its own gaps; we derive them from what came back empty,
+  and re-derive them whenever a field changes, so the list can't go stale.
 """
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # A parsed `json.loads` object (posts, labels, raw extractor output, results files). Values are
 # arbitrary JSON, so they stay `Any`; code that needs guarantees validates into a model instead.
@@ -149,10 +151,34 @@ class ExtractedFields(BaseModel):
 
 
 class DealRequirement(ExtractedFields):
+    """ExtractedFields plus the derived `missing_fields`.
+
+    `missing_fields` is always recomputed from the current field values: on construction, on
+    attribute assignment (validate_assignment) and on `model_copy(update=...)`, which pydantic
+    would otherwise do without running validators. A stale list would make the follow-up ask
+    about the wrong gap, e.g. skip "Which state?" after state was cleared.
+    """
+
+    # Only DealRequirement validates on assignment; ExtractedFields' config is part of the tool schema.
+    model_config = ConfigDict(validate_assignment=True)
+
     missing_fields: list[str] = []
 
     @model_validator(mode="after")
     def _compute_missing(self) -> Self:
         # A non-deal post has nothing to follow up on.
-        self.missing_fields = [f for f in KEY_FIELDS if getattr(self, f) is None] if self.is_deal_request else []
+        missing = [f for f in KEY_FIELDS if getattr(self, f) is None] if self.is_deal_request else []
+        # Written to __dict__, not assigned: with validate_assignment on, `self.missing_fields = ...`
+        # would re-run this validator forever.
+        self.__dict__["missing_fields"] = missing
         return self
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
+        """Copy, re-validating when `update` is given so updated values are checked and gaps recomputed.
+
+        pydantic's model_copy(update=...) skips validation, which would let a cleared field keep
+        its old missing_fields. A validated copy builds fresh objects, so `deep` needs no extra work.
+        """
+        if not update:
+            return super().model_copy(deep=deep)
+        return self.model_validate({**self.model_dump(), **update})

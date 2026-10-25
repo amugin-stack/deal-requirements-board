@@ -102,13 +102,14 @@ _QUESTIONS: dict[str, Callable[[DealRequirement], str]] = {
 def follow_up_question(req: DealRequirement) -> str | None:
     """The question to send the poster about their most important gap, or None.
 
-    Driven by `req.missing_fields`, which the schema computes from what came back
-    empty, so this never disagrees with the gaps shown elsewhere. Non-deal posts
-    have no missing fields and therefore get None, as do complete deals.
+    The gaps are read from the current field values, the same rule the schema uses for
+    `missing_fields`, rather than from the stored list, so even a requirement built
+    without validation (model_construct) can't make this ask about the wrong field.
+    Non-deal posts get None, as do complete deals.
     """
     if not req.is_deal_request:
         return None
-    missing = set(req.missing_fields)
+    missing = {f for f in KEY_FIELDS if getattr(req, f) is None}
     for field in PRIORITY:
         if field in missing:
             return _QUESTIONS[field](req)
