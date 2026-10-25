@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "httpx==0.28.1",  # FastAPI's TestClient
+    "httpx2==2.15.1",  # Starlette's TestClient and the tests' fake Anthropic errors (also an anthropic dependency)
     "mypy==2.4.0",
     "pytest==9.1.1",
     "ruff==0.17.2",
@@ -66,6 +66,8 @@ known-first-party = ["deal_board"]
 
 [tool.ruff.format]
 quote-style = "double"
+# Markdown is prose and agent-graph records; its code blocks are illustrations, not code to format.
+exclude = ["*.md"]
 
 [tool.mypy]
 strict = true
