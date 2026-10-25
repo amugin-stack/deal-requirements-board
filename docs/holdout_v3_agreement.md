@@ -157,3 +157,16 @@ These are not fixed, because rewriting post texts after double-labeling would vo
 ### Changes from review
 
 None. The log table above is unchanged.
+
+## Proof the tests catch a bad label (step 7)
+
+I temporarily set the `state` of non-deal post v3-20 (a lender ad) to `"TX"` and ran `pytest -q tests/test_holdout_v3.py`:
+
+```
+>       assert filled == {}
+E       AssertionError: assert {'state': 'TX'} == {}
+FAILED tests/test_holdout_v3.py::test_non_deal_posts_have_no_fields[v3-20] - ...
+1 failed, 82 passed
+```
+
+I then restored the file with `git checkout`, confirmed it is byte-identical to the committed version, and the full suite passed again: 583 tests (500 existing + 83 new).
