@@ -22,9 +22,10 @@ import hmac
 import logging
 import secrets
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from functools import lru_cache
-from typing import Annotated, Any, Literal, Protocol, cast
+from typing import Annotated, Any, Final, Literal, Protocol, cast
+from zoneinfo import ZoneInfo
 
 import anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -214,9 +215,28 @@ def get_brokers() -> list[Broker]:
     return broker_store.load_brokers()
 
 
+# The easternmost time zone of any US state's licensing authority (Maine to Florida, plus DC).
+# Every state's local date is on or before the date here, so checking expirations against it
+# can only be stricter than the deal state's own date, never more lenient (fail closed).
+LICENSING_TZ: Final = ZoneInfo("America/New_York")
+
+
+def licensing_date(now: datetime) -> date:
+    """The date license expirations are checked against at the instant `now`: today in `LICENSING_TZ`.
+
+    Not the server's local date: on a host west of a deal's state, that date would still be
+    "yesterday" for the first hours of the state's day, so a license that expired yesterday
+    there would pass. Pure, so tests pass an instant instead of patching the clock. A naive
+    `now` is ambiguous about which instant it means, so it is rejected with ValueError.
+    """
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("licensing_date needs a timezone-aware datetime")
+    return now.astimezone(LICENSING_TZ).date()
+
+
 def get_as_of() -> date:
-    """The date license expirations are checked against. A dependency so tests can pin it."""
-    return date.today()
+    """Today's licensing date (`licensing_date` of the current instant). A dependency so tests can pin it."""
+    return licensing_date(datetime.now(UTC))
 
 
 class MatcherUnavailable(RuntimeError):
