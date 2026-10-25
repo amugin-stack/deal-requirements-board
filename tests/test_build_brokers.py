@@ -180,8 +180,12 @@ def test_build_labels_trec_rows_with_trec_source(small: list[dict[str, str]]) ->
 
 
 def _write_fictional(tmp_path: Path) -> list[str]:
-    """Copy the header and two fictional rows from the real file into tmp_path/data."""
-    lines = (REPO_ROOT / "data/fictional_brokers.csv").read_text().splitlines()[:3]
+    """Write a header and two fictional rows into tmp_path/data, independent of the real file."""
+    lines = [
+        (REPO_ROOT / "data/fictional_brokers.csv").read_text().splitlines()[0],
+        "fx-bb-1,Fictional Broker BB-1,fictional,FL,FICT-FL-7001,Broker Individual,Active,2028-01-31,,,,,,",
+        "fx-bb-2,Fictional Broker BB-2,fictional,AZ,FICT-AZ-7002,Sales Agent,Active,2028-01-31,,,,,,",
+    ]
     (tmp_path / "data").mkdir(exist_ok=True)
     (tmp_path / "data/fictional_brokers.csv").write_text("\n".join(lines) + "\n")
     return lines
@@ -218,7 +222,7 @@ def test_build_strata_counts(big_build: tuple[list[dict[str, str]], int, str], t
     Exact counts: 150 Active in-date, 25 Active expired (capped at N_INVALID // 2), 25 others,
     and loading the CSV the gate licenses exactly the 150.
     """
-    rows, _, out = big_build
+    rows, n_fictional, out = big_build
     trec = [r for r in rows if r["source"] == SOURCE]
     active_ok = [r for r in trec if r["license_status"] == "Active" and r["license_expiration"] >= AS_OF.isoformat()]
     active_expired = [
@@ -230,7 +234,7 @@ def test_build_strata_counts(big_build: tuple[list[dict[str, str]], int, str], t
     assert all(r["license_number"].startswith("92") for r in active_expired)
     brokers = [b for b in load_brokers(tmp_path / "data/brokers.csv") if b.source == SOURCE]
     assert sum(is_licensed(b, "TX", AS_OF) for b in brokers) == 150
-    assert "wrote 200 TREC rows (150 valid as of 2026-10-20) + 2 fictional" in out
+    assert f"wrote 200 TREC rows (150 valid as of 2026-10-20) + {n_fictional} fictional" in out
 
 
 def test_build_output_has_unique_ids(big_build: tuple[list[dict[str, str]], int, str]) -> None:

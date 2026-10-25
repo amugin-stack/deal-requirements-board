@@ -8,6 +8,7 @@ Each test pins one behavior a deliberate bug would change: the production clock 
 import sys
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta, tzinfo
+from pathlib import Path
 from typing import ClassVar, Self
 from zoneinfo import ZoneInfo
 
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 from deal_board import api
 from deal_board import brokers as broker_store
 from deal_board.brokers import Broker
+from deal_board.matcher import match
 from deal_board.schema import DealRequirement, PropertyType, Timeline, TransactionType
 
 AS_OF = date(2026, 10, 20)
@@ -280,24 +282,45 @@ def test_chunked_body_of_exactly_max_bytes_is_accepted(client: TestClient) -> No
 # --- get_brokers: every record reaches the gate ------------------------------
 
 
-def test_real_get_brokers_keeps_every_record_and_counts_exclusions(client: TestClient) -> None:
+_BROKER_HEADER = (
+    "broker_id,name,source,license_state,license_number,license_type,license_status,"
+    "license_expiration,county,markets,property_types,transaction_types,min_deal_usd,max_deal_usd"
+)
+# Two licensed TX rows and three refused ones (inactive, expired, wrong state), all fictional.
+_MIXED_BROKER_ROWS = (
+    "fx-gb-1,Fictional Broker GB-1,fictional,TX,FICT-TX-8001,Broker Individual,Active,2028-01-31,,,,,,",
+    "fx-gb-2,Fictional Broker GB-2,fictional,TX,FICT-TX-8002,Sales Agent,Active,2027-06-30,,,,,,",
+    "fx-gb-3,Fictional Broker GB-3,fictional,TX,FICT-TX-8003,Broker Individual,Inactive,2028-01-31,,,,,,",
+    "fx-gb-4,Fictional Broker GB-4,fictional,TX,FICT-TX-8004,Broker Individual,Active,2026-01-31,,,,,,",
+    "fx-gb-5,Fictional Broker GB-5,fictional,FL,FICT-FL-8005,Broker Individual,Active,2028-01-31,,,,,,",
+)
+
+
+def test_real_get_brokers_keeps_every_record_and_counts_exclusions(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Guards against get_brokers pre-filtering to Active records: non-Active brokers would vanish
-    from excluded_for_licensing, understating how many were refused on licensing grounds."""
-    matcher = pytest.importorskip("deal_board.matcher")
-    all_brokers = broker_store.load_brokers()
-    assert any(b.license_status != "Active" for b in all_brokers)  # otherwise the check is vacuous
+    from excluded_for_licensing, understating how many were refused on licensing grounds.
+
+    The store reads a tmp CSV with a known mix, so the test doesn't depend on data/brokers.csv."""
+    csv_path = tmp_path / "brokers.csv"
+    csv_path.write_text("\n".join((_BROKER_HEADER, *_MIXED_BROKER_ROWS)) + "\n", encoding="utf-8")
+    real_load = broker_store.load_brokers
+    monkeypatch.setattr(broker_store, "load_brokers", lambda: real_load(csv_path))
     api.get_brokers.cache_clear()
     try:
         loaded = api.get_brokers()
-        assert len(loaded) == len(all_brokers)
-        assert {b.broker_id for b in loaded} == {b.broker_id for b in all_brokers}
+        assert [b.broker_id for b in loaded] == [f"fx-gb-{i}" for i in range(1, 6)]
+        assert [b.license_status for b in loaded].count("Inactive") == 1
 
         api.app.dependency_overrides[api.get_extractor] = lambda: FakeExtractor(FULL_TX_DEAL)
         api.app.dependency_overrides[api.get_as_of] = lambda: AS_OF
+        api.app.dependency_overrides[api.get_matcher] = lambda: match
         resp = client.post("/match", json={"text": POST})
     finally:
         api.get_brokers.cache_clear()
 
     assert resp.status_code == 200
-    expected = len(all_brokers) - sum(matcher.is_licensed(b, "TX", AS_OF) for b in all_brokers)
-    assert resp.json()["excluded_for_licensing"] == expected
+    body = resp.json()
+    assert sorted(m["broker_id"] for m in body["matches"]) == ["fx-gb-1", "fx-gb-2"]
+    assert body["excluded_for_licensing"] == 3  # inactive + expired + wrong state, out of 5
