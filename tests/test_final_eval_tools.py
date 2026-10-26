@@ -206,6 +206,8 @@ def make_hooks(
         data_path=env.data,
         guard_results_dirs=guard_results,
         guard_cache_dirs=guard_cache,
+        # The repo's own history holds the real final-eval looks; fakes must not see them.
+        history_looks=lambda extractor, ids: [],
     )
 
 
@@ -1179,9 +1181,27 @@ def test_tables_build_tables_raises_table_error(tables_mod: ModuleType, pair: V3
     assert isinstance(text, str) and "### Final holdout v3" in text
 
 
+def _git_paths(*args: str) -> set[str]:
+    """Repo-relative paths printed (NUL-separated) by a git command run in ROOT."""
+    out = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, check=True).stdout
+    return {p for p in out.decode().split("\0") if p}
+
+
 def test_tools_never_touch_repo_results_or_cache() -> None:
-    """Guard: no test above may leave a holdout_v3 results file in the repo's results/."""
-    for p in (ROOT / "results").rglob("*.json"):
+    """Guard: no test above may leave a holdout_v3 results file or a look marker in the repo's results/.
+
+    The committed final-eval looks are tracked at HEAD and unchanged, so they are ignored. Anything
+    untracked, or a tracked file changed since HEAD (staged or not), still fails.
+    """
+    untracked = _git_paths("ls-files", "--others", "-z", "--", "results")
+    changed = _git_paths("diff", "--name-only", "-z", "HEAD", "--", "results")
+    suspect = untracked | changed
+    looks = sorted(p for p in untracked if p.endswith(".look"))
+    assert not looks, looks
+    for rel in sorted(suspect):
+        p = ROOT / rel
+        if not p.name.endswith(".json") or not p.is_file():
+            continue
         try:
             data = json.loads(p.read_text())
         except ValueError:
