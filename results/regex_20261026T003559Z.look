@@ -1,0 +1,12 @@
+{
+  "extractor": "regex",
+  "split": "holdout_v3",
+  "timestamp": "20261026T003559Z",
+  "git": {
+    "commit": "452e5fdf20de222faef808538797fcfe6b4c5c44",
+    "dirty": false
+  },
+  "data_sha256": "09da9578cbd1a4e771a998d55a99fa51b86876a29728da4069458a38d2a0ee99",
+  "second_look": false,
+  "note": "a look at holdout_v3 started; the results file with the same extractor and timestamp records it"
+}
