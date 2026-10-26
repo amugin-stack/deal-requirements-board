@@ -60,7 +60,7 @@ def discordant(a: dict[str, dict[str, bool]], b: dict[str, dict[str, bool]]) -> 
 def main() -> None:
     state = load("loop/state.json")
     print("Prompt loop on the 24 dev posts (data/posts.jsonl split dev), 3 runs per prompt")
-    print("Source: loop/state.json -> results/claude_*.json, re-scored from raw outputs against current labels")
+    print("Source: loop/state.json and the claude_*.json files it names in results/, re-scored from raw outputs against current labels")
     print("p: exact McNemar vs the previous kept prompt, discordant (post, field) cells over the 7 mean fields,")
     print("   pooled over the 3 run pairs (run k vs run k); pooling repeated posts makes p optimistic, not conservative")
     print()

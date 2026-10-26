@@ -1,5 +1,5 @@
 Prompt loop on the 24 dev posts (data/posts.jsonl split dev), 3 runs per prompt
-Source: loop/state.json -> results/claude_*.json, re-scored from raw outputs against current labels
+Source: loop/state.json and the claude_*.json files it names in results/, re-scored from raw outputs against current labels
 p: exact McNemar vs the previous kept prompt, discordant (post, field) cells over the 7 mean fields,
    pooled over the 3 run pairs (run k vs run k); pooling repeated posts makes p optimistic, not conservative
 
