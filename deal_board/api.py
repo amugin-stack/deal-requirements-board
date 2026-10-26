@@ -656,3 +656,10 @@ def _respond(
         result.excluded_for_licensing,
     )
     return response
+
+
+# --- Web page -----------------------------------------------------------------------------------
+# The broker-facing page at `/` (static files that call `POST /match`); not part of the API schema.
+from deal_board import ui as _ui  # noqa: E402  (imported last: it only adds routes to `app`)
+
+_ui.install(app)

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Requirements Board · Find licensed brokers</title>
+<meta name="description" content="Paste a cross-state referral post. See only brokers actively licensed in the deal's state, ranked with a reason for every point.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#post-text">Skip to the deal post</a>
+
+<header class="masthead">
+  <div class="masthead__inner">
+    <a class="brand" href="/" aria-label="Deal Requirements Board, start over">
+      <img class="brand__mark" src="/static/mark.svg" alt="" width="28" height="28">
+      <span class="brand__name">Deal Requirements Board</span>
+    </a>
+    <p class="masthead__note">Prototype · extraction may be done by an AI model · <a href="/docs">API</a></p>
+  </div>
+</header>
+
+<main id="main" class="layout">
+  <section class="pane pane--post" aria-labelledby="post-heading">
+    <h1 id="post-heading" class="page-title">Who can legally take this deal?</h1>
+    <p class="lede">Paste a referral post. You'll see only brokers actively licensed in the deal's state, ranked by fit, with the reason for every point.</p>
+
+    <div id="error-summary" class="error-summary" role="alert" tabindex="-1" hidden>
+      <h2 class="error-summary__title" id="error-title">There is a problem</h2>
+      <p class="error-summary__body" id="error-body"></p>
+      <div class="error-summary__actions" id="error-actions"></div>
+    </div>
+
+    <form id="match-form" class="post-form" novalidate>
+      <div class="field" id="post-field">
+        <label class="field__label" for="post-text">Deal post</label>
+        <p class="field__hint" id="post-hint">Include the state, city, property type, what the client wants to do, the price and the timing. Your text is sent only to this app and isn't saved.</p>
+        <p class="field__error" id="post-error" hidden></p>
+        <textarea id="post-text" name="text" rows="7" maxlength="4000" spellcheck="true"
+          aria-describedby="post-hint post-count" autocomplete="off"
+          placeholder="e.g. Need a buyer's agent in Phoenix, AZ for an SFR up to $450k, closing in 30 days."></textarea>
+        <p class="field__count" id="post-count" aria-live="polite">0 of 4,000 characters</p>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="button button--primary" id="submit">
+          <span class="button__label">Find licensed brokers</span>
+        </button>
+        <button type="button" class="button button--quiet" id="clear" hidden>Clear</button>
+        <span class="actions__shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>Enter</kbd></span>
+      </div>
+
+    </form>
+
+    <section id="reading" class="reading" aria-labelledby="reading-heading" hidden>
+      <h2 id="reading-heading" class="section-title">What we read from the post</h2>
+      <p class="provenance" id="provenance"></p>
+      <dl class="facts" id="facts"></dl>
+      <p class="reading__caution">Extraction can be wrong. Check these details before you refer. To change one, edit the post and run it again.</p>
+    </section>
+
+    <details class="examples" id="examples-wrap" open>
+      <summary class="examples__summary">Try an example post</summary>
+      <ul class="examples__list" id="examples"></ul>
+    </details>
+
+  </section>
+
+  <section class="pane pane--results" aria-labelledby="results-heading" aria-live="polite" aria-busy="false" id="results">
+    <h2 id="results-heading" class="results-title" tabindex="-1">How matching works</h2>
+    <div id="results-body">
+      <ol class="how">
+        <li class="how__step">
+          <span class="how__num" aria-hidden="true">1</span>
+          <div><h3 class="how__title">Read the post</h3>
+          <p>The post becomes structured fields: state, city, property type, transaction, value and timeline. Anything not in the post is left empty, never guessed.</p></div>
+        </li>
+        <li class="how__step">
+          <span class="how__num" aria-hidden="true">2</span>
+          <div><h3 class="how__title">Check licenses first</h3>
+          <p>A broker is shown only if their license is in the deal's state, the status is exactly <span class="term">Active</span>, and the expiration date is known and not past. If the post doesn't name a state, nobody is shown and you're asked for it.</p></div>
+        </li>
+        <li class="how__step">
+          <span class="how__num" aria-hidden="true">3</span>
+          <div><h3 class="how__title">Rank by fit, with reasons</h3>
+          <p>Up to 8 fit points: property type +3, transaction type +2, local market +2, deal size in range +1. Each point is listed, so you can see why a broker ranks where they do.</p></div>
+        </li>
+      </ol>
+      <p class="data-note">Broker data: 200 public Texas Real Estate Commission records (names removed) and 26 clearly marked fictional brokers for other states. This is a prototype, not a licensing authority.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <p>Licensing checks are a conservative engineering rule, not legal advice. Always confirm a license with the state's regulator before referring.</p>
+</footer>
+
+<template id="tpl-broker">
+  <li class="broker">
+    <div class="broker__rank" aria-hidden="true"></div>
+    <div class="broker__main">
+      <div class="broker__head">
+        <h3 class="broker__name"></h3>
+        <span class="badge badge--licensed"><span class="badge__dot" aria-hidden="true"></span>Licensed</span>
+      </div>
+      <dl class="broker__meta">
+        <div><dt>License</dt><dd><span class="mono broker__license"></span> <button type="button" class="link-button broker__copy">Copy</button></dd></div>
+        <div><dt>Type</dt><dd class="broker__type"></dd></div>
+        <div><dt>Record</dt><dd class="broker__source"></dd></div>
+      </dl>
+      <ul class="reasons"></ul>
+      <ul class="notes"></ul>
+    </div>
+    <div class="fit">
+      <p class="fit__score"><span class="fit__num"></span><span class="fit__of"> of 8</span></p>
+      <p class="fit__label">fit points</p>
+      <div class="fit__bar" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    </div>
+  </li>
+</template>
+</body>
+</html>

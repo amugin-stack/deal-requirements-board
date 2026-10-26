@@ -287,6 +287,8 @@ DEAL_EXTRACTOR=regex .venv/bin/uvicorn deal_board.api:app --reload        # the 
 curl -s localhost:8000/match -H 'content-type: application/json' -d '{"text": "Need a listing agent in Columbus, Ohio for a 3bd ranch, about $275k"}'
 ```
 
+With the server running, open <http://localhost:8000/> for the broker page: paste a post and see the licensed brokers, the reasons for each point and any follow-up question. It calls the same `POST /match`; design notes and screenshots are in [`docs/design/DESIGN.md`](docs/design/DESIGN.md). The generated API reference stays at `/docs`.
+
 Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-brokers data/raw/<file>.csv`. It uses a fixed seed, so the same input gives the same 200 rows.
 
 ## Engineering notes
