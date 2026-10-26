@@ -1,0 +1,5 @@
+Sensitivity (secondary): holdout v3 city accuracy with v3-09, v3-16 excluded
+Sources: results/regex_20261026T003559Z.json, results/claude_20261026T003610Z.json, data/holdout_v3.jsonl
+- all 25 posts: regex city 79% [57–91] (15/19 deal posts); Claude city 89% [69–97] (17/19 deal posts)
+- 23 posts: regex city 88% [66–97] (15/17 deal posts); Claude city 100% [82–100] (17/17 deal posts)
+- paired exact McNemar on the 17 remaining deal posts: p = 0.5 (Claude-only correct: v3-07, v3-08; regex-only correct: none)
