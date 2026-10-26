@@ -1,0 +1,16 @@
+Prompt loop on the 24 dev posts (data/posts.jsonl split dev), 3 runs per prompt
+Source: loop/state.json -> results/claude_*.json, re-scored from raw outputs against current labels
+p: exact McNemar vs the previous kept prompt, discordant (post, field) cells over the 7 mean fields,
+   pooled over the 3 run pairs (run k vs run k); pooling repeated posts makes p optimistic, not conservative
+
+| Iteration | Prompt | Dev mean (3 runs) | Per-run min–max | vs | Better / worse cells | p | Decision |
+|---|---|---:|---:|---|---:|---:|---|
+| 0 | `de789943` | 0.885 | 0.881–0.890 | – | – | – | baseline |
+| 1 | `a86a1ad8` | 0.926 | 0.926–0.926 | `de789943` | 25 / 8 | 0.00455 | kept |
+| 2 | `b0950301` | 0.930 | 0.925–0.932 | `a86a1ad8` | 8 / 6 | 0.791 | kept |
+| 3 | `b4f9c9ab` | 0.952 | 0.947–0.955 | `b0950301` | 10 / 1 | 0.0117 | reverted |
+| 4 | `ac1a145b` | 0.945 | 0.940–0.955 | `b0950301` | 7 / 1 | 0.0703 | kept |
+
+First prompt vs final prompt, one run each: results/claude_20261024T231514Z.json (de789943) vs results/claude_20261024T234359Z.json (ac1a145b)
+- 11 untuned author posts (data/posts.jsonl split holdout): mean 0.957 -> 0.943; better / worse cells 2 / 3, p = 1; posts that changed: s12, s15, s30, s33
+- holdout v2 (data/holdout.jsonl, 15 posts): mean 0.805 -> 0.952; better / worse cells 14 / 1, p = 0.000977; posts that changed: h01, h02, h06, h12
