@@ -56,6 +56,7 @@ namespaces = false  # deal_board/extractors/frozen/ is source kept as data, neve
 
 [tool.setuptools.package-data]
 "deal_board.extractors" = ["frozen/*.py"]
+"deal_board" = ["ui_static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
