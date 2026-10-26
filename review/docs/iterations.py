@@ -57,12 +57,25 @@ def discordant(a: dict[str, dict[str, bool]], b: dict[str, dict[str, bool]]) -> 
     return b_only, a_only, ids
 
 
+def post_level(a: dict[str, dict[str, bool]], b: dict[str, dict[str, bool]]) -> tuple[list[str], list[str]]:
+    """Posts with more / fewer correct cells (over the 7 mean fields) in b than in a."""
+    ids = set().union(*(a[f].keys() & b[f].keys() for f in MEAN_FIELDS))
+
+    def n(c: dict[str, dict[str, bool]], pid: str) -> int:
+        return sum(c[f].get(pid, False) for f in MEAN_FIELDS)
+
+    better = sorted(p for p in ids if n(b, p) > n(a, p))
+    worse = sorted(p for p in ids if n(b, p) < n(a, p))
+    return better, worse
+
+
 def main() -> None:
     state = load("loop/state.json")
     print("Prompt loop on the 24 dev posts (data/posts.jsonl split dev), 3 runs per prompt")
     print("Source: loop/state.json and the claude_*.json files it names in results/, re-scored from raw outputs against current labels")
     print("p: exact McNemar vs the previous kept prompt, discordant (post, field) cells over the 7 mean fields,")
-    print("   pooled over the 3 run pairs (run k vs run k); pooling repeated posts makes p optimistic, not conservative")
+    print("   pooled over the 3 run pairs (run k vs run k); repeated posts, and cells within one post moving together,")
+    print("   make this p optimistic, not conservative")
     print()
     print("| Iteration | Prompt | Dev mean (3 runs) | Per-run min–max | vs | Better / worse cells | p | Decision |")
     print("|---|---|---:|---:|---|---:|---:|---|")
@@ -98,6 +111,13 @@ def main() -> None:
         print(
             f"- {label}: mean {m1:.3f} -> {m2:.3f}; better / worse cells {b} / {a}, "
             f"p = {exact_mcnemar_p(b, a):.3g}; posts that changed: {', '.join(sorted(ids)) or 'none'}"
+        )
+        better, worse = post_level(c1, c2)
+        print(
+            f"  post level (cells within a post move together, so this is the fairer test): "
+            f"posts with more / fewer correct fields {len(better)} / {len(worse)}, "
+            f"p = {exact_mcnemar_p(len(better), len(worse)):.3g} "
+            f"(more: {', '.join(better) or 'none'}; fewer: {', '.join(worse) or 'none'})"
         )
 
 
