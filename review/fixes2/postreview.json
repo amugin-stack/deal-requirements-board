@@ -1,0 +1,602 @@
+{
+ "mutants": [
+  {
+   "id": "post-01",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "Snapshot source matched with re.search instead of fullmatch, so any source merely containing 'trec_<date>' (e.g. 'trec_2026-10-20_revoked', 'old_trec_2026-10-20') is read as a fresh snapshot and passes the allow-list.",
+   "severity": "high",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -54,7 +54,7 @@\n     \"\"\"\n     if broker.source == _FICTIONAL:\n         return True\n-    found = _SNAPSHOT_SOURCE.fullmatch(broker.source)\n+    found = _SNAPSHOT_SOURCE.search(broker.source)\n     if found is None:\n         return False\n     try:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import is_licensed\\nprint(is_licensed(B(source='trec_2026-10-20_revoked'), 'TX', date(2026,10,25)))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[ trec_2026-10-20]"
+    ]
+   }
+  },
+  {
+   "id": "post-02",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "Lower bound of the snapshot age check dropped, so a snapshot dated AFTER as_of (says nothing about the license on that earlier day) is accepted.",
+   "severity": "high",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -61,7 +61,7 @@\n         snapshot = date.fromisoformat(found.group(1))\n     except ValueError:  # e.g. 2026-02-30\n         return False\n-    return 0 <= (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS\n+    return (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS\n \n \n def is_licensed(broker: Broker, state: str | None, as_of: date) -> bool:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import is_licensed\\nprint(is_licensed(B(source='trec_2026-10-20'), 'TX', date(2026,9,1)))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[trec_2026-12-01]"
+    ]
+   }
+  },
+  {
+   "id": "post-03",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "An impossible snapshot date (e.g. trec_2026-02-30) fails open: the ValueError branch returns True, so a record whose age can't be read is vouched for forever.",
+   "severity": "high",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -60,7 +60,7 @@\n     try:\n         snapshot = date.fromisoformat(found.group(1))\n     except ValueError:  # e.g. 2026-02-30\n-        return False\n+        return True\n     return 0 <= (as_of - snapshot).days <= MAX_SNAPSHOT_AGE_DAYS\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import is_licensed\\nprint(is_licensed(B(source='trec_2026-02-30'), 'TX', date(2026,10,25)))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_comp_c2_unparseable_snapshot_fails_closed[trec_2026-13-45]"
+    ]
+   }
+  },
+  {
+   "id": "post-04",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "Fictional check uses startswith('fictional'), so any source beginning with 'fictional' ('fictional_import', 'fictional-trec_2019-01-01') skips the snapshot-freshness gate entirely.",
+   "severity": "high",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -52,7 +52,7 @@\n     is a record whose age we can't read, so it fails closed instead of never ageing out. A\n     snapshot dated after as_of fails too: it says nothing about the license on that earlier day.\n     \"\"\"\n-    if broker.source == _FICTIONAL:\n+    if broker.source.startswith(_FICTIONAL):\n         return True\n     found = _SNAPSHOT_SOURCE.fullmatch(broker.source)\n     if found is None:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import is_licensed\\nprint(is_licensed(B(source='fictional-trec_2019-01-01'), 'TX', date(2026,10,25)))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-05",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "MAX_SNAPSHOT_AGE_DAYS raised from 90 to 365, so a TREC status snapshot up to a year stale (missing suspensions/revocations) is still vouched for.",
+   "severity": "high",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -39,7 +39,7 @@\n # snapshot, a suspension or revocation since then could be missed, so the gate stops vouching for\n # the row. 90, not 30: TREC status changes slowly, and the red-team suite pins an as_of of\n # 2026-11-30 against the 2026-10-20 snapshot. Re-download the data to restore the rows.\n-MAX_SNAPSHOT_AGE_DAYS = 90\n+MAX_SNAPSHOT_AGE_DAYS = 365\n \n _FICTIONAL = \"fictional\"\n _SNAPSHOT_SOURCE = re.compile(r\"trec_(\\d{4}-\\d{2}-\\d{2})\")\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import is_licensed\\nprint(is_licensed(B(source='trec_2026-10-20', license_expiration=date(2028,1,1)), 'TX', date(2027,3,1)))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_comp_c2_max_snapshot_age_constant - Asse..."
+    ]
+   }
+  },
+  {
+   "id": "post-06",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "Broker markets are cut at the first comma before keying, so a NY broker listing 'Hoboken, NJ' gets the +2 local-fit point on a NY deal in Hoboken (other-state market counted as local).",
+   "severity": "medium",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -109,7 +109,7 @@\n     if req.city is None:\n         return None\n     city = market_key(req.city, req.state)\n-    if city in {market_key(m, req.state) for m in broker.markets}:\n+    if city in {market_key(m.split(\",\")[0], req.state) for m in broker.markets}:\n         return 2, f\"+2 serves {req.city}\"\n     county = _TX_COUNTY_BY_KEY.get(city) if req.state == \"TX\" else None\n     if county is not None and county == broker.county:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import match\\nr=match(R(state='NY', city='Hoboken'), [B(license_state='NY', markets=['Hoboken, NJ'])], date(2026,10,25))\\nprint([(m.score, m.reasons) for m in r.matches])\" -> original: '[(0, [])]'; mutant: \"[(2, ['+2 serves Hoboken'])]\"",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_comp_c9_market_point_requires_same_state"
+    ]
+   }
+  },
+  {
+   "id": "post-07",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "excluded_for_licensing counts only in-state brokers that failed the gate, so out-of-state brokers are silently dropped from the excluded count.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -153,5 +153,5 @@\n     )\n     return MatchResult(\n         matches=[m for m, _ in scored[: max(limit, 0)]],\n-        excluded_for_licensing=len(brokers) - len(licensed),\n+        excluded_for_licensing=sum(1 for b in brokers if b.license_state == req.state) - len(licensed),\n     )\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import match\\nr=match(R(), [B(broker_id='a'), B(broker_id='b', license_state='CA')], date(2026,10,25))\\nprint(len(r.matches), r.excluded_for_licensing)\" -> original: '1 1'; mutant: '1 0'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_api.py::test_real_matcher_only_returns_brokers_licensed_in_the_deal_state"
+    ]
+   }
+  },
+  {
+   "id": "post-08",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "Sales Agent referral-fee compliance note only added when the agent earned at least one point, so a zero-fit licensed Sales Agent is returned without the 'paid through sponsoring broker' note.",
+   "severity": "high",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -132,7 +132,7 @@\n     \"\"\"Return the match and how many rules earned points (the first tie-breaker).\"\"\"\n     points = [p for rule in RULES if (p := rule(req, broker)) is not None]\n     reasons = [text for _, text in points]\n-    if broker.license_type == SALES_AGENT:\n+    if points and broker.license_type == SALES_AGENT:\n         reasons.append(SALES_AGENT_NOTE)\n     return Match(broker=broker, score=sum(n for n, _ in points), reasons=reasons), len(points)\n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import match\\nr=match(R(), [B(license_type='Sales Agent')], date(2026,10,25))\\nprint([m.reasons for m in r.matches])\" -> original: \"[['Referral fee must be paid through sponsoring broker']]\"; mutant: '[[]]'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_matcher.py::test_sales_agent_with_score_0_still_returned_with_note"
+    ]
+   }
+  },
+  {
+   "id": "post-09",
+   "author": "post-reviewer",
+   "file": "deal_board/matcher.py",
+   "description": "limit=0 treated as 'no limit' (scored[:limit] if limit else scored), so a caller asking for zero matches gets every licensed broker.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -152,6 +152,6 @@\n         key=lambda pair: (-pair[0].score, -pair[1], pair[0].broker.broker_id),\n     )\n     return MatchResult(\n-        matches=[m for m, _ in scored[: max(limit, 0)]],\n+        matches=[m for m, _ in (scored[: max(limit, 0)] if limit else scored)],\n         excluded_for_licensing=len(brokers) - len(licensed),\n     )\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import match\\nr=match(R(), [B(broker_id='a'), B(broker_id='b')], date(2026,10,25), limit=0)\\nprint(len(r.matches))\" -> original: '0'; mutant: '2'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-10",
+   "author": "post-reviewer",
+   "file": "deal_board/brokers.py",
+   "description": "_is_blank uses any() instead of all(), so any row with a single blank field (every TREC row: blank markets) is skipped as blank; brokers silently vanish from the pool and from excluded_for_licensing.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -70,7 +70,7 @@\n \n def _is_blank(row: dict[str | None, str | list[str] | None]) -> bool:\n     \"\"\"A row of only commas/whitespace (e.g. a trailing line from a spreadsheet) carries no broker.\"\"\"\n-    return all(v is None or (isinstance(v, str) and not v.strip()) for v in row.values())\n+    return any(v is None or (isinstance(v, str) and not v.strip()) for v in row.values())\n \n \n def load_brokers(path: Path = BROKERS_CSV) -> list[Broker]:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.brokers import load_brokers\\nh='broker_id,name,source,license_state,license_number,license_type,license_status,license_expiration,county,markets,property_types,transaction_types,min_deal_usd,max_deal_usd\\\\n'\\np=csv_file(h+'tx-1,T,trec_2026-10-20,TX,1,Sales Agent,Active,2027-01-31,Travis,,,,,\\\\n')\\nprint(len(load_brokers(p)))\" -> original: '1'; mutant: '0'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_api.py::test_missing_state_excludes_everyone_and_asks_for_state"
+    ]
+   }
+  },
+  {
+   "id": "post-11",
+   "author": "post-reviewer",
+   "file": "deal_board/brokers.py",
+   "description": "_split_list splits on commas as well as semicolons, so a market written 'Austin, TX' becomes two markets 'Austin' and 'TX' (and a broker can match a deal city literally named after a state code token).",
+   "severity": "medium",
+   "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -61,7 +61,7 @@\n     @field_validator(\"markets\", \"property_types\", \"transaction_types\", mode=\"before\")\n     @classmethod\n     def _split_list(cls, v: object) -> object:\n-        return [x.strip() for x in v.split(\";\") if x.strip()] if isinstance(v, str) else (v or [])\n+        return [x.strip() for x in v.replace(\",\", \";\").split(\";\") if x.strip()] if isinstance(v, str) else (v or [])\n \n     @property\n     def is_fictional(self) -> bool:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"print(B(markets='Austin, TX;Dallas').markets)\" -> original: \"['Austin, TX', 'Dallas']\"; mutant: \"['Austin', 'TX', 'Dallas']\"",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_comp_c9_market_point_requires_same_state"
+    ]
+   }
+  },
+  {
+   "id": "post-12",
+   "author": "post-reviewer",
+   "file": "deal_board/brokers.py",
+   "description": "A bad broker row is skipped (continue) instead of failing the load, so a malformed record (e.g. state 'Texas' or a bad license_type) silently disappears from the pool and from excluded_for_licensing.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -88,8 +88,6 @@\n                 continue\n             try:\n                 brokers.append(Broker.model_validate(row))\n-            except ValueError as e:  # pydantic.ValidationError subclasses ValueError\n-                raise ValueError(\n-                    f\"{path}: bad broker row at CSV line {reader.line_num} (broker_id={row.get('broker_id')!r}): {e}\"\n-                ) from e\n+            except ValueError:  # pydantic.ValidationError subclasses ValueError\n+                continue\n     return brokers\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.brokers import load_brokers\\nh='broker_id,name,source,license_state,license_number,license_type,license_status,license_expiration,county,markets,property_types,transaction_types,min_deal_usd,max_deal_usd\\\\n'\\np=csv_file(h+'tx-1,T,trec_2026-10-20,Texas,1,Sales Agent,Active,2027-01-31,Travis,,,,,\\\\n')\\ntry:\\n    print(len(load_brokers(p)))\\nexcept ValueError as e:\\n    print('raised', type(e).__name__)\" -> original: 'raised ValueError'; mutant: '0'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_corr_c7_bad_row_names_line_and_broker - ..."
+    ]
+   }
+  },
+  {
+   "id": "post-13",
+   "author": "post-reviewer",
+   "file": "deal_board/brokers.py",
+   "description": "_blank_to_none uses falsiness (None if not v), so a programmatic min_deal_usd=0 becomes None (a fully known $0-$X range is treated as open-ended, losing the +1 deal-size point) and a Broker built with an empty list (markets=[]) fails validation.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -56,7 +56,7 @@\n     @field_validator(\"*\", mode=\"before\")\n     @classmethod\n     def _blank_to_none(cls, v: object) -> object:\n-        return None if v == \"\" else v\n+        return None if not v else v\n \n     @field_validator(\"markets\", \"property_types\", \"transaction_types\", mode=\"before\")\n     @classmethod\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.matcher import match\\nr=match(R(deal_value_usd=50000), [B(min_deal_usd=0, max_deal_usd=100000, markets=['Waco'], property_types=['retail'], transaction_types=['buy'])], date(2026,10,25))\\nprint([(m.score, m.reasons) for m in r.matches])\" -> original: \"[(1, ['+1 deal size $50,000 is within their $0\u2013$100,000 range'])]\"; mutant: '[(0, [])]'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "ERROR tests/test_api.py - pydantic_core._pydantic_core.ValidationError: 3 val..."
+    ]
+   }
+  },
+  {
+   "id": "post-14",
+   "author": "post-reviewer",
+   "file": "deal_board/brokers.py",
+   "description": "'Broker Organization' added to LicenseType, so company licenses load as brokers and (via PEOPLE = LICENSE_TYPES) the TREC build samples companies as people to match with.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -18,7 +18,7 @@\n # The license types we match, spelled exactly as TREC writes them. A closed set, because the\n # matcher adds the sales-agent referral note by exact comparison: a padded or misspelled\n # \"sales agent\" must fail at load rather than reach a poster without that note.\n-LicenseType = Literal[\"Broker Individual\", \"Sales Agent\"]\n+LicenseType = Literal[\"Broker Individual\", \"Sales Agent\", \"Broker Organization\"]\n LICENSE_TYPES: tuple[LicenseType, ...] = get_args(LicenseType)\n SALES_AGENT: LicenseType = \"Sales Agent\"\n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"try:\\n    print(B(license_type='Broker Organization').license_type)\\nexcept ValueError as e:\\n    print('rejected')\" -> original: 'rejected'; mutant: 'Broker Organization'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_comp_c4_license_types_constant - Asserti..."
+    ]
+   }
+  },
+  {
+   "id": "post-15",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "TREC rows are stamped source 'trec_<today>' (build date) instead of the download date AS_OF, so the matcher's snapshot-freshness clock restarts on every rebuild and a stale download is vouched for as fresh.",
+   "severity": "high",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -104,7 +104,7 @@\n             {\n                 \"broker_id\": f\"tx-{i:03d}\",\n                 \"name\": f\"TX Licensee {i:03d}\",\n-                \"source\": f\"trec_{AS_OF.isoformat()}\",\n+                \"source\": f\"trec_{date.today().isoformat()}\",\n                 \"license_state\": \"TX\",\n                 \"license_number\": r[\"License Number\"].strip(),\n                 \"license_type\": r[\"License Type\"],\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import sample_trec\\nprint(sorted({r['source'] for r in sample_trec(raw_trec())}))\" -> original: \"['trec_2026-10-20']\"; mutant: \"['trec_2026-10-25']\"",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_build_brokers.py::test_built_row_expiration_is_iso - Assert..."
+    ]
+   }
+  },
+  {
+   "id": "post-16",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "parse_date no longer raises on a 4-digit year, so if TREC switches to MM/DD/YYYY every expiry silently becomes unknown (None) and the build fails with a misleading 'need 150 valid rows' or writes blank expirations.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -53,8 +53,6 @@\n     reading every date as unknown would mark the whole download invalid.\n     \"\"\"\n     s = s.strip()\n-    if _FOUR_DIGIT_YEAR.fullmatch(s):\n-        raise ValueError(f\"expected a 2-digit year (MM/DD/YY), got {s!r}: has TREC changed its date format?\")\n     try:\n         return datetime.strptime(s, \"%m/%d/%y\").date()\n     except ValueError:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import parse_date\\ntry:\\n    print(parse_date('10/20/2027'))\\nexcept ValueError:\\n    print('raised')\" -> original: 'raised'; mutant: 'None'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_a.py::test_comp_c5_parse_date_rejects_four_digit_year"
+    ]
+   }
+  },
+  {
+   "id": "post-17",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "County 'Pending' is no longer blanked, so the placeholder 'Pending' is written as a real county name.",
+   "severity": "low",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -110,7 +110,7 @@\n                 \"license_type\": r[\"License Type\"],\n                 \"license_status\": r[\"Status\"],  # trimmed of surrounding whitespace, otherwise verbatim\n                 \"license_expiration\": exp.isoformat() if exp else \"\",\n-                \"county\": \"\" if county in (\"\", \"Pending\") else county,\n+                \"county\": \"\" if county == \"\" else county,\n                 # TREC has no specialty or deal-size data. Left blank rather than invented.\n                 \"markets\": \"\",\n                 \"property_types\": \"\",\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import sample_trec\\nprint(sorted({r['county'] for r in sample_trec(raw_trec(extra=[('Sales Agent','Active','01/31/27','Pending')]*200))}))\" -> original: \"['', 'Travis']\"; mutant: \"['Pending', 'Travis']\"",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_build_brokers.py::test_small_build_exact_output - Assertion..."
+    ]
+   }
+  },
+  {
+   "id": "post-18",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "'Status' dropped from _TRIMMED_COLUMNS, so a raw ' Active ' is classified invalid (and as non-Active, not 'Active but expired') and written padded; the strata and the value written diverge from what was classified on.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -40,7 +40,7 @@\n \n \n # The raw columns we classify on and write out. Trimmed once on read (see _trimmed).\n-_TRIMMED_COLUMNS = (\"Status\", \"License Expiration Date\", \"License Type\")\n+_TRIMMED_COLUMNS = (\"License Expiration Date\", \"License Type\")\n _FOUR_DIGIT_YEAR = re.compile(r\"\\d{1,2}/\\d{1,2}/\\d{4}\")\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import is_valid, _trimmed\\nrow={'Status':' Active ','License Expiration Date':'01/31/27','License Type':'Sales Agent','County':'x','License Number':'1'}\\nprint(is_valid(_trimmed(row)))\" -> original: 'True'; mutant: 'False'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-19",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "is_valid uses exp > AS_OF, so an Active license expiring exactly on the download date is put in the 'Active but expired' stratum although it is valid that day (strata mislabeled vs the matcher's >=).",
+   "severity": "medium",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -69,7 +69,7 @@\n def is_valid(row: dict[str, str]) -> bool:\n     \"\"\"Expects a _trimmed row.\"\"\"\n     exp = parse_date(row[\"License Expiration Date\"])\n-    return row[\"Status\"] == \"Active\" and exp is not None and exp >= AS_OF\n+    return row[\"Status\"] == \"Active\" and exp is not None and exp > AS_OF\n \n \n def sample_trec(raw_path: str) -> list[dict[str, str]]:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import is_valid\\nprint(is_valid({'Status':'Active','License Expiration Date':'10/20/26','License Type':'Sales Agent'}))\" -> original: 'True'; mutant: 'False'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-20",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "Valid stratum takes the first N_VALID rows (valid[:N_VALID]) instead of a seeded random sample, so the real sample is biased to file order and every later rng draw shifts (different invalid rows, different shuffle).",
+   "severity": "medium",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -86,7 +86,7 @@\n         raise ValueError(f\"need {N_VALID} valid (Active, unexpired as of {AS_OF}) rows, found {len(valid)}\")\n \n     rng = random.Random(SEED)\n-    chosen_valid = rng.sample(valid, N_VALID)\n+    chosen_valid = valid[:N_VALID]\n     # Sample only when over the cap, so a download under it draws the same rows as before.\n     if len(active_expired) > N_INVALID // 2:\n         active_expired = rng.sample(active_expired, N_INVALID // 2)\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import sample_trec\\nrows=sample_trec(raw_trec())\\nprint(sorted(r['license_number'] for r in rows)[:5], rows[0]['license_number'])\" -> original: \"['000001-SA', '000003-SA', '000004-SA', '000005-SA', '000006-SA'] 000081-SA\"; mutant: \"['000001-SA', '000002-SA', '000003-SA', '000004-SA', '000005-SA'] 000069-SA\"",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-21",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "Final rng.shuffle removed, so licensee numbers reveal the stratum (tx-001..150 are exactly the valid rows), leaking the label into the broker_id.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -94,7 +94,6 @@\n     if len(other_invalid) < n_other:\n         raise ValueError(f\"need {n_other} other invalid rows (not Active), found {len(other_invalid)}\")\n     chosen = chosen_valid + active_expired + rng.sample(other_invalid, n_other)\n-    rng.shuffle(chosen)  # so the licensee number doesn't reveal which group a row came from\n \n     rows: list[dict[str, str]] = []\n     for i, r in enumerate(chosen, 1):\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.cli.build_brokers import sample_trec\\nrows=sample_trec(raw_trec())\\nprint(all(r['license_status']=='Active' and r['license_expiration']>='2026-10-20' for r in rows[:150]))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-22",
+   "author": "post-reviewer",
+   "file": "deal_board/cli/build_brokers.py",
+   "description": "Build summary counts valid rows with > instead of >=, so the printed 'N valid as of AS_OF' undercounts licenses expiring on the download day (log only).",
+   "severity": "low",
+   "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -130,7 +130,7 @@\n         w = csv.DictWriter(f, fieldnames=FIELDS)\n         w.writeheader()\n         w.writerows(real + fictional)\n-    n_ok = sum(1 for r in real if r[\"license_status\"] == \"Active\" and r[\"license_expiration\"] >= AS_OF.isoformat())\n+    n_ok = sum(1 for r in real if r[\"license_status\"] == \"Active\" and r[\"license_expiration\"] > AS_OF.isoformat())\n     print(f\"wrote {len(real)} TREC rows ({n_ok} valid as of {AS_OF}) + {len(fictional)} fictional\")\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"import io, contextlib, tempfile, pathlib, shutil\\nimport deal_board.cli.build_brokers as bb\\nd=pathlib.Path(tempfile.mkdtemp()); (d/'data').mkdir()\\n(d/'data/fictional_brokers.csv').write_text(','.join(bb.FIELDS)+'\\\\n')\\nbb.ROOT=d\\nbuf=io.StringIO()\\nwith contextlib.redirect_stdout(buf):\\n    bb.main(raw_trec(extra=[('Sales Agent','Active','10/20/26')]*400))\\nprint(buf.getvalue().strip())\" -> original: 'wrote 200 TREC rows (150 valid as of 2026-10-20) + 0 fictional'; mutant: 'wrote 200 TREC rows (42 valid as of 2026-10-20) + 0 fictional'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-23",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "revalidate_requirement uses bool(is_deal_request) instead of 'is True', so a model_construct'ed requirement with is_deal_request='no' is treated as a deal and gets licensed matches.",
+   "severity": "high",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -173,7 +173,7 @@\n     fields: dict[str, Any] = {name: getattr(extracted, name, None) for name in ExtractedFields.model_fields}\n     state = fields[\"state\"]\n     fields[\"state\"] = state if isinstance(state, str) and state in STATE_CODES else None\n-    fields[\"is_deal_request\"] = fields[\"is_deal_request\"] is True\n+    fields[\"is_deal_request\"] = bool(fields[\"is_deal_request\"])\n     return DealRequirement.model_validate(fields)\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.api import revalidate_requirement\\nfrom deal_board.schema import DealRequirement\\nprint(revalidate_requirement(DealRequirement.model_construct(is_deal_request='no', state='TX')).is_deal_request)\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_b.py::test_smuggled_truthy_non_deal_gets_no_matches"
+    ]
+   }
+  },
+  {
+   "id": "post-24",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "revalidate_requirement keeps a state if its strip().upper() is a code, so an unvalidated ' tx ' from a buggy extractor is normalised to TX and routed instead of failing closed to None.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -172,7 +172,7 @@\n         raise TypeError(f\"extractor returned {type(extracted).__name__}, not a DealRequirement\")\n     fields: dict[str, Any] = {name: getattr(extracted, name, None) for name in ExtractedFields.model_fields}\n     state = fields[\"state\"]\n-    fields[\"state\"] = state if isinstance(state, str) and state in STATE_CODES else None\n+    fields[\"state\"] = state if isinstance(state, str) and state.strip().upper() in STATE_CODES else None\n     fields[\"is_deal_request\"] = fields[\"is_deal_request\"] is True\n     return DealRequirement.model_validate(fields)\n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.api import revalidate_requirement\\nfrom deal_board.schema import DealRequirement\\nprint(revalidate_requirement(DealRequirement.model_construct(is_deal_request=True, state=' tx ')).state)\" -> original: 'None'; mutant: 'TX'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_b.py::test_smuggled_lowercase_state_still_matches_nobody"
+    ]
+   }
+  },
+  {
+   "id": "post-25",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "LICENSING_TZ set to America/Chicago instead of America/New_York, so for the first hour of each Eastern day as_of is still yesterday and a NY/FL/GA license that expired yesterday passes the gate.",
+   "severity": "high",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -310,7 +310,7 @@\n # The easternmost time zone of any US state's licensing authority (Maine to Florida, plus DC).\n # Every state's local date is on or before the date here, so checking expirations against it\n # can only be stricter than the deal state's own date, never more lenient (fail closed).\n-LICENSING_TZ: Final = ZoneInfo(\"America/New_York\")\n+LICENSING_TZ: Final = ZoneInfo(\"America/Chicago\")\n \n \n def licensing_date(now: datetime) -> date:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: 'from deal_board.api import licensing_date\\nprint(licensing_date(datetime(2026,10,26,4,30,tzinfo=timezone.utc)))' -> original: '2026-10-26'; mutant: '2026-10-25'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc"
+    ]
+   }
+  },
+  {
+   "id": "post-26",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "licensing_date no longer rejects a naive datetime, so a naive now is silently interpreted in the host's local zone and the licensing date depends on server TZ.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -321,8 +321,6 @@\n     there would pass. Pure, so tests pass an instant instead of patching the clock. A naive\n     `now` is ambiguous about which instant it means, so it is rejected with ValueError.\n     \"\"\"\n-    if now.tzinfo is None or now.utcoffset() is None:\n-        raise ValueError(\"licensing_date needs a timezone-aware datetime\")\n     return now.astimezone(LICENSING_TZ).date()\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.api import licensing_date\\ntry:\\n    print(licensing_date(datetime(2026,10,26,4,30)))\\nexcept ValueError:\\n    print('raised')\" -> original: 'raised'; mutant: '2026-10-26'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-27",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "_declared_length_ok drops the digit-count guard, so a Content-Length of >4300 digits makes int() raise ValueError inside the middleware (500 instead of 413).",
+   "severity": "medium",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -452,7 +452,7 @@\n     Any value with more digits than `max_bytes` is over the cap (or zero-padded, which no\n     client needs), so it can be rejected without parsing.\n     \"\"\"\n-    return declared.isdigit() and len(declared) <= len(str(max_bytes)) and int(declared) <= max_bytes\n+    return declared.isdigit() and int(declared) <= max_bytes\n \n \n def _replay(messages: list[Message], then: Receive | None = None) -> Receive:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.api import _declared_length_ok\\ntry:\\n    print(_declared_length_ok(b'9'*5000, 65536))\\nexcept ValueError:\\n    print('raised')\" -> original: 'False'; mutant: 'raised'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_b.py::test_huge_digit_content_length_is_413 - asser..."
+    ]
+   }
+  },
+  {
+   "id": "post-28",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "_ClaudeKey fingerprint ignores the secret, so every key has the same fingerprint and a rotated ANTHROPIC_API_KEY keeps reusing the cached client built with the old key.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -269,7 +269,7 @@\n     def of(cls, settings: Settings) -> _ClaudeKey:\n         \"\"\"The current settings' key. Call only when `settings.use_claude` (so a key is set).\"\"\"\n         secret = SecretStr(settings.api_key_value() or \"\")\n-        digest = hmac.new(_POST_ID_KEY, b\"api-key\\0\" + secret.get_secret_value().encode(), hashlib.sha256)\n+        digest = hmac.new(_POST_ID_KEY, b\"api-key\\0\", hashlib.sha256)\n         return cls(fingerprint=digest.hexdigest(), secret=secret)\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.api import _ClaudeKey\\nclass S:\\n    def __init__(s,k): s.k=k\\n    def api_key_value(s): return s.k\\nprint(_ClaudeKey.of(S('k-one'))==_ClaudeKey.of(S('k-two')))\" -> original: 'False'; mutant: 'True'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_b.py::test_claude_extractor_rebuilt_when_key_or_model_changes"
+    ]
+   }
+  },
+  {
+   "id": "post-29",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "Body-size middleware checks each chunk's size instead of the running total, so a chunked upload of many sub-cap chunks bypasses the 64 KiB limit.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -423,7 +423,7 @@\n                 await self.app(scope, _replay([message]), send)\n                 return\n             body = message.get(\"body\", b\"\")\n-            size += len(body)\n+            size = len(body)\n             if size > self.max_bytes:\n                 await self._reject(send)\n                 return\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"import asyncio\\nfrom deal_board.api import BodySizeLimit\\nseen=[]\\nasync def app(scope, receive, send):\\n    m=await receive(); seen.append(len(m['body']))\\n    await send({'type':'http.response.start','status':200,'headers':[]}); await send({'type':'http.response.body','body':b''})\\nmsgs=[{'type':'http.request','body':b'x'*40000,'more_body':True},{'type':'http.request','body':b'x'*40000,'more_body':False}]\\nasync def recv(): return msgs.pop(0)\\nout=[]\\nasync def send(m): out.append(m.get('status'))\\nasyncio.run(BodySizeLimit(app, 65536)({'type':'http','headers':[]}, recv, send))\\nprint(out[0], seen)\" -> original: '413 []'; mutant: '200 [80000]'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-30",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "Route catches (ValidationError, TypeError) around revalidation, so an extractor returning a non-requirement (None/dict - an extractor bug) is reported as a 422 'could not extract' instead of the logged fixed 500.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -577,7 +577,7 @@\n     # the extractor's own object. An invalid field is the same failure as an ExtractionError.\n     try:\n         requirement = revalidate_requirement(extracted)\n-    except ValidationError as e:\n+    except (ValidationError, TypeError) as e:\n         logger.warning(\"extraction failed post=%s extractor=%s error=%s\", post_id, extractor.name, type(e).__name__)\n         raise HTTPException(\n             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from fastapi.testclient import TestClient\\nimport deal_board.api as api\\nclass E:\\n    name='regex'\\n    def extract(self,t): return None\\napi.app.dependency_overrides[api.get_extractor]=lambda: E()\\napi.app.dependency_overrides[api.get_brokers]=lambda: []\\nprint(TestClient(api.app).post('/match', json={'text':'need a broker in Austin TX'}).status_code)\" -> original: '500'; mutant: '422'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500[none]"
+    ]
+   }
+  },
+  {
+   "id": "post-31",
+   "author": "post-reviewer",
+   "file": "deal_board/api.py",
+   "description": "Auto-fallback warning condition inverted (== FORCE_REGEX), so an explicit DEAL_EXTRACTOR=regex logs the downgrade warning and the real auto-mode downgrade is silent (log only).",
+   "severity": "low",
+   "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -240,7 +240,7 @@\n     if settings.deal_extractor == FORCE_CLAUDE:\n         logger.error(\"DEAL_EXTRACTOR=claude but no ANTHROPIC_API_KEY is set\")\n         raise ExtractorUnavailable\n-    if settings.deal_extractor != FORCE_REGEX:\n+    if settings.deal_extractor == FORCE_REGEX:\n         _warn_auto_fell_back_to_regex()\n     return _regex_extractor()\n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"import deal_board.api as api\\ncalls=[]\\napi._warn_auto_fell_back_to_regex=lambda: calls.append(1)\\nclass S:\\n    use_claude=False; deal_extractor=''; deal_model='m'\\napi.load_settings=lambda: S()\\napi.get_extractor()\\nprint(len(calls))\" -> original: '1'; mutant: '0'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-32",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/claude.py",
+   "description": "_strict_type_ok accepts isinstance(value, int) for deal_value_usd, so a JSON boolean (True) passes the strict check and becomes deal_value_usd=1.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -198,7 +198,7 @@\n     if value is None:\n         return True\n     if field == \"deal_value_usd\":\n-        return type(value) is int\n+        return isinstance(value, int)\n     return type(value) is str\n \n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.claude import check_claude_raw\\ntry:\\n    check_claude_raw(full_raw(deal_value_usd=True)); print('accepted')\\nexcept Exception as e:\\n    print('rejected')\" -> original: 'rejected'; mutant: 'accepted'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_c1.py::test_claude_rejects_truncated_or_loose_output[deal_value_bool]"
+    ]
+   }
+  },
+  {
+   "id": "post-33",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/claude.py",
+   "description": "check_claude_raw no longer rejects unexpected keys, so a tool input with extra keys (e.g. 'license_state') is accepted and pydantic silently drops them.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -217,8 +217,6 @@\n     expected = set(ExtractedFields.model_fields)\n     if missing := sorted(expected - raw.keys()):\n         raise ExtractionError(f\"invalid output: missing keys {missing}\")\n-    if extra := sorted(str(k) for k in raw.keys() - expected):\n-        raise ExtractionError(f\"invalid output: unexpected keys {extra}\")\n     if bad := sorted(f for f in expected if not _strict_type_ok(f, raw[f])):\n         raise ExtractionError(f\"invalid output: wrong JSON type for {bad}\")\n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.claude import check_claude_raw\\ntry:\\n    check_claude_raw(full_raw(license_state='TX')); print('accepted')\\nexcept Exception as e:\\n    print('rejected')\" -> original: 'rejected'; mutant: 'accepted'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_c1.py::test_claude_rejects_truncated_or_loose_output[extra_key]"
+    ]
+   }
+  },
+  {
+   "id": "post-34",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/claude.py",
+   "description": "A stop_reason of 'max_tokens' is accepted like 'tool_use', so a tool call cut off mid-object is returned by extract_raw as if complete.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -277,7 +277,7 @@\n             raise ExtractionError(\"model refused\")\n         # Anything but \"tool_use\" means the call didn't finish on our tool: \"max_tokens\" can hand\n         # back a tool_use block whose input was cut off mid-object, which would validate with nulls.\n-        if response.stop_reason != \"tool_use\":\n+        if response.stop_reason not in (\"tool_use\", \"max_tokens\"):\n             raise ExtractionError(f\"no complete tool call (stop_reason={response.stop_reason})\")\n         call = next((b for b in response.content if _is_tool_use(b)), None)\n         if call is None:\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.claude import ClaudeExtractor, TOOL\\nx=ClaudeExtractor(client=FakeClient('max_tokens',[Blk(type='tool_use', name=TOOL['name'], input={'is_deal_request': True, 'state': 'TX'})]), model='m')\\ntry:\\n    print(x.extract_raw('p'))\\nexcept Exception as e:\\n    print('raised', type(e).__name__)\" -> original: 'raised ExtractionError'; mutant: \"{'is_deal_request': True, 'state': 'TX'}\"",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_fix_set_c1.py::test_claude_extractor_rejects_max_tokens_truncated_tool_call[max_tokens]"
+    ]
+   }
+  },
+  {
+   "id": "post-35",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/claude.py",
+   "description": "A tool_use block with no name is accepted (name check only when name is not None), so a nameless block is trusted as our tool.",
+   "severity": "low",
+   "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -283,6 +283,6 @@\n         if call is None:\n             raise ExtractionError(f\"no tool call (stop_reason={response.stop_reason})\")\n         name = getattr(call, \"name\", None)  # a block without a name can't be our tool either\n-        if name != TOOL[\"name\"]:\n+        if name is not None and name != TOOL[\"name\"]:\n             raise ExtractionError(f\"wrong tool called: {name!r}\")\n         return call.input\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.claude import ClaudeExtractor\\nx=ClaudeExtractor(client=FakeClient('tool_use',[Blk(type='tool_use', input=full_raw())]), model='m')\\ntry:\\n    print(x.extract_raw('p')['state'])\\nexcept Exception as e:\\n    print('raised', type(e).__name__)\" -> original: 'raised ExtractionError'; mutant: 'TX'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-36",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/claude.py",
+   "description": "_strict_schema no longer recurses into lists, so 'minimum' inside deal_value_usd's anyOf survives in the strict tool schema (strict mode may reject the tool) and PROMPT_VERSION changes.",
+   "severity": "low",
+   "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -79,9 +79,6 @@\n                 node[\"additionalProperties\"] = False\n                 node[\"required\"] = list(node[\"properties\"])\n             for v in node.values():\n-                walk(v)\n-        elif isinstance(node, list):\n-            for v in node:\n                 walk(v)\n \n     walk(schema)\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.claude import INPUT_SCHEMA, PROMPT_VERSION\\nprint(INPUT_SCHEMA['properties']['deal_value_usd'], PROMPT_VERSION)\" -> original: '{\\'anyOf\\': [{\\'type\\': \\'integer\\'}, {\\'type\\': \\'null\\'}], \\'description\\': \"The client\\'s price or budget in dollars. For a range use the upper bound; for \\'$4M+\\' use 4000000. Ignore NOI, rent, $/sf rates, earnest money, appraisals/BOVs, cap rates.\", \\'title\\': \\'Deal Value Usd\\'} ac1a145b'; mutant: '{\\'anyOf\\': [{\\'minimum\\': 0, \\'type\\': \\'integer\\'}, {\\'type\\': \\'null\\'}], \\'description\\': \"The client\\'s price or budget in dollars. For a range use the upper bound; for \\'$4M+\\' use 4000000. Ignore NOI, rent, $/sf rates, earnest money, appraisals/BOVs, cap rates.\", \\'title\\': \\'Deal Value Usd\\'} f1c0eb8b'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_packaging_compat.py::test_check_success_prompt_version - As..."
+    ]
+   }
+  },
+  {
+   "id": "post-37",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/claude.py",
+   "description": "last_usage is no longer reset at the start of extract_raw, so a later call whose response has no usage reports the previous call's tokens (cost accounting).",
+   "severity": "low",
+   "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -260,7 +260,6 @@\n \n         eval.py saves this so results can be re-scored later without calling the API again.\n         \"\"\"\n-        self.last_usage = None\n         response = self.client.messages.create(\n             model=self.model,\n             max_tokens=MAX_TOKENS,\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.claude import ClaudeExtractor, TOOL\\nx=ClaudeExtractor(client=FakeClient('tool_use',[Blk(type='tool_use', name=TOOL['name'], input=full_raw())], usage=Blk(input_tokens=5, output_tokens=7)), model='m')\\nx.extract_raw('p')\\nx.client=FakeClient('tool_use',[Blk(type='tool_use', name=TOOL['name'], input=full_raw())])\\nx.extract_raw('p')\\nprint(x.last_usage)\" -> original: 'None'; mutant: 'Usage(input_tokens=5, output_tokens=7)'",
+   "own_suite_run": {
+    "killed": true,
+    "killed_by": [
+     "FAILED tests/test_eval_cache.py::test_last_usage_reset_each_call - assert Usa..."
+    ]
+   }
+  },
+  {
+   "id": "post-38",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/regex_baseline.py",
+   "description": "Wrapper's output check weakened to 'result is None', so a frozen impl returning a dict/other object is passed through as if it were a validated DealRequirement.",
+   "severity": "medium",
+   "diff": "--- a/deal_board/extractors/regex_baseline.py\n+++ b/deal_board/extractors/regex_baseline.py\n@@ -89,6 +89,6 @@\n \n     def extract(self, text: str) -> DealRequirement:\n         result = self._impl.extract(text)\n-        if not isinstance(result, DealRequirement):\n+        if result is None:\n             raise TypeError(f\"frozen RegexExtractor returned {type(result).__name__}, not DealRequirement\")\n         return result\n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.regex_baseline import RegexExtractor\\nx=RegexExtractor()\\nclass I:\\n    def extract(self,t): return {'is_deal_request': True, 'state': 'ZZ'}\\nx._impl=I()\\ntry:\\n    print(x.extract('p'))\\nexcept TypeError:\\n    print('TypeError')\" -> original: 'TypeError'; mutant: \"{'is_deal_request': True, 'state': 'ZZ'}\"",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  },
+  {
+   "id": "post-39",
+   "author": "post-reviewer",
+   "file": "deal_board/extractors/regex_baseline.py",
+   "description": "_scoped_import aliases 'schema' at any import level, so a relative 'from .schema import' (level 1) inside the frozen file would also be redirected to deal_board.schema instead of resolving normally.",
+   "severity": "low",
+   "diff": "--- a/deal_board/extractors/regex_baseline.py\n+++ b/deal_board/extractors/regex_baseline.py\n@@ -38,7 +38,7 @@\n     level: int = 0,\n ) -> ModuleType:\n     \"\"\"`__import__` for the frozen file only: absolute `schema` resolves to `deal_board.schema`.\"\"\"\n-    if level == 0 and name in _ALIASES:\n+    if name in _ALIASES:\n         return _ALIASES[name]\n     return builtins.__import__(name, globals, locals, fromlist or (), level)\n \n",
+   "verified_real": true,
+   "verifier_note": "snippet: \"from deal_board.extractors.regex_baseline import _scoped_import\\ntry:\\n    print(_scoped_import('schema', {'__name__':'x','__package__':''}, None, (), 1).__name__)\\nexcept Exception as e:\\n    print('raised', type(e).__name__)\" -> original: 'raised ImportError'; mutant: 'deal_board.schema'",
+   "own_suite_run": {
+    "killed": false,
+    "killed_by": []
+   }
+  }
+ ]
+}

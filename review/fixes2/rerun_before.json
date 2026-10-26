@@ -1,0 +1,473 @@
+{
+  "tree": {
+    "deal_board": "dc63ce5fca5b0cb60101f387e2574c08c6ceda43",
+    "tests": "9b0fa6d12c924d012032b1a4e2097ffb4083dbb8",
+    "data": "f839299f8d4fe2067c57d5957e95f94b65929a05",
+    "pyproject.toml": "29ae66d12f011e970b73de312bacc3fb9d35776d"
+  },
+  "baseline": {
+    "failed": [],
+    "counts": {
+      "passed": 1451,
+      "skipped": 1
+    },
+    "note": "1451 passed, 1 skipped in 43.96s"
+  },
+  "mutants": {
+    "api-10": {
+      "diff_source": "rewritten",
+      "diff_sha256": "586214de76e291953150c5a4ceacbf6b908a26e1c9972b06b15eb6407b5f3b8b",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[honolulu-behind]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]",
+        "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
+      ],
+      "counts": {
+        "failed": 4,
+        "passed": 1447,
+        "skipped": 1
+      },
+      "note": "4 failed, 1447 passed, 1 skipped in 62.74s (0:01:02)",
+      "killed_by_count": 4
+    },
+    "api-21": {
+      "diff_source": "original",
+      "diff_sha256": "ea02b8d185357513de39d111e25c3efd41ca0b79b294308b6d1978012d8927b4",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 62.53s (0:01:02)",
+      "killed_by_count": 0
+    },
+    "api-28": {
+      "diff_source": "original",
+      "diff_sha256": "2540eba15b2057acd3d62cab2da1bf2c428b56614635fdcf1586a23cfbda9968",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 62.71s (0:01:02)",
+      "killed_by_count": 0
+    },
+    "api-44": {
+      "diff_source": "original",
+      "diff_sha256": "7e007a58c6bd9fb816f24ee598e2206192043b6b2f221493060a1c46d4b981ac",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 62.72s (0:01:02)",
+      "killed_by_count": 0
+    },
+    "gate-20": {
+      "diff_source": "rewritten",
+      "diff_sha256": "a72adef337bcf2ac644d5a6ce306e2097664cd59573352d5284fea394a09241f",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[honolulu-behind]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]",
+        "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
+      ],
+      "counts": {
+        "failed": 4,
+        "passed": 1447,
+        "skipped": 1
+      },
+      "note": "4 failed, 1447 passed, 1 skipped in 62.72s (0:01:02)",
+      "killed_by_count": 4
+    },
+    "gate-21": {
+      "diff_source": "rewritten",
+      "diff_sha256": "fe19d3d3c96a64d4330359679657c1618b6112f4fb313c2641ec2ff5fde5a10a",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1449,
+        "skipped": 1
+      },
+      "note": "2 failed, 1449 passed, 1 skipped in 65.46s (0:01:05)",
+      "killed_by_count": 2
+    },
+    "gate-22": {
+      "diff_source": "rewritten",
+      "diff_sha256": "a17faccac6729ebfe1a00044e16074a06fc7cd9ad1d7d22d8b860f112a55d8dc",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[honolulu-behind]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
+        "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]",
+        "tests/test_fix_set_b.py::test_license_expired_yesterday_in_texas_is_excluded_on_a_honolulu_host"
+      ],
+      "counts": {
+        "failed": 4,
+        "passed": 1447,
+        "skipped": 1
+      },
+      "note": "4 failed, 1447 passed, 1 skipped in 65.23s (0:01:05)",
+      "killed_by_count": 4
+    },
+    "gate-23": {
+      "diff_source": "rewritten",
+      "diff_sha256": "7d8ece6ac9217dfc5adc5baf1532dbf1dcb7033f2b88eb86997bda0c0d27534b",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api.py::test_real_matcher_only_returns_brokers_licensed_in_the_deal_state"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1450,
+        "skipped": 1
+      },
+      "note": "1 failed, 1450 passed, 1 skipped in 65.12s (0:01:05)",
+      "killed_by_count": 1
+    },
+    "gate-25": {
+      "diff_source": "original",
+      "diff_sha256": "9c29811a07a404adbdf9136b8806134aee5e7ded3f00ba43325c0c0f3f319fca",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[ trec_2026-10-20]",
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[trec_2026-10-20 ]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected[ Broker Individual]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected[Sales Agent ]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected_at_load"
+      ],
+      "counts": {
+        "failed": 5,
+        "passed": 1446,
+        "skipped": 1
+      },
+      "note": "5 failed, 1446 passed, 1 skipped in 65.26s (0:01:05)",
+      "killed_by_count": 5
+    },
+    "gate-28": {
+      "diff_source": "rewritten",
+      "diff_sha256": "10d95de4d99303beff84fe96b85c2e082413fb2cac2d55b4aa45bf1c8e72dd3a",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 65.11s (0:01:05)",
+      "killed_by_count": 0
+    },
+    "gate-35": {
+      "diff_source": "rewritten",
+      "diff_sha256": "d4105dbf02c66e74d83f43ca602cedc51e9d1c08e6795e8206c7b7e495cccece",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 74.04s (0:01:14)",
+      "killed_by_count": 0
+    },
+    "gate-41": {
+      "diff_source": "rewritten",
+      "diff_sha256": "000ad53cd37448c0253513fa0559b70e07a7bf20a3eac4f0650259fa1e43971e",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented",
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written",
+        "tests/test_fix_set_a.py::test_comp_c5_parse_date_pivot_pinned"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1448,
+        "skipped": 1
+      },
+      "note": "3 failed, 1448 passed, 1 skipped in 74.04s (0:01:14)",
+      "killed_by_count": 3
+    },
+    "gate-42": {
+      "diff_source": "rewritten",
+      "diff_sha256": "55a6bdf247b2913d2342fb581db41f8586e2d1b7f4d8decfd78f44bded8d477a",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 73.01s (0:01:13)",
+      "killed_by_count": 0
+    },
+    "gate-43": {
+      "diff_source": "rewritten",
+      "diff_sha256": "aafa7872c37257b22fd6996e92abe5579e44f7e58caf74bd79d86f2f274e2fa2",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1450,
+        "skipped": 1
+      },
+      "note": "1 failed, 1450 passed, 1 skipped in 73.91s (0:01:13)",
+      "killed_by_count": 1
+    },
+    "gate-44": {
+      "diff_source": "rewritten",
+      "diff_sha256": "2ab5199022b275252bcb7a15ebb19f61ba1954c5bf1610b886cf422eff173bd7",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 73.90s (0:01:13)",
+      "killed_by_count": 0
+    },
+    "gate-45": {
+      "diff_source": "rewritten",
+      "diff_sha256": "e47e0a67c1df681c54faf6c5cc676282e72812bba4e9b0ca685fee11aa08ac9d",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 74.36s (0:01:14)",
+      "killed_by_count": 0
+    },
+    "gate-47": {
+      "diff_source": "rewritten",
+      "diff_sha256": "d64d1b48c3db6ed32892826f37aca68a3937c9b2a013b53dd2e3801ad7377a00",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented",
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1449,
+        "skipped": 1
+      },
+      "note": "2 failed, 1449 passed, 1 skipped in 73.31s (0:01:13)",
+      "killed_by_count": 2
+    },
+    "gate-48": {
+      "diff_source": "original",
+      "diff_sha256": "ecdea93e6f98e76f27f846841a15ea5932e9242e22d9cf00324ec861c8db93a8",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 73.33s (0:01:13)",
+      "killed_by_count": 0
+    },
+    "gate-49": {
+      "diff_source": "rewritten",
+      "diff_sha256": "64f4dd62e8f718b0ea80eb3e10040a196cfb1d994410e6c26406940ec0b982c9",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1450,
+        "skipped": 1
+      },
+      "note": "1 failed, 1450 passed, 1 skipped in 73.31s (0:01:13)",
+      "killed_by_count": 1
+    },
+    "gate-50": {
+      "diff_source": "rewritten",
+      "diff_sha256": "9663f90c786b48d84aff8291329cb8fda29456bf85b4496eef83fb116175bd17",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 72.33s (0:01:12)",
+      "killed_by_count": 0
+    },
+    "gate-53": {
+      "diff_source": "rewritten",
+      "diff_sha256": "222af41f88e2b10ce95d7707fa6f4e7cad5f0b4518d37633bc87aba62f0f4363",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 75.65s (0:01:15)",
+      "killed_by_count": 0
+    },
+    "gate-69": {
+      "diff_source": "rewritten",
+      "diff_sha256": "d5da69f1377f078494d4033b169cb235d81e2bd3a77744fff565a4124225ba21",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 74.54s (0:01:14)",
+      "killed_by_count": 0
+    },
+    "gate-71": {
+      "diff_source": "rewritten",
+      "diff_sha256": "b9de0168073fa5891fbbc0b6999c1f5f93e1d543cade4a6c0b1b6264fab54849",
+      "files": [
+        "deal_board/extractors/regex_baseline.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 74.50s (0:01:14)",
+      "killed_by_count": 0
+    },
+    "match-28": {
+      "diff_source": "original",
+      "diff_sha256": "70aaf89bcf4822d93d3854c34838534495bef973305be66800d273a1d3d84ccd",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 74.52s (0:01:14)",
+      "killed_by_count": 0
+    },
+    "match-30": {
+      "diff_source": "original",
+      "diff_sha256": "d4fafb25c6ba208ddd41fc97e00ae4402e3a0342f728b8544a8a6beaa7e94813",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1451,
+        "skipped": 1
+      },
+      "note": "1451 passed, 1 skipped in 74.51s (0:01:14)",
+      "killed_by_count": 0
+    },
+    "match-41": {
+      "diff_source": "original",
+      "diff_sha256": "ab3ce58f47755fb7f7787fc950f8b9c6bfdb0fc0be21db76007cc62077e76b16",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_corr_c6_ft_abbreviation_earns_county_point"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1450,
+        "skipped": 1
+      },
+      "note": "1 failed, 1450 passed, 1 skipped in 49.36s",
+      "killed_by_count": 1
+    },
+    "match-43": {
+      "diff_source": "original",
+      "diff_sha256": "a96057240026803395b18734200921e34ef7c661073be21fc6eaa7f250dd3f53",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [],
+      "counts": {
+        "passed": 1452,
+        "skipped": 1
+      },
+      "note": "1452 passed, 1 skipped in 49.21s",
+      "killed_by_count": 0
+    }
+  }
+}

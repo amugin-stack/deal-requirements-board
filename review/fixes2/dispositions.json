@@ -1,0 +1,227 @@
+{
+  "api-10": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -328,7 +328,8 @@\n \n def get_as_of() -> date:\n     \"\"\"Today's licensing date (`licensing_date` of the current instant). A dependency so tests can pin it.\"\"\"\n-    return licensing_date(datetime.now(UTC))\n+    today = licensing_date(datetime.now(UTC))\n+    return today.replace(year=today.year - 1)\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "rewrite_reason": "get_as_of now returns licensing_date(datetime.now(UTC)) instead of date.today()",
+    "test": "tests/test_api_mutants.py::test_get_as_of_is_today"
+  },
+  "api-21": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Not a live fail-open: shipped get_matcher already raises MatcherUnavailable on ImportError (503). Missing test only. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_api_mutants.py::test_matcher_import_error_is_503_and_returns_no_brokers"
+  },
+  "api-28": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Shipped get_matcher catches only ImportError. Missing test only. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_api_mutants.py::test_matcher_non_import_error_stays_500"
+  },
+  "api-44": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_api_mutants.py::test_body_of_exactly_max_bytes_is_accepted"
+  },
+  "gate-20": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -328,7 +328,7 @@\n \n def get_as_of() -> date:\n     \"\"\"Today's licensing date (`licensing_date` of the current instant). A dependency so tests can pin it.\"\"\"\n-    return licensing_date(datetime.now(UTC))\n+    return date.fromordinal(licensing_date(datetime.now(UTC)).toordinal() - 1)\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "rewrite_reason": "get_as_of now returns licensing_date(datetime.now(UTC)) instead of date.today()",
+    "test": "tests/test_api_mutants.py::test_production_as_of_excludes_license_expired_yesterday"
+  },
+  "gate-21": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Proposed test assumed the server's local date; the shipped code (since fix-loop) uses America/New_York via licensing_date, so the test freezes the instant at 02:00 UTC, when the NY date is the day before. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -328,7 +328,7 @@\n \n def get_as_of() -> date:\n     \"\"\"Today's licensing date (`licensing_date` of the current instant). A dependency so tests can pin it.\"\"\"\n-    return licensing_date(datetime.now(UTC))\n+    return datetime.now(UTC).date()\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "rewrite_reason": "get_as_of now returns licensing_date(datetime.now(UTC)) instead of date.today(); the bug is taking the UTC calendar date",
+    "test": "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc"
+  },
+  "gate-22": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -328,7 +328,7 @@\n \n def get_as_of() -> date:\n     \"\"\"Today's licensing date (`licensing_date` of the current instant). A dependency so tests can pin it.\"\"\"\n-    return licensing_date(datetime.now(UTC))\n+    return date(2026, 10, 20)\n \n \n class MatcherUnavailable(RuntimeError):\n",
+    "rewrite_reason": "get_as_of now returns licensing_date(datetime.now(UTC)) instead of date.today()",
+    "test": "tests/test_api_mutants.py::test_get_as_of_follows_the_clock"
+  },
+  "gate-23": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "A",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/api.py\n+++ b/deal_board/api.py\n@@ -304,7 +304,7 @@\n \n     The list is shared across requests, so the matcher must treat it as read-only.\n     \"\"\"\n-    return broker_store.load_brokers()\n+    return [b for b in broker_store.load_brokers() if b.license_status == \"Active\"]\n \n \n # The easternmost time zone of any US state's licensing authority (Maine to Florida, plus DC).\n",
+    "rewrite_reason": "get_brokers' docstring changed, so the stored diff's context no longer matches",
+    "test": "tests/test_api_mutants.py::test_real_get_brokers_keeps_every_record_and_counts_exclusions"
+  },
+  "gate-25": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Fixture row lives in a tmp_path CSV, not data/fictional_brokers.csv: adding a padded-status row there would change live /match output. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_brokers_mutants.py::test_padded_status_is_kept_verbatim_and_fails_closed"
+  },
+  "gate-28": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Fixture row in a tmp_path CSV, as gate-25. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -82,7 +82,7 @@\n     \"\"\"\n     brokers: list[Broker] = []\n     with open(path, newline=\"\", encoding=\"utf-8-sig\") as f:\n-        reader = csv.DictReader(f)\n+        reader = csv.DictReader(f, skipinitialspace=True)\n         for row in reader:\n             if _is_blank(row):\n                 continue\n",
+    "rewrite_reason": "load_brokers now loops over a named csv.DictReader to report the bad line number",
+    "test": "tests/test_brokers_mutants.py::test_leading_space_status_is_not_trimmed_on_load"
+  },
+  "gate-35": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "C",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/matcher.py\n+++ b/deal_board/matcher.py\n@@ -77,7 +77,7 @@\n     return (\n         _snapshot_is_fresh(broker, as_of)\n         and state is not None\n-        and broker.license_state == state\n+        and state in broker.license_state\n         and broker.license_status == \"Active\"\n         and broker.license_expiration is not None\n         and broker.license_expiration >= as_of\n",
+    "rewrite_reason": "is_licensed now checks the snapshot age first, so the surrounding lines changed",
+    "test": "tests/test_matcher_mutants.py::test_is_licensed_rejects_partial_or_empty_state"
+  },
+  "gate-41": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -56,7 +56,7 @@\n     if _FOUR_DIGIT_YEAR.fullmatch(s):\n         raise ValueError(f\"expected a 2-digit year (MM/DD/YY), got {s!r}: has TREC changed its date format?\")\n     try:\n-        return datetime.strptime(s, \"%m/%d/%y\").date()\n+        return datetime.strptime(s, \"%d/%m/%y\").date()\n     except ValueError:\n         return None  # an unreadable date is treated as no date, which fails the license check\n \n",
+    "rewrite_reason": "parse_date now strips first and rejects 4-digit years, so the strptime line changed",
+    "test": "tests/test_build_brokers.py::test_parse_date_is_month_first"
+  },
+  "gate-42": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -58,7 +58,7 @@\n     try:\n         return datetime.strptime(s, \"%m/%d/%y\").date()\n     except ValueError:\n-        return None  # an unreadable date is treated as no date, which fails the license check\n+        return date(2099, 12, 31)  # an unreadable date is treated as no date, which fails the license check\n \n \n def _trimmed(row: dict[str, str]) -> dict[str, str]:\n",
+    "rewrite_reason": "parse_date now strips first and rejects 4-digit years, so the context changed",
+    "test": "tests/test_build_brokers.py::test_parse_date_unreadable_is_none"
+  },
+  "gate-43": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -108,7 +108,7 @@\n                 \"license_state\": \"TX\",\n                 \"license_number\": r[\"License Number\"].strip(),\n                 \"license_type\": r[\"License Type\"],\n-                \"license_status\": r[\"Status\"],  # trimmed of surrounding whitespace, otherwise verbatim\n+                \"license_status\": \"Active\" if r[\"Status\"].endswith(\"Active\") else r[\"Status\"],\n                 \"license_expiration\": exp.isoformat() if exp else \"\",\n                 \"county\": \"\" if county in (\"\", \"Pending\") else county,\n                 # TREC has no specialty or deal-size data. Left blank rather than invented.\n",
+    "rewrite_reason": "build_brokers now trims the classified columns once in _trimmed, so the old lines changed",
+    "test": "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim"
+  },
+  "gate-44": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -109,7 +109,7 @@\n                 \"license_number\": r[\"License Number\"].strip(),\n                 \"license_type\": r[\"License Type\"],\n                 \"license_status\": r[\"Status\"],  # trimmed of surrounding whitespace, otherwise verbatim\n-                \"license_expiration\": exp.isoformat() if exp else \"\",\n+                \"license_expiration\": exp.strftime(\"%Y-%d-%m\") if exp else \"\",\n                 \"county\": \"\" if county in (\"\", \"Pending\") else county,\n                 # TREC has no specialty or deal-size data. Left blank rather than invented.\n                 \"markets\": \"\",\n",
+    "rewrite_reason": "build_brokers now trims the classified columns once in _trimmed, so the old lines changed",
+    "test": "tests/test_build_brokers.py::test_built_row_expiration_is_iso"
+  },
+  "gate-45": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -109,7 +109,7 @@\n                 \"license_number\": r[\"License Number\"].strip(),\n                 \"license_type\": r[\"License Type\"],\n                 \"license_status\": r[\"Status\"],  # trimmed of surrounding whitespace, otherwise verbatim\n-                \"license_expiration\": exp.isoformat() if exp else \"\",\n+                \"license_expiration\": (exp or AS_OF).isoformat(),\n                 \"county\": \"\" if county in (\"\", \"Pending\") else county,\n                 # TREC has no specialty or deal-size data. Left blank rather than invented.\n                 \"markets\": \"\",\n",
+    "rewrite_reason": "build_brokers now trims the classified columns once in _trimmed, so the old lines changed",
+    "test": "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank"
+  },
+  "gate-47": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -69,7 +69,7 @@\n def is_valid(row: dict[str, str]) -> bool:\n     \"\"\"Expects a _trimmed row.\"\"\"\n     exp = parse_date(row[\"License Expiration Date\"])\n-    return row[\"Status\"] == \"Active\" and exp is not None and exp >= AS_OF\n+    return row[\"Status\"] == \"Active\"\n \n \n def sample_trec(raw_path: str) -> list[dict[str, str]]:\n",
+    "rewrite_reason": "build_brokers now trims the classified columns once in _trimmed, so the old lines changed",
+    "test": "tests/test_build_brokers.py::test_build_strata_counts"
+  },
+  "gate-48": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_build_brokers.py::test_build_output_has_unique_ids"
+  },
+  "gate-49": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -74,7 +74,7 @@\n \n def sample_trec(raw_path: str) -> list[dict[str, str]]:\n     with open(raw_path, newline=\"\", encoding=\"utf-8-sig\") as f:\n-        people = [t for r in csv.DictReader(f) if (t := _trimmed(r))[\"License Type\"] in PEOPLE]\n+        people = [_trimmed(r) for r in csv.DictReader(f)]\n     valid = [r for r in people if is_valid(r)]\n     invalid = [r for r in people if not is_valid(r)]\n     # \"Active but expired\" is rare and the most useful test of the filter, so keep every one up\n",
+    "rewrite_reason": "build_brokers now trims the classified columns once in _trimmed, so the old lines changed",
+    "test": "tests/test_build_brokers.py::test_build_excludes_non_person_license_types"
+  },
+  "gate-50": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/cli/build_brokers.py\n+++ b/deal_board/cli/build_brokers.py\n@@ -104,7 +104,7 @@\n             {\n                 \"broker_id\": f\"tx-{i:03d}\",\n                 \"name\": f\"TX Licensee {i:03d}\",\n-                \"source\": f\"trec_{AS_OF.isoformat()}\",\n+                \"source\": \"fictional\",\n                 \"license_state\": \"TX\",\n                 \"license_number\": r[\"License Number\"].strip(),\n                 \"license_type\": r[\"License Type\"],\n",
+    "rewrite_reason": "build_brokers now trims the classified columns once in _trimmed, so the old lines changed",
+    "test": "tests/test_build_brokers.py::test_build_labels_trec_rows_with_trec_source"
+  },
+  "gate-53": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Shipped load_brokers keeps every row (no dedup); the test pins that both twins load and only the licensed one matches. Fixture row in tmp_path. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/brokers.py\n+++ b/deal_board/brokers.py\n@@ -92,4 +92,4 @@\n                 raise ValueError(\n                     f\"{path}: bad broker row at CSV line {reader.line_num} (broker_id={row.get('broker_id')!r}): {e}\"\n                 ) from e\n-    return brokers\n+    return list({b.broker_id: b for b in brokers}.values())\n",
+    "rewrite_reason": "load_brokers now loops over rows and appends, so the dedup moves to the return",
+    "test": "tests/test_brokers_mutants.py::test_load_brokers_keeps_rows_sharing_a_broker_id"
+  },
+  "gate-69": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "C",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Fixture broker built in the test, not added to data/fictional_brokers.csv. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/extractors/claude.py\n+++ b/deal_board/extractors/claude.py\n@@ -253,6 +253,14 @@\n     def extract(self, text: str) -> DealRequirement:\n         raw = self.extract_raw(text)\n         check_claude_raw(raw)\n+        if raw.get(\"state\") is None:\n+            import re\n+            from typing import get_args\n+\n+            from deal_board.schema import State\n+\n+            guess = next((t for t in re.findall(r\"\\b[A-Z]{2}\\b\", text) if t in get_args(State)), None)\n+            raw = {**raw, \"state\": guess}\n         return parse_requirement(raw)\n \n     def extract_raw(self, text: str) -> dict[str, object]:\n",
+    "rewrite_reason": "extract now runs check_claude_raw on the raw input before parse_requirement",
+    "test": "tests/test_extractor_mutants.py::test_claude_null_state_is_not_guessed_from_text"
+  },
+  "gate-71": {
+    "severity": "high",
+    "disposition": "killed",
+    "file_set": "C",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug. Shipped wrapper has no cache. Missing test only; test goes straight at RegexExtractor and through /match. Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "diff": "--- a/deal_board/extractors/regex_baseline.py\n+++ b/deal_board/extractors/regex_baseline.py\n@@ -74,6 +74,7 @@\n \n     def __init__(self) -> None:\n         self._impl = _FROZEN_CLASS()\n+        self._cache: dict[str, object] = {}\n \n     def __reduce__(self) -> tuple[type[RegexExtractor], tuple[()]]:\n         \"\"\"Pickle as \"build a fresh shim\", never as the wrapped frozen instance.\n@@ -88,7 +89,7 @@\n         return (RegexExtractor, ())\n \n     def extract(self, text: str) -> DealRequirement:\n-        result = self._impl.extract(text)\n+        result = self._cache.setdefault(text[:40], self._impl.extract(text))\n         if not isinstance(result, DealRequirement):\n             raise TypeError(f\"frozen RegexExtractor returned {type(result).__name__}, not DealRequirement\")\n         return result\n",
+    "rewrite_reason": "the wrapper gained __reduce__ and an isinstance check, so the stored context moved",
+    "test": "tests/test_extractor_mutants.py::test_regex_extractor_does_not_reuse_results_for_shared_prefix"
+  },
+  "match-28": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "C",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_matcher_mutants.py::test_transaction_reason_names_the_transaction_type"
+  },
+  "match-30": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "C",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_matcher_mutants.py::test_tie_break_uses_broker_id_not_name"
+  },
+  "match-41": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_brokers_mutants.py::test_fort_worth_maps_to_tarrant_county"
+  },
+  "match-43": {
+    "severity": "medium",
+    "disposition": "killed",
+    "file_set": "B",
+    "note": "killed by a blind-written test; missing test, no product fix: the shipped code is correct here and the mutant is a deliberate bug.  Implementer audit: no live fail-open path in the shipped code, so no product change.",
+    "test": "tests/test_brokers_mutants.py::test_tx_city_to_county_table_is_exact"
+  }
+}
