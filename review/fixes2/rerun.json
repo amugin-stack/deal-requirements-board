@@ -1,17 +1,17 @@
 {
   "tree": {
     "deal_board": "dc63ce5fca5b0cb60101f387e2574c08c6ceda43",
-    "tests": "920651ef62dc6741e888644fc4f7822990940bc7",
+    "tests": "c2b56154a450c7b2dbd05fceb846f9e07999ce02",
     "data": "f839299f8d4fe2067c57d5957e95f94b65929a05",
     "pyproject.toml": "29ae66d12f011e970b73de312bacc3fb9d35776d"
   },
   "baseline": {
     "failed": [],
     "counts": {
-      "passed": 1498,
+      "passed": 1514,
       "skipped": 1
     },
-    "note": "1498 passed, 1 skipped in 40.57s"
+    "note": "1514 passed, 1 skipped in 42.37s"
   },
   "mutants": {
     "api-10": {
@@ -34,10 +34,10 @@
       ],
       "counts": {
         "failed": 9,
-        "passed": 1489,
+        "passed": 1505,
         "skipped": 1
       },
-      "note": "9 failed, 1489 passed, 1 skipped in 64.61s (0:01:04)",
+      "note": "9 failed, 1505 passed, 1 skipped in 86.61s (0:01:26)",
       "killed_by_count": 9
     },
     "api-21": {
@@ -52,10 +52,10 @@
       ],
       "counts": {
         "failed": 1,
-        "passed": 1497,
+        "passed": 1513,
         "skipped": 1
       },
-      "note": "1 failed, 1497 passed, 1 skipped in 64.56s (0:01:04)",
+      "note": "1 failed, 1513 passed, 1 skipped in 86.55s (0:01:26)",
       "killed_by_count": 1
     },
     "api-28": {
@@ -70,10 +70,10 @@
       ],
       "counts": {
         "failed": 1,
-        "passed": 1497,
+        "passed": 1513,
         "skipped": 1
       },
-      "note": "1 failed, 1497 passed, 1 skipped in 64.46s (0:01:04)",
+      "note": "1 failed, 1513 passed, 1 skipped in 86.55s (0:01:26)",
       "killed_by_count": 1
     },
     "api-44": {
@@ -89,10 +89,10 @@
       ],
       "counts": {
         "failed": 2,
-        "passed": 1496,
+        "passed": 1512,
         "skipped": 1
       },
-      "note": "2 failed, 1496 passed, 1 skipped in 64.58s (0:01:04)",
+      "note": "2 failed, 1512 passed, 1 skipped in 86.56s (0:01:26)",
       "killed_by_count": 2
     },
     "gate-20": {
@@ -115,10 +115,10 @@
       ],
       "counts": {
         "failed": 9,
-        "passed": 1489,
+        "passed": 1505,
         "skipped": 1
       },
-      "note": "9 failed, 1489 passed, 1 skipped in 64.57s (0:01:04)",
+      "note": "9 failed, 1505 passed, 1 skipped in 100.40s (0:01:40)",
       "killed_by_count": 9
     },
     "gate-21": {
@@ -129,17 +129,18 @@
       ],
       "applied": true,
       "failed": [
+        "tests/test_api_mutants.py::test_get_as_of_matches_the_real_clock",
         "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc",
         "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[tokyo-ahead]",
         "tests/test_fix_set_b.py::test_get_as_of_uses_new_york_date[utc-ahead]"
       ],
       "counts": {
-        "failed": 3,
-        "passed": 1495,
+        "failed": 4,
+        "passed": 1510,
         "skipped": 1
       },
-      "note": "3 failed, 1495 passed, 1 skipped in 75.33s (0:01:15)",
-      "killed_by_count": 3
+      "note": "4 failed, 1510 passed, 1 skipped in 100.40s (0:01:40)",
+      "killed_by_count": 4
     },
     "gate-22": {
       "diff_source": "rewritten",
@@ -161,10 +162,10 @@
       ],
       "counts": {
         "failed": 9,
-        "passed": 1489,
+        "passed": 1505,
         "skipped": 1
       },
-      "note": "9 failed, 1489 passed, 1 skipped in 75.21s (0:01:15)",
+      "note": "9 failed, 1505 passed, 1 skipped in 100.19s (0:01:40)",
       "killed_by_count": 9
     },
     "gate-23": {
@@ -180,10 +181,10 @@
       ],
       "counts": {
         "failed": 2,
-        "passed": 1496,
+        "passed": 1512,
         "skipped": 1
       },
-      "note": "2 failed, 1496 passed, 1 skipped in 75.20s (0:01:15)",
+      "note": "2 failed, 1512 passed, 1 skipped in 100.19s (0:01:40)",
       "killed_by_count": 2
     },
     "gate-25": {
@@ -204,10 +205,10 @@
       ],
       "counts": {
         "failed": 7,
-        "passed": 1491,
+        "passed": 1507,
         "skipped": 1
       },
-      "note": "7 failed, 1491 passed, 1 skipped in 75.18s (0:01:15)",
+      "note": "7 failed, 1507 passed, 1 skipped in 87.46s (0:01:27)",
       "killed_by_count": 7
     },
     "gate-28": {
@@ -222,10 +223,10 @@
       ],
       "counts": {
         "failed": 1,
-        "passed": 1497,
+        "passed": 1513,
         "skipped": 1
       },
-      "note": "1 failed, 1497 passed, 1 skipped in 75.18s (0:01:15)",
+      "note": "1 failed, 1513 passed, 1 skipped in 87.46s (0:01:27)",
       "killed_by_count": 1
     },
     "gate-35": {
@@ -245,10 +246,10 @@
       ],
       "counts": {
         "failed": 6,
-        "passed": 1492,
+        "passed": 1508,
         "skipped": 1
       },
-      "note": "6 failed, 1492 passed, 1 skipped in 69.34s (0:01:09)",
+      "note": "6 failed, 1508 passed, 1 skipped in 88.57s (0:01:28)",
       "killed_by_count": 6
     },
     "gate-41": {
@@ -270,16 +271,18 @@
         "tests/test_build_brokers.py::test_small_build_exact_output",
         "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented",
         "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written",
-        "tests/test_fix_set_a.py::test_comp_c5_parse_date_pivot_pinned"
+        "tests/test_fix_set_a.py::test_comp_c5_parse_date_pivot_pinned",
+        "tests/test_postfix_mutants.py::test_build_summary_counts_license_expiring_on_as_of",
+        "tests/test_postfix_mutants.py::test_license_expiring_on_as_of_is_valid"
       ],
       "counts": {
-        "failed": 5,
-        "passed": 1486,
+        "failed": 7,
+        "passed": 1500,
         "skipped": 1,
         "errors": 7
       },
-      "note": "5 failed, 1486 passed, 1 skipped, 7 errors in 69.33s (0:01:09)",
-      "killed_by_count": 12
+      "note": "7 failed, 1500 passed, 1 skipped, 1 warning, 7 errors in 87.37s (0:01:27)",
+      "killed_by_count": 14
     },
     "gate-42": {
       "diff_source": "rewritten",
@@ -299,11 +302,11 @@
       ],
       "counts": {
         "failed": 2,
-        "passed": 1491,
+        "passed": 1507,
         "skipped": 1,
         "errors": 5
       },
-      "note": "2 failed, 1491 passed, 1 skipped, 5 errors in 69.52s (0:01:09)",
+      "note": "2 failed, 1507 passed, 1 skipped, 5 errors in 86.16s (0:01:26)",
       "killed_by_count": 7
     },
     "gate-43": {
@@ -321,10 +324,10 @@
       ],
       "counts": {
         "failed": 4,
-        "passed": 1494,
+        "passed": 1510,
         "skipped": 1
       },
-      "note": "4 failed, 1494 passed, 1 skipped in 69.50s (0:01:09)",
+      "note": "4 failed, 1510 passed, 1 skipped in 86.16s (0:01:26)",
       "killed_by_count": 4
     },
     "gate-44": {
@@ -343,10 +346,10 @@
       ],
       "counts": {
         "failed": 5,
-        "passed": 1493,
+        "passed": 1509,
         "skipped": 1
       },
-      "note": "5 failed, 1493 passed, 1 skipped in 69.50s (0:01:09)",
+      "note": "5 failed, 1509 passed, 1 skipped in 86.06s (0:01:26)",
       "killed_by_count": 5
     },
     "gate-45": {
@@ -363,10 +366,10 @@
       ],
       "counts": {
         "failed": 3,
-        "passed": 1495,
+        "passed": 1511,
         "skipped": 1
       },
-      "note": "3 failed, 1495 passed, 1 skipped in 69.39s (0:01:09)",
+      "note": "3 failed, 1511 passed, 1 skipped in 84.88s (0:01:24)",
       "killed_by_count": 3
     },
     "gate-47": {
@@ -387,16 +390,17 @@
         "tests/test_build_brokers.py::test_parse_date_unreadable_is_none",
         "tests/test_build_brokers.py::test_small_build_exact_output",
         "tests/test_fix_set_a.py::test_comp_c5_active_expired_capped_so_other_invalid_represented",
-        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written"
+        "tests/test_fix_set_a.py::test_comp_c5_padded_active_status_classified_as_written",
+        "tests/test_postfix_mutants.py::test_valid_stratum_is_a_random_sample_not_file_order"
       ],
       "counts": {
-        "failed": 6,
-        "passed": 1487,
+        "failed": 7,
+        "passed": 1502,
         "skipped": 1,
         "errors": 5
       },
-      "note": "6 failed, 1487 passed, 1 skipped, 5 errors in 69.71s (0:01:09)",
-      "killed_by_count": 11
+      "note": "7 failed, 1502 passed, 1 skipped, 5 errors in 79.12s (0:01:19)",
+      "killed_by_count": 12
     },
     "gate-48": {
       "diff_source": "original",
@@ -412,10 +416,10 @@
       ],
       "counts": {
         "failed": 3,
-        "passed": 1495,
+        "passed": 1511,
         "skipped": 1
       },
-      "note": "3 failed, 1495 passed, 1 skipped in 69.64s (0:01:09)",
+      "note": "3 failed, 1511 passed, 1 skipped, 1 warning in 79.12s (0:01:19)",
       "killed_by_count": 3
     },
     "gate-49": {
@@ -435,10 +439,10 @@
       ],
       "counts": {
         "failed": 6,
-        "passed": 1492,
+        "passed": 1508,
         "skipped": 1
       },
-      "note": "6 failed, 1492 passed, 1 skipped in 69.62s (0:01:09)",
+      "note": "6 failed, 1508 passed, 1 skipped in 79.12s (0:01:19)",
       "killed_by_count": 6
     },
     "gate-50": {
@@ -455,10 +459,10 @@
       ],
       "counts": {
         "failed": 3,
-        "passed": 1495,
+        "passed": 1511,
         "skipped": 1
       },
-      "note": "3 failed, 1495 passed, 1 skipped in 69.58s (0:01:09)",
+      "note": "3 failed, 1511 passed, 1 skipped in 79.12s (0:01:19)",
       "killed_by_count": 3
     },
     "gate-53": {
@@ -473,10 +477,10 @@
       ],
       "counts": {
         "failed": 1,
-        "passed": 1497,
+        "passed": 1513,
         "skipped": 1
       },
-      "note": "1 failed, 1497 passed, 1 skipped in 77.08s (0:01:17)",
+      "note": "1 failed, 1513 passed, 1 skipped in 118.18s (0:01:58)",
       "killed_by_count": 1
     },
     "gate-69": {
@@ -492,10 +496,10 @@
       ],
       "counts": {
         "failed": 2,
-        "passed": 1496,
+        "passed": 1512,
         "skipped": 1
       },
-      "note": "2 failed, 1496 passed, 1 skipped in 76.72s (0:01:16)",
+      "note": "2 failed, 1512 passed, 1 skipped in 118.18s (0:01:58)",
       "killed_by_count": 2
     },
     "gate-71": {
@@ -512,10 +516,10 @@
       ],
       "counts": {
         "failed": 3,
-        "passed": 1495,
+        "passed": 1511,
         "skipped": 1
       },
-      "note": "3 failed, 1495 passed, 1 skipped in 76.73s (0:01:16)",
+      "note": "3 failed, 1511 passed, 1 skipped in 118.38s (0:01:58)",
       "killed_by_count": 3
     },
     "match-28": {
@@ -534,10 +538,10 @@
       ],
       "counts": {
         "failed": 5,
-        "passed": 1493,
+        "passed": 1509,
         "skipped": 1
       },
-      "note": "5 failed, 1493 passed, 1 skipped in 76.76s (0:01:16)",
+      "note": "5 failed, 1509 passed, 1 skipped in 119.88s (0:01:59)",
       "killed_by_count": 5
     },
     "match-30": {
@@ -553,10 +557,10 @@
       ],
       "counts": {
         "failed": 2,
-        "passed": 1496,
+        "passed": 1512,
         "skipped": 1
       },
-      "note": "2 failed, 1496 passed, 1 skipped in 76.70s (0:01:16)",
+      "note": "2 failed, 1512 passed, 1 skipped in 85.57s (0:01:25)",
       "killed_by_count": 2
     },
     "match-41": {
@@ -573,10 +577,10 @@
       ],
       "counts": {
         "failed": 3,
-        "passed": 1495,
+        "passed": 1511,
         "skipped": 1
       },
-      "note": "3 failed, 1495 passed, 1 skipped in 52.90s",
+      "note": "3 failed, 1511 passed, 1 skipped in 85.59s (0:01:25)",
       "killed_by_count": 3
     },
     "match-43": {
@@ -591,10 +595,10 @@
       ],
       "counts": {
         "failed": 1,
-        "passed": 1498,
+        "passed": 1514,
         "skipped": 1
       },
-      "note": "1 failed, 1498 passed, 1 skipped in 52.80s",
+      "note": "1 failed, 1514 passed, 1 skipped in 85.46s (0:01:25)",
       "killed_by_count": 1
     }
   }

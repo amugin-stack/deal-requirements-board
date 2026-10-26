@@ -1,0 +1,983 @@
+{
+  "tree": {
+    "deal_board": "dc63ce5fca5b0cb60101f387e2574c08c6ceda43",
+    "tests": "c2b56154a450c7b2dbd05fceb846f9e07999ce02",
+    "data": "f839299f8d4fe2067c57d5957e95f94b65929a05",
+    "pyproject.toml": "29ae66d12f011e970b73de312bacc3fb9d35776d"
+  },
+  "baseline": {
+    "failed": [],
+    "counts": {
+      "passed": 1514,
+      "skipped": 1
+    },
+    "note": "1514 passed, 1 skipped in 117.61s (0:01:57)"
+  },
+  "mutants": {
+    "post-01": {
+      "diff_source": "post",
+      "diff_sha256": "7504a352b92145ea144e549dea47d8fec881a8eaab0cf8ecd9875a2ed0ff2806",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[ trec_2026-10-20]",
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[trec_2026-10-20 ]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 365.73s (0:06:05)",
+      "killed_by_count": 2
+    },
+    "post-02": {
+      "diff_source": "post",
+      "diff_sha256": "09d0cac0979a634066871296f42d9ca5de4b554c88161876418431836d78c840",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[trec_2026-12-01]",
+        "tests/test_fix_adversarial.py::test_adv2_unreadable_or_future_snapshot_fails_closed[trec_2099-01-01]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 365.85s (0:06:05)",
+      "killed_by_count": 2
+    },
+    "post-03": {
+      "diff_source": "post",
+      "diff_sha256": "77bfaaa135a6db4cccc993ea10f4f72fa740ef5d36a0792c3c97cb3d37e7652e",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c2_unparseable_snapshot_fails_closed[trec_2026-13-45]"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 365.56s (0:06:05)",
+      "killed_by_count": 1
+    },
+    "post-04": {
+      "diff_source": "post",
+      "diff_sha256": "5e88a3ae5ff0fb3596419106981c3753799b819ddf14cd057e61f89f5b3e75ee",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_only_exact_fictional_source_skips_snapshot_gate[fictional-trec_2019-01-01]",
+        "tests/test_postfix_mutants.py::test_only_exact_fictional_source_skips_snapshot_gate[fictional_import]",
+        "tests/test_postfix_mutants.py::test_only_exact_fictional_source_skips_snapshot_gate[fictionally_real]"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1511,
+        "skipped": 1
+      },
+      "note": "3 failed, 1511 passed, 1 skipped in 365.48s (0:06:05)",
+      "killed_by_count": 3
+    },
+    "post-05": {
+      "diff_source": "post",
+      "diff_sha256": "2d2aa245f425ec02849790aab0a617f70c938297223f12e5daf83e64618b0f5f",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c2_max_snapshot_age_constant",
+        "tests/test_fix_set_a.py::test_comp_c2_no_real_broker_matched_long_after_snapshot",
+        "tests/test_fix_set_a.py::test_comp_c2_snapshot_age_boundary",
+        "tests/test_fix_set_a.py::test_comp_c2_stale_snapshot_fails_closed"
+      ],
+      "counts": {
+        "failed": 4,
+        "passed": 1510,
+        "skipped": 1
+      },
+      "note": "4 failed, 1510 passed, 1 skipped in 175.90s (0:02:55)",
+      "killed_by_count": 4
+    },
+    "post-06": {
+      "diff_source": "post",
+      "diff_sha256": "500545c7b30c27bc10eca9577ce7485f824db93f1c6b7d66aa836a6d69338d84",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c9_market_point_requires_same_state"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 175.86s (0:02:55)",
+      "killed_by_count": 1
+    },
+    "post-07": {
+      "diff_source": "post",
+      "diff_sha256": "604a3355e8845fe1c87959f4d89afb14e5cc1328154142cb76ab159ce88aac29",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api.py::test_real_matcher_only_returns_brokers_licensed_in_the_deal_state",
+        "tests/test_api_mutants.py::test_real_get_brokers_keeps_every_record_and_counts_exclusions",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h01]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h02]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h03]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h04]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h05]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h06]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h07]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h08]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h09]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h10]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h14]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[h15]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s01]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s02]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s03]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s04]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s07]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s08]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s09]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s10]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s11]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s12]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s13]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s14]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s15]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s17]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s18]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s19]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s21]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s22]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s23]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s24]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s25]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s26]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s27]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s29]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s30]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s31]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s32]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s33]",
+        "tests/test_compliance.py::test_post_returns_only_licensed_brokers[s34]",
+        "tests/test_extractor_mutants.py::test_claude_null_state_is_not_guessed_from_text[Fictional client wants a retail buy, OK with any size, ME too]",
+        "tests/test_extractor_mutants.py::test_claude_null_state_is_not_guessed_from_text[Fictional client wants a retail buy, call me IN the morning]",
+        "tests/test_fix_set_a.py::test_comp_c8_stateless_requirement_fails_closed[buyer-in-la]",
+        "tests/test_fix_set_a.py::test_comp_c8_stateless_requirement_fails_closed[co-pending]",
+        "tests/test_fix_set_a.py::test_comp_c8_stateless_requirement_fails_closed[ne-portland]",
+        "tests/test_fix_set_a.py::test_comp_c8_stateless_requirement_fails_closed[washington-heights]",
+        "tests/test_matcher.py::test_excluded_counts_each_unlicensed_broker",
+        "tests/test_matcher.py::test_missing_state_returns_nothing_and_excludes_all",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[TXX]",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[T]",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[X]",
+        "tests/test_matcher_mutants.py::test_match_excludes_tx_broker_for_partial_state[]",
+        "tests/test_postfix_mutants.py::test_limit_zero_returns_no_matches",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[az-expired-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[deal-value-string-coerced]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[fl-inactive-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[ga-no-expiration-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[huge-deal-value]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-full-deal]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-no-state]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-city-with-follow-up]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[injection-in-notes]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[is-deal-request-yes-validated]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[json-state-in-city-ks]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[json-state-in-notes-ks]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[ks-only-suspended-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[missing-fields-empty-despite-nulls]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-missing-fields-empty]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-lowercase]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-not-a-state]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-null-no-missing]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-whitespace]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-lowercase]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-whitespace]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-01]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-02]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-03]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-04]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-05]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-06]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-07]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-08]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-09]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-10]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-11]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-12]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-13]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-14]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-15]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-16]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-17]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-18]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-19]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-20]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-21]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-22]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-23]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-24]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-25]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-26]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-27]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-28]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-29]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-30]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-01]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-02]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-03]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-04]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-05]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-06]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-07]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-08]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-09]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-10]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-11]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-12]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-13]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-14]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-15]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-16]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-17]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-18]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-19]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-20]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-21]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-22]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-23]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-24]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-25]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-26]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-27]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-28]",
+        "tests/test_red_team.py::test_regex_post_never_returns_unlicensed_broker[rt-30]"
+      ],
+      "counts": {
+        "failed": 137,
+        "passed": 1377,
+        "skipped": 1
+      },
+      "note": "137 failed, 1377 passed, 1 skipped in 189.21s (0:03:09)",
+      "killed_by_count": 137
+    },
+    "post-08": {
+      "diff_source": "post",
+      "diff_sha256": "40fd1f824ae9c718322c95d2ff3e63a67879e4e3a3a803386e255da4d5df1b3d",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_matcher.py::test_sales_agent_with_score_0_still_returned_with_note"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 175.70s (0:02:55)",
+      "killed_by_count": 1
+    },
+    "post-09": {
+      "diff_source": "post",
+      "diff_sha256": "22f2ab095e9ef67f40a6273fb9cc1cd9f8ebcb81ed2947bfac708b0da97507cc",
+      "files": [
+        "deal_board/matcher.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_limit_zero_returns_no_matches"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 139.23s (0:02:19)",
+      "killed_by_count": 1
+    },
+    "post-10": {
+      "diff_source": "post",
+      "diff_sha256": "8f71cd47684a95d2824184216ebf1a47af7b24351677e2c7c91f4b581bd780cb",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api.py::test_missing_state_excludes_everyone_and_asks_for_state",
+        "tests/test_api.py::test_real_matcher_only_returns_brokers_licensed_in_the_deal_state",
+        "tests/test_api_mutants.py::test_real_get_brokers_keeps_every_record_and_counts_exclusions",
+        "tests/test_brokers.py::test_sample_is_stratified",
+        "tests/test_brokers_mutants.py::test_leading_space_status_is_not_trimmed_on_load",
+        "tests/test_brokers_mutants.py::test_load_brokers_keeps_rows_sharing_a_broker_id",
+        "tests/test_brokers_mutants.py::test_padded_status_is_kept_verbatim_and_fails_closed",
+        "tests/test_build_brokers.py::test_build_keeps_compound_status_verbatim",
+        "tests/test_build_brokers.py::test_build_strata_counts",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_built_row_unknown_expiration_blank",
+        "tests/test_build_brokers.py::test_small_build_exact_output",
+        "tests/test_compliance.py::test_as_of_is_respected_not_the_clock",
+        "tests/test_compliance.py::test_duplicate_broker_id_returns_only_the_licensed_record",
+        "tests/test_compliance.py::test_every_non_active_status_is_not_licensed[Deceased]",
+        "tests/test_compliance.py::test_every_non_active_status_is_not_licensed[Expired less than 6 months]",
+        "tests/test_compliance.py::test_every_non_active_status_is_not_licensed[Expired more than 6 months]",
+        "tests/test_compliance.py::test_every_non_active_status_is_not_licensed[Inactive]",
+        "tests/test_compliance.py::test_every_non_active_status_is_not_licensed[Probation - Active]",
+        "tests/test_compliance.py::test_every_non_active_status_is_not_licensed[Suspended]",
+        "tests/test_compliance.py::test_expiration_boundary[today]",
+        "tests/test_compliance.py::test_expiration_boundary[tomorrow]",
+        "tests/test_compliance.py::test_expiration_boundary[unknown]",
+        "tests/test_compliance.py::test_expiration_boundary[yesterday]",
+        "tests/test_compliance.py::test_state_must_match_exactly",
+        "tests/test_compliance.py::test_state_none_is_not_licensed",
+        "tests/test_compliance.py::test_status_must_be_exactly_active[ Active]",
+        "tests/test_compliance.py::test_status_must_be_exactly_active[ACTIVE]",
+        "tests/test_compliance.py::test_status_must_be_exactly_active[Active ]",
+        "tests/test_compliance.py::test_status_must_be_exactly_active[active]",
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected_at_load",
+        "tests/test_fix_set_a.py::test_comp_c8_regex_matches_pinned[co-pending]",
+        "tests/test_fix_set_a.py::test_comp_c8_regex_matches_pinned[washington-heights]",
+        "tests/test_fix_set_a.py::test_comp_c9_fictional_markets_are_in_license_state",
+        "tests/test_fix_set_a.py::test_corr_c6_ft_lauderdale_earns_market_point[Fort Lauderdale, FL]",
+        "tests/test_fix_set_a.py::test_corr_c6_ft_lauderdale_earns_market_point[Ft Lauderdale]",
+        "tests/test_fix_set_a.py::test_corr_c6_ft_lauderdale_earns_market_point[Ft. Lauderdale]",
+        "tests/test_fix_set_a.py::test_corr_c6_ft_lauderdale_earns_market_point[fort  lauderdale]",
+        "tests/test_fix_set_a.py::test_corr_c7_all_comma_row_is_skipped",
+        "tests/test_fix_set_a.py::test_corr_c7_bad_row_names_line_and_broker",
+        "tests/test_fix_set_a.py::test_corr_c7_bom_csv_loads",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_san_antonio_earns_county_point[San  Antonio]",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_san_antonio_earns_county_point[San Antonio,]",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_san_antonio_earns_county_point[san antonio]",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_st_louis_earns_market_point[St Louis]",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_st_louis_earns_market_point[St.  Louis]",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_st_louis_earns_market_point[St. Louis]",
+        "tests/test_fix_set_a.py::test_eq_cq51_scorer_correct_st_louis_earns_market_point[st. louis,]",
+        "tests/test_fix_set_a.py::test_rt1_known_cities_keep_wording",
+        "tests/test_fix_set_b.py::test_matcher_crash_returns_fixed_json_500[reshaping-raises]",
+        "tests/test_followup.py::test_missing_state_names_the_city",
+        "tests/test_matcher.py::test_arlington_va_does_not_return_tarrant_county_tx_brokers",
+        "tests/test_matcher.py::test_fx19_sales_agent_in_real_data_gets_note",
+        "tests/test_matcher.py::test_real_tx_rows_earn_county_point_for_austin",
+        "tests/test_matcher.py::test_trap_fx03_inactive_perfect_fit_excluded",
+        "tests/test_matcher.py::test_trap_fx05_active_but_expired_excluded",
+        "tests/test_matcher.py::test_trap_fx07_active_unknown_expiration_excluded",
+        "tests/test_matcher.py::test_trap_fx25_suspended_excluded_and_kansas_city_wrong_state",
+        "tests/test_matcher.py::test_wrong_state_portland_me_vs_or",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[az-expired-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[fl-inactive-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[ga-no-expiration-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[json-state-in-city-ks]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[json-state-in-notes-ks]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[ks-only-suspended-broker]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-lowercase]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[smuggled-state-whitespace]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-lowercase]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[state-whitespace]",
+        "tests/test_red_team.py::test_hostile_extractor_cannot_slip_past_gate[tx-probation-broker]",
+        "tests/test_red_team.py::test_known_regex_state_leaks_are_pinned",
+        "tests/test_red_team.py::test_regex_path_is_not_vacuous"
+      ],
+      "counts": {
+        "failed": 72,
+        "passed": 1194,
+        "skipped": 5
+      },
+      "note": "72 failed, 1194 passed, 5 skipped in 136.81s (0:02:16)",
+      "killed_by_count": 72
+    },
+    "post-11": {
+      "diff_source": "post",
+      "diff_sha256": "62f66ae1891d5af5b02071a1b0762d7743257947be31a352590c490dda55ea99",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c9_market_point_requires_same_state"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 139.25s (0:02:19)",
+      "killed_by_count": 1
+    },
+    "post-12": {
+      "diff_source": "post",
+      "diff_sha256": "9a0f8aa4abc2ed9ea398589d6229165f4544a898883b74229a91c99b4fb8f501",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c4_unknown_license_type_rejected_at_load",
+        "tests/test_fix_set_a.py::test_corr_c7_bad_row_names_line_and_broker"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 138.40s (0:02:18)",
+      "killed_by_count": 2
+    },
+    "post-13": {
+      "diff_source": "post",
+      "diff_sha256": "a8349d11df3d6ef0502976da5abc99bf2896663d5cb77ccd3c8b4e7ed01d96af",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api.py::<collection-error>",
+        "tests/test_brokers.py::<collection-error>",
+        "tests/test_compliance.py::<collection-error>",
+        "tests/test_fix_set_a.py::<collection-error>",
+        "tests/test_matcher.py::<collection-error>",
+        "tests/test_red_team.py::<collection-error>"
+      ],
+      "counts": {
+        "errors": 6
+      },
+      "note": "6 errors in 5.21s",
+      "killed_by_count": 6
+    },
+    "post-14": {
+      "diff_source": "post",
+      "diff_sha256": "ef8e681aec83c956c69c9b9f67f90c62793e81a8105f903d1c369cfdf07aa779",
+      "files": [
+        "deal_board/brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c4_license_types_constant"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 134.28s (0:02:14)",
+      "killed_by_count": 1
+    },
+    "post-15": {
+      "diff_source": "post",
+      "diff_sha256": "fd49eda2ea82d2c0db6742dd60478eb7e7d713b78159f7a72edcaf1551949739",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_build_labels_trec_rows_with_trec_source",
+        "tests/test_build_brokers.py::test_build_output_has_unique_ids",
+        "tests/test_build_brokers.py::test_build_strata_counts",
+        "tests/test_build_brokers.py::test_built_row_expiration_is_iso",
+        "tests/test_build_brokers.py::test_small_build_exact_output"
+      ],
+      "counts": {
+        "failed": 5,
+        "passed": 1509,
+        "skipped": 1
+      },
+      "note": "5 failed, 1509 passed, 1 skipped in 134.30s (0:02:14)",
+      "killed_by_count": 5
+    },
+    "post-16": {
+      "diff_source": "post",
+      "diff_sha256": "0b4adfaada4138786b2a19b5aa353ba24b40ac57df682821a6fe630a3a768235",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_a.py::test_comp_c5_parse_date_rejects_four_digit_year"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 140.28s (0:02:20)",
+      "killed_by_count": 1
+    },
+    "post-17": {
+      "diff_source": "post",
+      "diff_sha256": "6400d01c075994bb3be93d368a8f9ac57ebb958cd676a40be15b2cf471800b7d",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_build_brokers.py::test_small_build_exact_output"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 139.97s (0:02:19)",
+      "killed_by_count": 1
+    },
+    "post-18": {
+      "diff_source": "post",
+      "diff_sha256": "9da43943cf57c449b2202fa5bf60edb0d4716af7a870f714de528388fedfaaba",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_padded_active_status_is_trimmed_and_classified_valid"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 140.41s (0:02:20)",
+      "killed_by_count": 1
+    },
+    "post-19": {
+      "diff_source": "post",
+      "diff_sha256": "ceef1199db8bc7983655376ade9ffdd094ab8a2ed8d82be1294c060fd1d762d5",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_build_summary_counts_license_expiring_on_as_of",
+        "tests/test_postfix_mutants.py::test_license_expiring_on_as_of_is_valid"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 140.53s (0:02:20)",
+      "killed_by_count": 2
+    },
+    "post-20": {
+      "diff_source": "post",
+      "diff_sha256": "87ef82505120f6a0b654c1164fdac8e03331cecb74ff122dff3f2354cfa100b2",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_valid_stratum_is_a_random_sample_not_file_order"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 139.02s (0:02:19)",
+      "killed_by_count": 1
+    },
+    "post-21": {
+      "diff_source": "post",
+      "diff_sha256": "d4010e2c64920fa5170dfb11d3a4004d718af612add3e066da547762ebc35bfe",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_broker_ids_do_not_reveal_stratum"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 134.98s (0:02:14)",
+      "killed_by_count": 1
+    },
+    "post-22": {
+      "diff_source": "post",
+      "diff_sha256": "e7e3e2eb763b7ae56f27841a51794e835eb47cfb5ede28a90a33599e27f097f5",
+      "files": [
+        "deal_board/cli/build_brokers.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_build_summary_counts_license_expiring_on_as_of"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 150.90s (0:02:30)",
+      "killed_by_count": 1
+    },
+    "post-23": {
+      "diff_source": "post",
+      "diff_sha256": "a9dc5940128007747be061e70993f76b355ec138b064e6d04833049ceadba669",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_smuggled_truthy_non_deal_gets_no_matches"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 150.86s (0:02:30)",
+      "killed_by_count": 1
+    },
+    "post-24": {
+      "diff_source": "post",
+      "diff_sha256": "7476b3bed3986d0ee669c058379e06b95b0e29979b507e3c0de7ae1e6ba7fa54",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_smuggled_lowercase_state_still_matches_nobody",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-01]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-02]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-03]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-04]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-05]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-06]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-07]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-08]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-09]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-10]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-11]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-12]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-13]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-14]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-15]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-16]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-17]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-18]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-19]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-20]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-21]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-22]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-23]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-24]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-25]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-26]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-27]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-28]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-29]",
+        "tests/test_red_team.py::test_hostile_extractor_per_post[rt-30]"
+      ],
+      "counts": {
+        "failed": 31,
+        "passed": 1483,
+        "skipped": 1
+      },
+      "note": "31 failed, 1483 passed, 1 skipped in 153.34s (0:02:33)",
+      "killed_by_count": 31
+    },
+    "post-25": {
+      "diff_source": "post",
+      "diff_sha256": "92af2da503c6c24495b5e2f158c315a7bf2b8df1bc869d9c18b4f07c490713cb",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_api_mutants.py::test_get_as_of_uses_licensing_date_not_utc"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 149.59s (0:02:29)",
+      "killed_by_count": 1
+    },
+    "post-26": {
+      "diff_source": "post",
+      "diff_sha256": "578afbe60c8db44f1959039da5d6fb7a4a452b3b38d8146854cf71a712eb15d6",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_licensing_date_rejects_naive_datetime"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 142.11s (0:02:22)",
+      "killed_by_count": 1
+    },
+    "post-27": {
+      "diff_source": "post",
+      "diff_sha256": "c8745f076eb05c1e0d3207402ef5a1f6f1855acf4df688faae7d8887800a51be",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_body_size_limit_handles_huge_digit_header_directly",
+        "tests/test_fix_set_b.py::test_huge_digit_content_length_is_413"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 141.93s (0:02:21)",
+      "killed_by_count": 2
+    },
+    "post-28": {
+      "diff_source": "post",
+      "diff_sha256": "2c2f8ce442a0abd56eeaa58d3278af812359233d22c4f31772b0776aeb0d55cd",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_b.py::test_claude_extractor_rebuilt_when_key_or_model_changes"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 137.18s (0:02:17)",
+      "killed_by_count": 1
+    },
+    "post-29": {
+      "diff_source": "post",
+      "diff_sha256": "b00b72ba8a0ab23eb3cbec2d3503eeb3951ebd7923cfdd2f7433e276d70c355a",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_body_limit_counts_running_total_of_chunks"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 137.05s (0:02:17)",
+      "killed_by_count": 1
+    },
+    "post-30": {
+      "diff_source": "post",
+      "diff_sha256": "274d6c3383c7ea60ee26e56d1e3fefdd4771f6caeef8f7e1302ff89abc2abd18",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500[dict]",
+        "tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500[none]",
+        "tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500[obj]",
+        "tests/test_fix_adversarial.py::test_adv3_non_requirement_from_extractor_is_a_logged_500[str]"
+      ],
+      "counts": {
+        "failed": 4,
+        "passed": 1510,
+        "skipped": 1
+      },
+      "note": "4 failed, 1510 passed, 1 skipped in 112.43s (0:01:52)",
+      "killed_by_count": 4
+    },
+    "post-31": {
+      "diff_source": "post",
+      "diff_sha256": "818d7c15eea9e2e599d45c705896387cd5348e19075274d6470ac5e2d8b62b98",
+      "files": [
+        "deal_board/api.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_fallback_warning_only_in_auto_mode"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 112.43s (0:01:52)",
+      "killed_by_count": 1
+    },
+    "post-32": {
+      "diff_source": "post",
+      "diff_sha256": "df8650562380ff7f500f193be23d351a0bfb620b3ff5dea98ca9432e9df180f8",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_c1.py::test_claude_rejects_truncated_or_loose_output[deal_value_bool]",
+        "tests/test_fix_set_c1.py::test_loose_output_is_an_error_in_eval[deal_value_bool]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 110.10s (0:01:50)",
+      "killed_by_count": 2
+    },
+    "post-33": {
+      "diff_source": "post",
+      "diff_sha256": "70f4c36642f70c050ff83a96077c1c73ab92d245e86482b2120690a8597c8eca",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_c1.py::test_claude_rejects_truncated_or_loose_output[extra_key]",
+        "tests/test_fix_set_c1.py::test_loose_output_is_an_error_in_eval[extra_key]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 110.09s (0:01:50)",
+      "killed_by_count": 2
+    },
+    "post-34": {
+      "diff_source": "post",
+      "diff_sha256": "a8a5f41439d0e47ef146c7e5f92636d4b82600e7bdd0c1bfe4f78f40b7e83d3b",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_fix_set_c1.py::test_claude_extractor_rejects_max_tokens_truncated_tool_call[max_tokens]",
+        "tests/test_fix_set_c1.py::test_claude_extractor_rejects_max_tokens_truncated_tool_call[max_tokens_partial]",
+        "tests/test_fix_set_c1.py::test_truncated_call_is_recorded_as_an_error[max_tokens]"
+      ],
+      "counts": {
+        "failed": 3,
+        "passed": 1511,
+        "skipped": 1
+      },
+      "note": "3 failed, 1511 passed, 1 skipped in 95.97s (0:01:35)",
+      "killed_by_count": 3
+    },
+    "post-35": {
+      "diff_source": "post",
+      "diff_sha256": "058fd4f2822a5bc830767a6653b1ae33a0ad372204a5415ab3ba546043398228",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_claude_rejects_tool_use_block_without_name[False]",
+        "tests/test_postfix_mutants.py::test_claude_rejects_tool_use_block_without_name[True]"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 95.97s (0:01:35)",
+      "killed_by_count": 2
+    },
+    "post-36": {
+      "diff_source": "post",
+      "diff_sha256": "2862ec99e5973699ac92ce6514675ce0edd62c086c988d3ef6a63627f8c24a3b",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_packaging_compat.py::test_check_success_prompt_version",
+        "tests/test_packaging_compat.py::test_prompt_version_unchanged"
+      ],
+      "counts": {
+        "failed": 2,
+        "passed": 1512,
+        "skipped": 1
+      },
+      "note": "2 failed, 1512 passed, 1 skipped in 93.94s (0:01:33)",
+      "killed_by_count": 2
+    },
+    "post-37": {
+      "diff_source": "post",
+      "diff_sha256": "5a0cf12f790e112ee459057ad137eaa595049a39c03c98f983bc837debc121b0",
+      "files": [
+        "deal_board/extractors/claude.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_eval_cache.py::test_last_usage_reset_each_call"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 93.94s (0:01:33)",
+      "killed_by_count": 1
+    },
+    "post-38": {
+      "diff_source": "post",
+      "diff_sha256": "b7dc3c2fc2066080eaa5a18898eaac6015f7afdc28296683369808133aafc1a4",
+      "files": [
+        "deal_board/extractors/regex_baseline.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_regex_wrapper_rejects_non_requirement_output"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 56.62s",
+      "killed_by_count": 1
+    },
+    "post-39": {
+      "diff_source": "post",
+      "diff_sha256": "791ecfb2b2ef851b02f76e69a15e3f129d6498f9eeb84e58d9765df9453eac04",
+      "files": [
+        "deal_board/extractors/regex_baseline.py"
+      ],
+      "applied": true,
+      "failed": [
+        "tests/test_postfix_mutants.py::test_scoped_import_aliases_only_absolute_schema"
+      ],
+      "counts": {
+        "failed": 1,
+        "passed": 1513,
+        "skipped": 1
+      },
+      "note": "1 failed, 1513 passed, 1 skipped in 56.62s",
+      "killed_by_count": 1
+    }
+  }
+}
