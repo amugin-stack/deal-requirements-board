@@ -1,5 +1,9 @@
 # Deal Requirements Board
 
+**In plain English:** a real estate broker pastes a referral post, and this tool finds brokers who can legally take the deal in that state, ranked by fit, with the reason for each match.\
+On 25 test posts it had never seen, the AI version got 95.5% of the deal details right, against 78.9% for a simple rule-based version.\
+It only shows brokers actively licensed in the deal's state, and in every test, including posts written to trick it, it has never returned one who isn't.
+
 A small prototype of the core of a "Deal Requirements Board" for cross-state real estate referrals. A broker posts a deal need in free text. The system extracts a structured requirement, filters brokers down to those **actively licensed in the deal's state**, and ranks them by fit with a plain-English reason for every point. When the post leaves out something essential, it asks one follow-up question instead of guessing.
 
 Built as part of my application to License LinkUp ("Stay Compliant. Close Anywhere."). It is not affiliated with or endorsed by License LinkUp. The emphasis is on measurement and compliance, not breadth.
@@ -195,7 +199,7 @@ Both v2 files predate the per-post text and label hashes, so `tables.py` warns t
 
 ### How the prompt improved
 
-The prompt was improved by an automated loop (`loop/`, `HANDOFF.md`) that tuned **only on the 24 dev posts**. It ran each candidate prompt 3 times, because Haiku 5.5 only accepts its default temperature, so outputs vary from run to run. It kept a change only if the dev mean rose, no field dropped by more than ~4 points (`HANDOFF.md`; a bit under one post on the 19 dev deal posts), and fills on non-deal posts didn't rise; iteration 3 met the first two and was reverted on the third. Iteration 2 was kept although state and city each dipped by less than one post. A success test in `loop/check_success.py` fixed the bar before the loop started and fails if the loop edits the scoring, the labels, or its own rules.
+The prompt was improved by an automated loop ([`loop/`](loop/), with its rules in [`loop/DRAFT.md`](loop/DRAFT.md)) that tuned **only on the 24 dev posts**. It ran each candidate prompt 3 times, because Haiku 5.5 only accepts its default temperature, so outputs vary from run to run. It kept a change only if the dev mean rose, no field dropped by more than ~4 points ([`.claude/agents/extractor-improver.md`](.claude/agents/extractor-improver.md); a bit under one post on the 19 dev deal posts), and fills on non-deal posts didn't rise; iteration 3 met the first two and was reverted on the third. Iteration 2 was kept although state and city each dipped by less than one post. A success test in `loop/check_success.py` fixed the bar before the loop started and fails if the loop edits the scoring, the labels, or its own rules.
 
 Prompt loop on the 24 dev posts (data/posts.jsonl split dev), 3 runs per prompt
 Source: loop/state.json and the claude_*.json files it names in results/, re-scored from raw outputs against current labels
@@ -298,6 +302,7 @@ Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-b
 - **Tests that defend the claims.** The compliance test runs every labeled post against every broker, plus generated variants (each non-Active status, expired yesterday, no expiration, wrong state). It fails if an unlicensed broker is ever returned. Every Claude test uses a fake client.
 - **Mutation testing.** Deliberate bugs were applied to the gate and the match path one at a time, to see which ones the suite misses ([`review/mutants/REPORT.md`](review/mutants/REPORT.md)). That pass did not converge: 45 of 160 mutants survived, 13 of them high severity, after its 4 rounds. The gaps were mostly around the gate, such as the production clock and the broker builder. After the fixes, a fresh reviewer's 39 new mutants were all killed ([`review/fixes2/POSTREVIEW.md`](review/fixes2/POSTREVIEW.md)). The tests are in `tests/test_api_mutants.py`, `tests/test_brokers_mutants.py`, `tests/test_build_brokers.py`, `tests/test_extractor_mutants.py`, `tests/test_matcher_mutants.py` and `tests/test_postfix_mutants.py`.
 - **Reviews.** Separate read-only review passes covered eval quality, compliance and security, and API correctness. Each finding was verified before it was fixed. Findings and logs are in [`review/`](review/).
+- **CI on every push.** GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on each push and pull request: ruff, the format check, `mypy --strict` and the offline test suite, with full history and tags so the frozen-baseline test can compare against `baseline-v1`. It needs no secrets and makes no API calls.
 - **Built with parallel agent sessions.** The matcher and the API were built at the same time against one fixed interface, each in its own worktree with an adversarial review step. The red team, holdout v3, packaging and this docs pass each have a graph in [`docs/agent-graphs/`](docs/agent-graphs/).
 
 ## Limitations and next steps
@@ -307,7 +312,6 @@ Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-b
 - **Seller vs buyer.** Listing posts that seek buyers' agents still come back as `buy`. Next: one schema sentence and a contrasting example.
 - **Schema gaps found by holdout v3.** There is no "near/outside X" rule for city, and no written rule that a vague amount ("mid six figures") is null. Both labelers applied conventions the schema never states ([`docs/holdout_v3_agreement.md`](docs/holdout_v3_agreement.md)).
 - **The TREC sample goes stale.** The gate rejects TREC rows whose snapshot is more than 90 days old, so all 198 real rows stop matching 90 days after the 2026-10-20 download. Next: refresh the download with `deal-build-brokers`.
-- **CI has never run.** The workflow is defined in `.github/workflows/ci.yml` (ruff, format check, mypy, pytest), but the repo has no remote, so it has never been triggered.
 - **A different-model holdout.** Every set so far was written and labeled by Claude models. Next: a holdout written and labeled by a non-Claude model, with a human spot check of the labels.
 
 ## License
