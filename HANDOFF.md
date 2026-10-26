@@ -94,4 +94,4 @@ You are the orchestrator. You don't edit extractor code yourself; the agent does
 
 ## Where it fits
 
-This is Phase 5 of the roadmap artifact (https://claude.ai/artifact/Y4Gk3fdGak2fVi1b5SrMPU). After `phase5-done`, the next phase is P6: confidence intervals, a resumable cache and repeated-run reporting.
+This is Phase 5 of the project roadmap. After `phase5-done`, the next phase is P6: confidence intervals, a resumable cache and repeated-run reporting.

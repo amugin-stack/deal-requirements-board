@@ -25,3 +25,5 @@ fx-23,Fictional Broker IL-A,fictional,IL,FICT-IL-0001,Broker Individual,Active,2
 fx-24,Fictional Broker MO-A,fictional,MO,FICT-MO-0001,Broker Individual,Active,2028-06-30,,Kansas City;St. Louis,multifamily,buy,150000,2000000
 fx-25,Fictional Broker KS-A,fictional,KS,FICT-KS-0001,Broker Individual,Suspended,2028-06-30,,Kansas City,multifamily,buy,150000,2000000
 fx-26,Fictional Broker VA-A,fictional,VA,FICT-VA-0001,Broker Individual,Active,2028-03-31,,Arlington,condo_townhome,buy,300000,1500000
+fx-27,Fictional Broker TX-A,fictional,TX,FICT-TX-0001,Broker Individual,Deceased,2024-03-31,Travis,,single_family,buy,200000,1500000
+fx-28,Fictional Broker TX-B,fictional,TX,FICT-TX-0002,Broker Individual,Probation - Active,2027-06-30,Bexar,,retail,sell,500000,5000000

@@ -2,7 +2,7 @@
 
 A small prototype of the core of a "Deal Requirements Board" for cross-state real estate referrals. A broker posts a deal need in free text. The system extracts a structured requirement, filters brokers down to those **actively licensed in the deal's state**, and ranks them by fit with a plain-English reason for every point. When the post leaves out something essential, it asks one follow-up question instead of guessing.
 
-Built as an internship portfolio project for License LinkUp ("Stay Compliant. Close Anywhere."). The emphasis is on measurement and compliance, not breadth.
+Built as part of my application to License LinkUp ("Stay Compliant. Close Anywhere."). It is not affiliated with or endorsed by License LinkUp. The emphasis is on measurement and compliance, not breadth.
 
 ```
 POST /match  {"text": "Need a buyer's agent in Phoenix, AZ for an SFR up to $450k, closing in 30 days."}
@@ -255,8 +255,8 @@ The frozen regex baseline has known bugs, kept on purpose and pinned by `tests/t
 | `data/holdout.jsonl` (15 posts, holdout v2) | **Synthetic**, written by a separate agent from `schema.py` | No brief was recorded, so I can't show what that agent saw, and `data/posts.jsonl` was already in the tree. It shares wording with `data/posts.jsonl`: h08 repeats s04's sentence "45-day ID clock started last week" verbatim, and h13~s06, h14~s13 and h05~s05 share shorter phrases. Treat it as a development set seen twice, not a blind one. Holdout v3 is the stronger independent set. |
 | `data/holdout_v3.jsonl` (25 posts) | **Synthetic**, written and labeled by Claude Sonnet from a recorded blind brief, then labeled again blind by Claude Opus | 19 deal requests, 6 non-deals. The record says the labelers saw only `schema.py`, the record shape (the first line's keys of `data/holdout.jsonl`) and a variety checklist; that is recorded, not verified. Both labelers are the same model family as the extractor, so they may share blind spots. A different-model holdout remains planned. Agreement and adjudication: [`docs/holdout_v3_agreement.md`](docs/holdout_v3_agreement.md). |
 | `data/red_team.jsonl` (30 posts) | **Synthetic, adversarial.** Written by an attacker agent that read the schema, the matcher and the regex baseline | Each post tries to route a deal to the wrong state: two states in one post, a license named elsewhere, state-code collisions, implied cities, unicode tricks, and prompt injection inside the post. Graph: [`docs/agent-graphs/red-team.md`](docs/agent-graphs/red-team.md). |
-| `data/brokers.csv`, TREC rows (200) | **Real public license records** from the Texas Real Estate Commission licensee download (Oct 20, 2026) | **Names removed, not anonymized.** License numbers are kept, and they are public lookups. Stratified sample: 150 valid, 50 inactive, expired, or "Active" with a placeholder 1990/1991 expiration. Specialty, market and deal-size fields are blank, because TREC doesn't publish them and inventing them for real people would be fabrication. County comes from the license holder's address, not necessarily where they work. |
-| `data/brokers.csv`, fictional rows (26, from `data/fictional_brokers.csv`) | **Fictional**, every name prefixed "Fictional", every license number `FICT-` | Includes deliberate traps: an inactive perfect fit, Active but expired, Active with no expiration, suspended, wrong state, a sales agent. |
+| `data/brokers.csv`, TREC rows (198) | **Real public license records** from the Texas Real Estate Commission licensee download (Oct 20, 2026) | **Names removed, not anonymized.** License numbers are kept, and they are public lookups. Stratified sample of 200: 150 valid, 50 inactive, expired, or "Active" with a placeholder 1990/1991 expiration. Before publishing, the two sampled rows whose status was "Deceased" or "Probation - Active" were replaced by fictional rows with the same statuses, so no real licensee is shown with either status; 198 real rows remain. Specialty, market and deal-size fields are blank, because TREC doesn't publish them and inventing them for real people would be fabrication. County comes from the license holder's address, not necessarily where they work. |
+| `data/brokers.csv`, fictional rows (28, from `data/fictional_brokers.csv`) | **Fictional**, every name prefixed "Fictional", every license number `FICT-` | Includes deliberate traps: an inactive perfect fit, Active but expired, Active with no expiration, suspended, wrong state, a sales agent, and two Texas rows marked "Deceased" and "Probation - Active". |
 
 The raw TREC file stays in `data/raw/`, which is gitignored and never committed. No private groups or sites that prohibit scraping were used.
 
@@ -264,7 +264,7 @@ The raw TREC file stays in `data/raw/`, which is gitignored and never committed.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest -q                  # 1522 passed, 1 skipped in about 42 s; offline, no API key needed
+.venv/bin/pytest -q                  # 1540 passed, 1 skipped in about 43 s; offline, no API key needed
 .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/mypy --strict
 ```
 
@@ -289,7 +289,7 @@ curl -s localhost:8000/match -H 'content-type: application/json' -d '{"text": "N
 
 With the server running, open <http://localhost:8000/> for the broker page: paste a post and see the licensed brokers, the reasons for each point and any follow-up question. It calls the same `POST /match`; design notes and screenshots are in [`docs/design/DESIGN.md`](docs/design/DESIGN.md). The generated API reference stays at `/docs`.
 
-Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-brokers data/raw/<file>.csv`. It uses a fixed seed, so the same input gives the same 200 rows.
+Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-brokers data/raw/<file>.csv`. It uses a fixed seed, so the same input gives the same 200 rows. The published file then has the two rows described above replaced by hand, so a rebuild must repeat that step before it is committed.
 
 ## Engineering notes
 
@@ -306,6 +306,10 @@ Rebuilding the broker sample from a fresh TREC download: `.venv/bin/deal-build-b
 - **Timeline arithmetic.** The model over-shortens timelines. Next: have it extract the duration phrase and compute the bucket in code.
 - **Seller vs buyer.** Listing posts that seek buyers' agents still come back as `buy`. Next: one schema sentence and a contrasting example.
 - **Schema gaps found by holdout v3.** There is no "near/outside X" rule for city, and no written rule that a vague amount ("mid six figures") is null. Both labelers applied conventions the schema never states ([`docs/holdout_v3_agreement.md`](docs/holdout_v3_agreement.md)).
-- **The TREC sample goes stale.** The gate rejects TREC rows whose snapshot is more than 90 days old, so all 200 real rows stop matching 90 days after the 2026-10-20 download. Next: refresh the download with `deal-build-brokers`.
+- **The TREC sample goes stale.** The gate rejects TREC rows whose snapshot is more than 90 days old, so all 198 real rows stop matching 90 days after the 2026-10-20 download. Next: refresh the download with `deal-build-brokers`.
 - **CI has never run.** The workflow is defined in `.github/workflows/ci.yml` (ruff, format check, mypy, pytest), but the repo has no remote, so it has never been triggered.
 - **A different-model holdout.** Every set so far was written and labeled by Claude models. Next: a holdout written and labeled by a non-Claude model, with a human spot check of the labels.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The TREC rows in `data/brokers.csv` are public records from the Texas Real Estate Commission and are not covered by that license; their use is governed by TREC's own terms. The fictional broker rows and the synthetic posts were written for this project.
