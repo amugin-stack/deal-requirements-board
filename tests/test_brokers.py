@@ -29,8 +29,22 @@ def test_real_rows_have_no_invented_profile_fields() -> None:
 
 def test_sample_is_stratified() -> None:
     valid = [b for b in REAL if b.license_status == "Active" and b.license_expiration and b.license_expiration >= AS_OF]
-    assert len(REAL) == 200 and len(valid) == 150
+    # 200 sampled TREC rows minus the two replaced by fictional rows (see the next test): 198.
+    assert len(REAL) == 198 and len(valid) == 150
     # The hardest case for a status-only filter must be in the sample.
     assert any(
         b.license_status == "Active" and b.license_expiration is not None and b.license_expiration < AS_OF for b in REAL
     )
+
+
+def test_sensitive_statuses_appear_only_on_fictional_rows() -> None:
+    """Owner decision before publishing: no real licensee is shown as Deceased or on probation.
+
+    The two sampled TREC rows with those statuses were replaced by fictional Texas rows with the
+    same statuses, so the gate is still tested on both. Neither status passes the gate.
+    """
+    sensitive = {"Deceased", "Probation - Active"}
+    assert not [b.broker_id for b in REAL if b.license_status in sensitive]
+    fictional_tx = {b.license_status: b for b in FICTIONAL if b.license_state == "TX"}
+    assert sensitive <= set(fictional_tx)
+    assert all(fictional_tx[s].license_number.startswith("FICT-TX-") for s in sensitive)

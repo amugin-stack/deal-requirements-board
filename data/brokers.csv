@@ -119,7 +119,6 @@ tx-117,TX Licensee 117,trec_2026-10-20,TX,773806-SA,Sales Agent,Active,2027-11-3
 tx-118,TX Licensee 118,trec_2026-10-20,TX,826925-SA,Sales Agent,Active,2028-08-31,,,,,,
 tx-119,TX Licensee 119,trec_2026-10-20,TX,468584-SA,Sales Agent,Active,2027-04-30,Montgomery,,,,,
 tx-120,TX Licensee 120,trec_2026-10-20,TX,730680-SA,Sales Agent,Active,2027-11-30,Rains,,,,,
-tx-121,TX Licensee 121,trec_2026-10-20,TX,263746-B,Broker Individual,Deceased,2023-06-17,Moore,,,,,
 tx-122,TX Licensee 122,trec_2026-10-20,TX,640582-SA,Sales Agent,Inactive,2027-12-31,Williamson,,,,,
 tx-123,TX Licensee 123,trec_2026-10-20,TX,745162-SA,Sales Agent,Expired less than 6 months,2024-09-30,Dallas,,,,,
 tx-124,TX Licensee 124,trec_2026-10-20,TX,704868-SA,Sales Agent,Active,2028-05-31,McLennan,,,,,
@@ -129,7 +128,6 @@ tx-127,TX Licensee 127,trec_2026-10-20,TX,710269-SA,Sales Agent,Active,2028-08-3
 tx-128,TX Licensee 128,trec_2026-10-20,TX,606091-SA,Sales Agent,Active,2027-06-30,Denton,,,,,
 tx-129,TX Licensee 129,trec_2026-10-20,TX,722391-SA,Sales Agent,Active,2027-05-31,Bexar,,,,,
 tx-130,TX Licensee 130,trec_2026-10-20,TX,816019-SA,Sales Agent,Active,2027-12-31,Harris,,,,,
-tx-131,TX Licensee 131,trec_2026-10-20,TX,334893-B,Broker Individual,Probation - Active,2027-01-31,Bexar,,,,,
 tx-132,TX Licensee 132,trec_2026-10-20,TX,540162-B,Broker Individual,Active,2026-11-30,Travis,,,,,
 tx-133,TX Licensee 133,trec_2026-10-20,TX,755853-SA,Sales Agent,Active,2027-03-31,Harris,,,,,
 tx-134,TX Licensee 134,trec_2026-10-20,TX,761730-SA,Sales Agent,Inactive,2027-05-31,Guadalupe,,,,,
@@ -225,3 +223,5 @@ fx-23,Fictional Broker IL-A,fictional,IL,FICT-IL-0001,Broker Individual,Active,2
 fx-24,Fictional Broker MO-A,fictional,MO,FICT-MO-0001,Broker Individual,Active,2028-06-30,,Kansas City;St. Louis,multifamily,buy,150000,2000000
 fx-25,Fictional Broker KS-A,fictional,KS,FICT-KS-0001,Broker Individual,Suspended,2028-06-30,,Kansas City,multifamily,buy,150000,2000000
 fx-26,Fictional Broker VA-A,fictional,VA,FICT-VA-0001,Broker Individual,Active,2028-03-31,,Arlington,condo_townhome,buy,300000,1500000
+fx-27,Fictional Broker TX-A,fictional,TX,FICT-TX-0001,Broker Individual,Deceased,2024-03-31,Travis,,single_family,buy,200000,1500000
+fx-28,Fictional Broker TX-B,fictional,TX,FICT-TX-0002,Broker Individual,Probation - Active,2027-06-30,Bexar,,retail,sell,500000,5000000
