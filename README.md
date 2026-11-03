@@ -6,9 +6,7 @@ It only shows brokers actively licensed in the deal's state, and in every test, 
 
 A small prototype of the core of a "Deal Requirements Board" for cross-state real estate referrals. A broker posts a deal need in free text. The system extracts a structured requirement, filters brokers down to those **actively licensed in the deal's state**, and ranks them by fit with a plain-English reason for every point. When the post leaves out something essential, it asks one follow-up question instead of guessing.
 
-Built as part of my application to License LinkUp ("Stay Compliant. Close Anywhere."). It is not affiliated with or endorsed by License LinkUp. The emphasis is on measurement and compliance, not breadth.
 
-```
 POST /match  {"text": "Need a buyer's agent in Phoenix, AZ for an SFR up to $450k, closing in 30 days."}
 ```
 ```json
